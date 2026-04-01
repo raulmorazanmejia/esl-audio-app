@@ -8,10 +8,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Mic, Square, Trash2, Download, User, CheckCircle2, Loader2 } from "lucide-react";
 
 export default function ESLAudioPromptApp() {
-  const env = typeof globalThis !== "undefined" && (globalThis as any).process?.env ? (globalThis as any).process.env : {};
-  const SUPABASE_URL = env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const SUPABASE_ANON_KEY = env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const SUPABASE_BUCKET = env.NEXT_PUBLIC_SUPABASE_BUCKET || "student-audio";
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
+  const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+  const SUPABASE_BUCKET = import.meta.env.VITE_SUPABASE_BUCKET || "student-audio";
 
   const prompt = "Say two things you like about Texas.";
   const example = 'Example: "I like the food. I like the weather."';
