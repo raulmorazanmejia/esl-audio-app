@@ -13,3 +13,4 @@ npm run dev
 
 ## Deploy to Vercel
 Upload this folder to Vercel and add the same environment variables in the Vercel project settings.
+update
