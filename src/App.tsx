@@ -27,8 +27,6 @@ type Submission = {
   feedback_created_at?: string | null;
 };
 
-type RecorderMode = "student" | "teacher";
-
 function formatDate(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -155,8 +153,7 @@ export default function ESLAudioPromptApp() {
 
   const [studentName, setStudentName] = useState("");
   const [permissionState, setPermissionState] = useState("idle");
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingMode, setRecordingMode] = useState<RecorderMode>("student");
+  const [isStudentRecording, setIsStudentRecording] = useState(false);
   const [audioURL, setAudioURL] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [statusText, setStatusText] = useState("Ready to record.");
@@ -174,65 +171,48 @@ export default function ESLAudioPromptApp() {
   const [teacherStatusText, setTeacherStatusText] = useState("Ready to record feedback.");
   const [teacherSeconds, setTeacherSeconds] = useState(0);
   const [teacherPermissionState, setTeacherPermissionState] = useState("idle");
+  const [isTeacherRecording, setIsTeacherRecording] = useState(false);
   const [isUploadingFeedback, setIsUploadingFeedback] = useState(false);
   const [teacherSuccess, setTeacherSuccess] = useState("");
 
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const studentRecorderRef = useRef<MediaRecorder | null>(null);
+  const studentStreamRef = useRef<MediaStream | null>(null);
+  const studentChunksRef = useRef<Blob[]>([]);
+  const studentTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const teacherRecorderRef = useRef<MediaRecorder | null>(null);
+  const teacherStreamRef = useRef<MediaStream | null>(null);
+  const teacherChunksRef = useRef<Blob[]>([]);
+  const teacherTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (studentTimerRef.current) clearInterval(studentTimerRef.current);
+      if (teacherTimerRef.current) clearInterval(teacherTimerRef.current);
+
       if (audioURL) URL.revokeObjectURL(audioURL);
       if (teacherAudioURL) URL.revokeObjectURL(teacherAudioURL);
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+
+      if (studentStreamRef.current) {
+        studentStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      if (teacherStreamRef.current) {
+        teacherStreamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, [audioURL, teacherAudioURL]);
 
-  const startTimer = (mode: RecorderMode) => {
-    if (mode === "student") setSeconds(0);
-    if (mode === "teacher") setTeacherSeconds(0);
-
-    timerRef.current = setInterval(() => {
-      if (mode === "student") {
-        setSeconds((prev) => prev + 1);
-      } else {
-        setTeacherSeconds((prev) => prev + 1);
-      }
-    }, 1000);
-  };
-
-  const stopTimer = () => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
+  const stopStudentTimer = () => {
+    if (studentTimerRef.current) {
+      clearInterval(studentTimerRef.current);
+      studentTimerRef.current = null;
     }
   };
 
-  const requestMic = async (mode: RecorderMode) => {
-    try {
-      if (mode === "student") setPermissionState("requesting");
-      if (mode === "teacher") setTeacherPermissionState("requesting");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      if (mode === "student") setPermissionState("granted");
-      if (mode === "teacher") setTeacherPermissionState("granted");
-      return stream;
-    } catch (error) {
-      console.error(error);
-      if (mode === "student") {
-        setPermissionState("denied");
-        setStatusText("Microphone access was blocked.");
-      }
-      if (mode === "teacher") {
-        setTeacherPermissionState("denied");
-        setTeacherStatusText("Microphone access was blocked.");
-      }
-      return null;
+  const stopTeacherTimer = () => {
+    if (teacherTimerRef.current) {
+      clearInterval(teacherTimerRef.current);
+      teacherTimerRef.current = null;
     }
   };
 
@@ -256,62 +236,131 @@ export default function ESLAudioPromptApp() {
     setTeacherSeconds(0);
   };
 
-  const startRecording = async (mode: RecorderMode) => {
-    if (mode === "student") {
-      setSubmitted(false);
-      setSubmitError("");
-      if (audioURL) clearStudentRecording();
-    } else {
-      setTeacherError("");
-      setTeacherSuccess("");
-      if (teacherAudioURL) clearTeacherRecording();
+  const requestStudentMic = async () => {
+    try {
+      setPermissionState("requesting");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      studentStreamRef.current = stream;
+      setPermissionState("granted");
+      return stream;
+    } catch (error) {
+      console.error(error);
+      setPermissionState("denied");
+      setStatusText("Microphone access was blocked.");
+      return null;
     }
+  };
 
-    let stream = streamRef.current;
-    if (!stream) {
-      stream = await requestMic(mode);
+  const requestTeacherMic = async () => {
+    try {
+      setTeacherPermissionState("requesting");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      teacherStreamRef.current = stream;
+      setTeacherPermissionState("granted");
+      return stream;
+    } catch (error) {
+      console.error(error);
+      setTeacherPermissionState("denied");
+      setTeacherStatusText("Microphone access was blocked.");
+      return null;
+    }
+  };
+
+  const startStudentRecording = async () => {
+    setSubmitted(false);
+    setSubmitError("");
+    if (audioURL) clearStudentRecording();
+
+    let stream = studentStreamRef.current;
+    if (!stream || stream.getTracks().every((track) => track.readyState === "ended")) {
+      stream = await requestStudentMic();
     }
     if (!stream) return;
 
-    chunksRef.current = [];
+    studentChunksRef.current = [];
     const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
     const recorder = new MediaRecorder(stream, { mimeType });
-    mediaRecorderRef.current = recorder;
-    setRecordingMode(mode);
+    studentRecorderRef.current = recorder;
 
     recorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
-        chunksRef.current.push(event.data);
+        studentChunksRef.current.push(event.data);
       }
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      const blob = new Blob(studentChunksRef.current, {
+        type: recorder.mimeType || "audio/webm",
+      });
       const url = URL.createObjectURL(blob);
-
-      if (mode === "student") {
-        setAudioBlob(blob);
-        setAudioURL(url);
-        setStatusText("Recording saved in this browser. Ready to upload.");
-      } else {
-        setTeacherAudioBlob(blob);
-        setTeacherAudioURL(url);
-        setTeacherStatusText("Feedback recording saved. Ready to upload.");
-      }
+      setAudioBlob(blob);
+      setAudioURL(url);
+      setStatusText("Recording saved in this browser. Ready to upload.");
     };
 
     recorder.start();
-    setIsRecording(true);
-    if (mode === "student") setStatusText("Recording...");
-    if (mode === "teacher") setTeacherStatusText("Recording feedback...");
-    startTimer(mode);
+    setIsStudentRecording(true);
+    setStatusText("Recording...");
+    setSeconds(0);
+    studentTimerRef.current = setInterval(() => {
+      setSeconds((prev) => prev + 1);
+    }, 1000);
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      stopTimer();
+  const stopStudentRecording = () => {
+    if (studentRecorderRef.current && isStudentRecording) {
+      studentRecorderRef.current.stop();
+      setIsStudentRecording(false);
+      stopStudentTimer();
+    }
+  };
+
+  const startTeacherRecording = async () => {
+    setTeacherError("");
+    setTeacherSuccess("");
+    if (teacherAudioURL) clearTeacherRecording();
+
+    let stream = teacherStreamRef.current;
+    if (!stream || stream.getTracks().every((track) => track.readyState === "ended")) {
+      stream = await requestTeacherMic();
+    }
+    if (!stream) return;
+
+    teacherChunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
+    const recorder = new MediaRecorder(stream, { mimeType });
+    teacherRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        teacherChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(teacherChunksRef.current, {
+        type: recorder.mimeType || "audio/webm",
+      });
+      const url = URL.createObjectURL(blob);
+      setTeacherAudioBlob(blob);
+      setTeacherAudioURL(url);
+      setTeacherStatusText("Feedback recording saved. Ready to upload.");
+    };
+
+    recorder.start();
+    setIsTeacherRecording(true);
+    setTeacherStatusText("Recording feedback...");
+    setTeacherSeconds(0);
+    teacherTimerRef.current = setInterval(() => {
+      setTeacherSeconds((prev) => prev + 1);
+    }, 1000);
+  };
+
+  const stopTeacherRecording = () => {
+    if (teacherRecorderRef.current && isTeacherRecording) {
+      teacherRecorderRef.current.stop();
+      setIsTeacherRecording(false);
+      stopTeacherTimer();
     }
   };
 
@@ -545,13 +594,13 @@ export default function ESLAudioPromptApp() {
 
                 <div className="rounded-2xl border p-5">
                   <div className="flex flex-wrap items-center gap-3">
-                    {!isRecording || recordingMode !== "student" ? (
-                      <AppButton onClick={() => startRecording("student")}>
+                    {!isStudentRecording ? (
+                      <AppButton onClick={startStudentRecording}>
                         <Mic className="mr-2 h-4 w-4" />
                         Start recording
                       </AppButton>
                     ) : (
-                      <AppButton onClick={stopRecording} variant="destructive">
+                      <AppButton onClick={stopStudentRecording} variant="destructive">
                         <Square className="mr-2 h-4 w-4" />
                         Stop recording
                       </AppButton>
@@ -765,13 +814,13 @@ export default function ESLAudioPromptApp() {
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3">
-                        {!isRecording || recordingMode !== "teacher" ? (
-                          <AppButton onClick={() => startRecording("teacher")}>
+                        {!isTeacherRecording ? (
+                          <AppButton onClick={startTeacherRecording}>
                             <Mic className="mr-2 h-4 w-4" />
                             Start feedback recording
                           </AppButton>
                         ) : (
-                          <AppButton onClick={stopRecording} variant="destructive">
+                          <AppButton onClick={stopTeacherRecording} variant="destructive">
                             <Square className="mr-2 h-4 w-4" />
                             Stop recording
                           </AppButton>
