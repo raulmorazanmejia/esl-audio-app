@@ -139,7 +139,7 @@ function AlertBox({
 export default function ESLAudioPromptApp() {
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
   const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
-  const SUPABASE_BUCKET = import.meta.env.VITE_SUPABASE_BUCKET || "student-audio";
+  const SUPABASE_BUCKET = import.meta.env.VITE_SUPABASE_BUCKET || "Student-audio";
 
   const prompt = "Say two things you like about Texas.";
   const example = 'Example: "I like the food. I like the weather."';
@@ -539,27 +539,38 @@ export default function ESLAudioPromptApp() {
             </p>
           </div>
           <div className="flex gap-2">
-            <AppButton
-              variant={activeView === "student" ? "default" : "outline"}
+            <button
+              type="button"
               onClick={() => setActiveView("student")}
+              className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition ${
+                activeView === "student"
+                  ? "bg-slate-900 text-white"
+                  : "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
+              }`}
             >
               <Mic className="mr-2 h-4 w-4" />
               Student View
-            </AppButton>
-            <AppButton
-  variant={activeView === "teacher" ? "default" : "outline"}
-  onClick={() => {
-    const password = prompt("Enter teacher password:");
-    if (password === "admin123") {
-      setActiveView("teacher");
-    } else {
-      alert("Wrong password");
-    }
-  }}
->
-  <ListMusic className="mr-2 h-4 w-4" />
-  Teacher Dashboard
-</AppButton>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const password = window.prompt("Enter teacher password:");
+                if (password === "admin123") {
+                  setActiveView("teacher");
+                } else if (password !== null) {
+                  window.alert("Wrong password");
+                }
+              }}
+              className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition ${
+                activeView === "teacher"
+                  ? "bg-slate-900 text-white"
+                  : "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
+              }`}
+            >
+              <ListMusic className="mr-2 h-4 w-4" />
+              Teacher Dashboard
+            </button>
           </div>
         </div>
 
