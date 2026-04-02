@@ -547,12 +547,19 @@ export default function ESLAudioPromptApp() {
               Student View
             </AppButton>
             <AppButton
-              variant={activeView === "teacher" ? "default" : "outline"}
-              onClick={() => setActiveView("teacher")}
-            >
-              <ListMusic className="mr-2 h-4 w-4" />
-              Teacher Dashboard
-            </AppButton>
+  variant={activeView === "teacher" ? "default" : "outline"}
+  onClick={() => {
+    const password = prompt("Enter teacher password:");
+    if (password === "admin123") {
+      setActiveView("teacher");
+    } else {
+      alert("Wrong password");
+    }
+  }}
+>
+  <ListMusic className="mr-2 h-4 w-4" />
+  Teacher Dashboard
+</AppButton>
           </div>
         </div>
 
