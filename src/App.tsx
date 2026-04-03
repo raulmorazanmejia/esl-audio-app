@@ -859,7 +859,7 @@ export default function ESLAudioPromptApp() {
 
       const { error: insertError } = await supabase.from("student_submissions").insert({
         student_name: studentName.trim(),
-        student_email: authUser?.email ?? studentEmail.trim() || null,
+        student_email: authUser?.email ?? (studentEmail.trim() || null),
         student_auth_id: authUser?.id ?? null,
         prompt_text: activePrompt.prompt_text,
         audio_path: filePath,
