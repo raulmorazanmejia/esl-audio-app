@@ -879,24 +879,26 @@ export default function ESLAudioPromptApp() {
                 <CardTitle className="text-4xl leading-tight text-slate-900">
                   Student Recording Screen
                 </CardTitle>
-                <p className="text-lg text-slate-600">
-                  This screen uses the active prompt from the teacher dashboard.
-                </p>
               </CardHeader>
 
               <CardContent className="space-y-7">
-                <div
-                  className="rounded-[30px] border p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
-                  style={{
-                    background: `linear-gradient(135deg, ${displayedCardBackground}, #ffffff)`,
-                    borderColor: `${displayedPromptColor}33`,
-                  }}
-                >
+                <div className="rounded-[30px] border border-violet-200 bg-gradient-to-r from-violet-100 via-pink-50 to-white p-4 shadow-sm">
+                  <div className="mb-3 inline-flex items-center rounded-full bg-white px-4 py-1 text-sm font-bold uppercase tracking-wide text-violet-800 shadow-sm">
+                    Speaking task
+                  </div>
                   <div
-                    className="text-4xl font-black leading-snug"
-                    style={{ color: displayedPromptColor }}
+                    className="rounded-[24px] border p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                    style={{
+                      background: `linear-gradient(135deg, ${displayedCardBackground}, #ffffff)`,
+                      borderColor: `${displayedPromptColor}44`,
+                    }}
                   >
-                    {displayedPrompt}
+                    <div
+                      className="text-4xl font-black leading-snug"
+                      style={{ color: displayedPromptColor }}
+                    >
+                      {displayedPrompt}
+                    </div>
                   </div>
                 </div>
 
