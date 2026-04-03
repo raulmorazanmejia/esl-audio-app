@@ -74,7 +74,9 @@ function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>
+    <div
+      className={`rounded-[28px] border border-slate-200/80 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur ${className}`}
+    >
       {children}
     </div>
   );
@@ -87,7 +89,7 @@ function CardHeader({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={`p-6 ${className}`}>{children}</div>;
+  return <div className={`p-7 ${className}`}>{children}</div>;
 }
 
 function CardContent({
@@ -97,7 +99,7 @@ function CardContent({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <div className={`px-6 pb-6 ${className}`}>{children}</div>;
+  return <div className={`px-7 pb-7 ${className}`}>{children}</div>;
 }
 
 function CardTitle({
@@ -107,7 +109,7 @@ function CardTitle({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <h2 className={`font-bold ${className}`}>{children}</h2>;
+  return <h2 className={`font-bold tracking-tight ${className}`}>{children}</h2>;
 }
 
 function AppButton({
@@ -128,16 +130,16 @@ function AppButton({
   style?: CSSProperties;
 }) {
   let styles =
-    "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50";
+    "inline-flex items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
 
   if (variant === "default") {
-    styles += " bg-slate-900 text-white hover:bg-slate-800";
+    styles += " bg-slate-900 text-white hover:bg-slate-800 shadow-sm";
   } else if (variant === "outline") {
     styles += " border border-slate-300 bg-white text-slate-900 hover:bg-slate-50";
   } else if (variant === "secondary") {
     styles += " bg-slate-100 text-slate-900 hover:bg-slate-200";
   } else if (variant === "destructive") {
-    styles += " bg-red-600 text-white hover:bg-red-700";
+    styles += " bg-rose-600 text-white hover:bg-rose-700 shadow-sm";
   }
 
   return (
@@ -157,7 +159,7 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${props.className || ""}`}
+      className={`h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-slate-900 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 ${props.className || ""}`}
     />
   );
 }
@@ -166,7 +168,7 @@ function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
       {...props}
-      className={`min-h-[100px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${props.className || ""}`}
+      className={`min-h-[110px] w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-violet-400 focus:ring-4 focus:ring-violet-100 ${props.className || ""}`}
     />
   );
 }
@@ -179,8 +181,8 @@ function AlertBox({
   tone?: "default" | "success" | "error";
 }) {
   let styles = "rounded-2xl border p-4 text-sm";
-  if (tone === "success") styles += " border-green-200 bg-green-50 text-green-900";
-  if (tone === "error") styles += " border-red-200 bg-red-50 text-red-900";
+  if (tone === "success") styles += " border-emerald-200 bg-emerald-50 text-emerald-900";
+  if (tone === "error") styles += " border-rose-200 bg-rose-50 text-rose-900";
   if (tone === "default") styles += " border-slate-200 bg-slate-50 text-slate-800";
   return <div className={styles}>{children}</div>;
 }
@@ -206,9 +208,9 @@ export default function ESLAudioPromptApp() {
   const [newPromptTitle, setNewPromptTitle] = useState("");
   const [newPromptText, setNewPromptText] = useState("");
   const [newExampleText, setNewExampleText] = useState("");
-  const [newPromptColor, setNewPromptColor] = useState("#0f172a");
-  const [newButtonColor, setNewButtonColor] = useState("#0f172a");
-  const [newCardBackground, setNewCardBackground] = useState("#ffffff");
+  const [newPromptColor, setNewPromptColor] = useState("#5b21b6");
+  const [newButtonColor, setNewButtonColor] = useState("#ec4899");
+  const [newCardBackground, setNewCardBackground] = useState("#fdf4ff");
   const [newShowExample, setNewShowExample] = useState(true);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
@@ -539,9 +541,9 @@ export default function ESLAudioPromptApp() {
         prompt_text: newPromptText.trim(),
         example_text: newExampleText.trim() || null,
         is_active: false,
-        prompt_color: safeColor(newPromptColor, "#0f172a"),
-        button_color: safeColor(newButtonColor, "#0f172a"),
-        card_background: safeColor(newCardBackground, "#ffffff"),
+        prompt_color: safeColor(newPromptColor, "#5b21b6"),
+        button_color: safeColor(newButtonColor, "#ec4899"),
+        card_background: safeColor(newCardBackground, "#fdf4ff"),
         show_example: newShowExample,
       });
 
@@ -550,9 +552,9 @@ export default function ESLAudioPromptApp() {
       setNewPromptTitle("");
       setNewPromptText("");
       setNewExampleText("");
-      setNewPromptColor("#0f172a");
-      setNewButtonColor("#0f172a");
-      setNewCardBackground("#ffffff");
+      setNewPromptColor("#5b21b6");
+      setNewButtonColor("#ec4899");
+      setNewCardBackground("#fdf4ff");
       setNewShowExample(true);
 
       setPromptSuccess("Prompt created successfully.");
@@ -728,132 +730,137 @@ export default function ESLAudioPromptApp() {
   const displayedTitle = activePrompt?.prompt_title?.trim() || "Student speaking task";
   const displayedPrompt = activePrompt?.prompt_text || "No active prompt yet.";
   const displayedExample = activePrompt?.example_text || "";
-  const displayedPromptColor = safeColor(activePrompt?.prompt_color, "#0f172a");
-  const displayedButtonColor = safeColor(activePrompt?.button_color, "#0f172a");
-  const displayedCardBackground = safeColor(activePrompt?.card_background, "#ffffff");
+  const displayedPromptColor = safeColor(activePrompt?.prompt_color, "#5b21b6");
+  const displayedButtonColor = safeColor(activePrompt?.button_color, "#ec4899");
+  const displayedCardBackground = safeColor(activePrompt?.card_background, "#fdf4ff");
   const displayedShowExample = activePrompt?.show_example ?? true;
 
   const studentPrimaryButtonStyle: CSSProperties = {
     backgroundColor: displayedButtonColor,
     color: "#ffffff",
+    boxShadow: "0 10px 25px rgba(236, 72, 153, 0.22)",
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">ESL Audio App</h1>
-            <p className="text-slate-600">
-              Student recording, teacher feedback, and admin prompt management.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveView("student")}
-              className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition ${
-                activeView === "student"
-                  ? "bg-slate-900 text-white"
-                  : "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
-              }`}
-            >
-              <Mic className="mr-2 h-4 w-4" />
-              Student View
-            </button>
+    <div className="min-h-screen bg-gradient-to-br from-violet-50 via-pink-50 to-sky-50 p-6 text-slate-900">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <div className="rounded-[30px] border border-white/70 bg-white/75 p-6 shadow-[0_18px_50px_rgba(91,33,182,0.10)] backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-5xl font-black tracking-tight text-violet-950">ESL Audio App</h1>
+              <p className="mt-2 text-lg text-slate-600">
+                Student recording, teacher feedback, and admin prompt management.
+              </p>
+            </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                const password = window.prompt("Enter teacher password:");
-                if (password === "admin123") {
-                  setActiveView("teacher");
-                } else if (password !== null) {
-                  window.alert("Wrong password");
-                }
-              }}
-              className={`inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition ${
-                activeView === "teacher"
-                  ? "bg-slate-900 text-white"
-                  : "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50"
-              }`}
-            >
-              <ListMusic className="mr-2 h-4 w-4" />
-              Teacher Dashboard
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveView("student")}
+                className={`inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-bold transition ${
+                  activeView === "student"
+                    ? "bg-violet-700 text-white shadow-[0_10px_25px_rgba(109,40,217,0.25)]"
+                    : "border border-violet-200 bg-white text-violet-900 hover:bg-violet-50"
+                }`}
+              >
+                <Mic className="mr-2 h-4 w-4" />
+                Student View
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const password = window.prompt("Enter teacher password:");
+                  if (password === "admin123") {
+                    setActiveView("teacher");
+                  } else if (password !== null) {
+                    window.alert("Wrong password");
+                  }
+                }}
+                className={`inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-bold transition ${
+                  activeView === "teacher"
+                    ? "bg-pink-600 text-white shadow-[0_10px_25px_rgba(219,39,119,0.25)]"
+                    : "border border-pink-200 bg-white text-pink-900 hover:bg-pink-50"
+                }`}
+              >
+                <ListMusic className="mr-2 h-4 w-4" />
+                Teacher Dashboard
+              </button>
+            </div>
           </div>
         </div>
 
         {activeView === "student" ? (
-          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-            <Card>
-              <CardHeader className="space-y-3">
-                <div className="inline-flex w-fit items-center rounded-full border px-3 py-1 text-sm">
+          <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.35fr_0.95fr]">
+            <Card className="overflow-hidden">
+              <div className="h-3 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500" />
+              <CardHeader className="space-y-4">
+                <div className="inline-flex w-fit items-center rounded-full border border-violet-200 bg-violet-50 px-4 py-1.5 text-sm font-semibold text-violet-800">
                   {displayedTitle}
                 </div>
-                <CardTitle className="text-3xl leading-tight">Student Recording Screen</CardTitle>
-                <p className="text-base text-slate-600">
+                <CardTitle className="text-4xl leading-tight text-slate-900">
+                  Student Recording Screen
+                </CardTitle>
+                <p className="text-lg text-slate-600">
                   This screen uses the active prompt from the teacher dashboard.
                 </p>
               </CardHeader>
 
-              <CardContent className="space-y-6">
+              <CardContent className="space-y-7">
                 <div
-                  className="rounded-2xl border p-5"
+                  className="rounded-[26px] border border-violet-100 p-7 shadow-inner"
                   style={{ backgroundColor: displayedCardBackground }}
                 >
                   <div
-                    className="text-xl font-semibold"
+                    className="text-3xl font-extrabold leading-snug"
                     style={{ color: displayedPromptColor }}
                     dangerouslySetInnerHTML={{ __html: renderBasicRichText(displayedPrompt) }}
                   />
-                  {displayedShowExample && displayedExample && (
-                    <div
-                      className="mt-2 text-sm text-slate-500"
-                      dangerouslySetInnerHTML={{ __html: renderBasicRichText(displayedExample) }}
-                    />
-                  )}
                 </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="studentName" className="text-base font-medium">
+                <div className="space-y-3">
+                  <label htmlFor="studentName" className="text-xl font-extrabold text-slate-900">
                     Student name
                   </label>
                   <div className="relative">
-                    <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <User className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-violet-400" />
                     <TextInput
                       id="studentName"
                       value={studentName}
                       onChange={(e) => setStudentName(e.target.value)}
                       placeholder="Type your name"
-                      className="pl-10"
+                      className="pl-12"
                     />
                   </div>
                 </div>
 
-                <div className="rounded-2xl border p-5">
-                  <div className="flex flex-wrap items-center gap-3">
+                <div className="rounded-[26px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-4">
                     {!isStudentRecording ? (
-                      <AppButton onClick={startStudentRecording} style={studentPrimaryButtonStyle}>
-                        <Mic className="mr-2 h-4 w-4" />
+                      <AppButton
+                        onClick={startStudentRecording}
+                        style={studentPrimaryButtonStyle}
+                        className="text-base"
+                      >
+                        <Mic className="mr-2 h-5 w-5" />
                         Start recording
                       </AppButton>
                     ) : (
-                      <AppButton onClick={stopStudentRecording} variant="destructive">
-                        <Square className="mr-2 h-4 w-4" />
+                      <AppButton onClick={stopStudentRecording} variant="destructive" className="text-base">
+                        <Square className="mr-2 h-5 w-5" />
                         Stop recording
                       </AppButton>
                     )}
 
-                    <div className="rounded-xl border px-4 py-2 font-mono text-lg">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3 font-mono text-xl font-bold text-slate-700">
                       {formatTime(seconds)}
                     </div>
                   </div>
 
-                  <p className="mt-3 text-sm text-slate-600">{statusText}</p>
+                  <p className="mt-4 text-sm text-slate-600">{statusText}</p>
 
                   {audioURL && (
-                    <div className="mt-5 space-y-4">
+                    <div className="mt-6 space-y-4">
                       <audio controls src={audioURL} className="w-full" />
                       <div className="flex flex-wrap gap-3">
                         <AppButton
@@ -882,12 +889,12 @@ export default function ESLAudioPromptApp() {
                 <AppButton
                   onClick={submitToSupabase}
                   disabled={!studentName.trim() || !audioBlob || isSubmitting || !activePrompt}
-                  className="h-11 w-full"
+                  className="h-12 w-full text-base"
                   style={studentPrimaryButtonStyle}
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Uploading...
                     </>
                   ) : (
@@ -917,27 +924,28 @@ export default function ESLAudioPromptApp() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="overflow-hidden">
+              <div className="h-3 bg-gradient-to-r from-pink-500 via-fuchsia-500 to-violet-500" />
               <CardHeader>
-                <CardTitle className="text-2xl">Current prompt</CardTitle>
+                <CardTitle className="text-3xl text-slate-900">Current prompt</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4 text-sm text-slate-700">
-                <div className="rounded-2xl border p-4">
-                  <p className="font-semibold">Title</p>
-                  <p className="mt-2">{displayedTitle}</p>
+              <CardContent className="space-y-5 text-slate-700">
+                <div className="rounded-[24px] border border-pink-100 bg-pink-50/60 p-5">
+                  <p className="text-2xl font-extrabold text-pink-900">Title</p>
+                  <p className="mt-3 text-xl font-medium">{displayedTitle}</p>
                 </div>
-                <div className="rounded-2xl border p-4">
-                  <p className="font-semibold">Prompt</p>
+                <div className="rounded-[24px] border border-violet-100 bg-violet-50/60 p-5">
+                  <p className="text-2xl font-extrabold text-violet-900">Prompt</p>
                   <div
-                    className="mt-2"
+                    className="mt-3 text-xl leading-relaxed"
                     dangerouslySetInnerHTML={{ __html: renderBasicRichText(displayedPrompt) }}
                   />
                 </div>
                 {displayedShowExample && displayedExample && (
-                  <div className="rounded-2xl border p-4">
-                    <p className="font-semibold">Example</p>
+                  <div className="rounded-[24px] border border-sky-100 bg-sky-50/70 p-5">
+                    <p className="text-2xl font-extrabold text-sky-900">Example</p>
                     <div
-                      className="mt-2"
+                      className="mt-3 text-xl leading-relaxed"
                       dangerouslySetInnerHTML={{ __html: renderBasicRichText(displayedExample) }}
                     />
                   </div>
@@ -948,7 +956,8 @@ export default function ESLAudioPromptApp() {
           </div>
         ) : (
           <div className="grid gap-6 xl:grid-cols-[0.95fr_1fr_1fr]">
-            <Card>
+            <Card className="overflow-hidden">
+              <div className="h-3 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500" />
               <CardHeader className="space-y-2">
                 <CardTitle className="text-2xl">Prompt manager</CardTitle>
                 <p className="text-sm text-slate-600">
@@ -989,7 +998,7 @@ export default function ESLAudioPromptApp() {
                     <TextInput
                       value={newPromptColor}
                       onChange={(e) => setNewPromptColor(e.target.value)}
-                      placeholder="#0f172a"
+                      placeholder="#5b21b6"
                     />
                   </div>
                   <div className="space-y-2">
@@ -997,7 +1006,7 @@ export default function ESLAudioPromptApp() {
                     <TextInput
                       value={newButtonColor}
                       onChange={(e) => setNewButtonColor(e.target.value)}
-                      placeholder="#0f172a"
+                      placeholder="#ec4899"
                     />
                   </div>
                   <div className="space-y-2">
@@ -1005,7 +1014,7 @@ export default function ESLAudioPromptApp() {
                     <TextInput
                       value={newCardBackground}
                       onChange={(e) => setNewCardBackground(e.target.value)}
-                      placeholder="#ffffff"
+                      placeholder="#fdf4ff"
                     />
                   </div>
                 </div>
@@ -1019,18 +1028,18 @@ export default function ESLAudioPromptApp() {
                   Show example to students
                 </label>
 
-                <div className="rounded-2xl border p-4">
-                  <p className="mb-2 font-semibold">Preview</p>
+                <div className="rounded-[24px] border border-violet-100 bg-violet-50/50 p-4">
+                  <p className="mb-2 font-semibold text-violet-900">Preview</p>
                   <div
-                    className="rounded-2xl border p-4"
-                    style={{ backgroundColor: safeColor(newCardBackground, "#ffffff") }}
+                    className="rounded-[20px] border border-white/70 p-4"
+                    style={{ backgroundColor: safeColor(newCardBackground, "#fdf4ff") }}
                   >
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm font-semibold text-slate-500">
                       {newPromptTitle || "Prompt title preview"}
                     </p>
                     <div
                       className="mt-2 text-base font-semibold"
-                      style={{ color: safeColor(newPromptColor, "#0f172a") }}
+                      style={{ color: safeColor(newPromptColor, "#5b21b6") }}
                       dangerouslySetInnerHTML={{
                         __html: renderBasicRichText(newPromptText || "Your prompt preview appears here."),
                       }}
@@ -1049,8 +1058,9 @@ export default function ESLAudioPromptApp() {
                   disabled={isSavingPrompt || !newPromptText.trim()}
                   className="w-full"
                   style={{
-                    backgroundColor: safeColor(newButtonColor, "#0f172a"),
+                    backgroundColor: safeColor(newButtonColor, "#ec4899"),
                     color: "#ffffff",
+                    boxShadow: "0 10px 25px rgba(236,72,153,0.22)",
                   }}
                 >
                   {isSavingPrompt ? (
@@ -1071,7 +1081,8 @@ export default function ESLAudioPromptApp() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="overflow-hidden">
+              <div className="h-3 bg-gradient-to-r from-pink-500 via-rose-400 to-orange-300" />
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
                   <CardTitle className="text-2xl">Saved prompts</CardTitle>
@@ -1095,32 +1106,35 @@ export default function ESLAudioPromptApp() {
                   </div>
                 ) : (
                   prompts.map((promptItem) => (
-                    <div key={promptItem.id} className="rounded-2xl border p-4">
+                    <div
+                      key={promptItem.id}
+                      className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className="font-semibold">
+                          <p className="font-semibold text-slate-900">
                             {promptItem.prompt_title?.trim() || "Untitled prompt"}
                           </p>
                           <div
-                            className="mt-2 text-sm"
+                            className="mt-2 text-sm leading-relaxed"
                             dangerouslySetInnerHTML={{
                               __html: renderBasicRichText(promptItem.prompt_text),
                             }}
                           />
                           {promptItem.show_example && promptItem.example_text && (
                             <div
-                              className="mt-2 text-sm text-slate-600"
+                              className="mt-2 text-sm text-slate-600 leading-relaxed"
                               dangerouslySetInnerHTML={{
                                 __html: renderBasicRichText(promptItem.example_text),
                               }}
                             />
                           )}
-                          <p className="mt-2 text-xs text-slate-500">
+                          <p className="mt-3 text-xs text-slate-500">
                             Created: {formatDate(promptItem.created_at)}
                           </p>
                         </div>
                         {promptItem.is_active ? (
-                          <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700">
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                             Active
                           </span>
                         ) : (
@@ -1139,7 +1153,8 @@ export default function ESLAudioPromptApp() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="overflow-hidden">
+              <div className="h-3 bg-gradient-to-r from-sky-400 via-cyan-400 to-teal-400" />
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
                   <CardTitle className="text-2xl">Student submissions</CardTitle>
@@ -1173,16 +1188,16 @@ export default function ESLAudioPromptApp() {
                           setTeacherSuccess("");
                           setTeacherError("");
                         }}
-                        className={`w-full rounded-2xl border p-4 text-left transition ${
-                          selected ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"
+                        className={`w-full rounded-[22px] border p-4 text-left transition ${
+                          selected
+                            ? "border-sky-300 bg-sky-50 shadow-sm"
+                            : "border-slate-200 bg-white hover:bg-slate-50"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-semibold">{item.student_name}</p>
-                            <p className="text-xs text-slate-500">
-                              {formatDate(item.created_at)}
-                            </p>
+                            <p className="text-xs text-slate-500">{formatDate(item.created_at)}</p>
                           </div>
                           <span className="rounded-full border px-2 py-1 text-xs">
                             {item.feedback_audio_url ? "Feedback sent" : "Needs feedback"}
@@ -1197,7 +1212,7 @@ export default function ESLAudioPromptApp() {
                 {teacherError && <AlertBox tone="error">{teacherError}</AlertBox>}
 
                 {selectedSubmission && (
-                  <div className="mt-4 space-y-6 rounded-2xl border p-4">
+                  <div className="mt-4 space-y-6 rounded-[24px] border border-slate-200 bg-slate-50/70 p-5">
                     <div>
                       <p className="text-sm text-slate-500">Student</p>
                       <p className="text-xl font-semibold">{selectedSubmission.student_name}</p>
@@ -1225,7 +1240,7 @@ export default function ESLAudioPromptApp() {
                       </div>
                     )}
 
-                    <div className="rounded-2xl border p-5">
+                    <div className="rounded-[22px] border border-slate-200 bg-white p-5">
                       <div className="mb-3 flex items-center gap-2">
                         <MessageSquare className="h-4 w-4" />
                         <p className="font-semibold">Record teacher feedback</p>
