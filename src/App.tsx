@@ -597,6 +597,42 @@ export default function ESLAudioPromptApp() {
     setNewCardBackground(theme.cardBackground);
   };
 
+  const updateActivePromptTheme = async () => {
+    if (!supabase) {
+      setPromptError("Supabase is not configured.");
+      return;
+    }
+
+    if (!activePrompt?.id) {
+      setPromptError("No active prompt to update.");
+      return;
+    }
+
+    setPromptError("");
+    setPromptSuccess("");
+
+    try {
+      const { error } = await supabase
+        .from("prompts")
+        .update({
+          prompt_color: safeColor(newPromptColor, "#be185d"),
+          button_color: safeColor(newButtonColor, "#ec4899"),
+          card_background: safeColor(newCardBackground, "#fdf2f8"),
+          show_example: newShowExample,
+        })
+        .eq("id", activePrompt.id);
+
+      if (error) throw error;
+
+      setPromptSuccess("Active prompt theme updated.");
+      await fetchActivePrompt();
+      await fetchPrompts();
+    } catch (error) {
+      console.error(error);
+      setPromptError(error instanceof Error ? error.message : "Could not update active prompt theme.");
+    }
+  };
+
   const createPrompt = async () => {
     if (!supabase) {
       setPromptError("Supabase is not configured.");
@@ -882,38 +918,25 @@ export default function ESLAudioPromptApp() {
               </CardHeader>
 
               <CardContent className="space-y-7">
-                <div
-                  className="rounded-[30px] p-6 shadow-xl"
-                  style={{
-                    background: `linear-gradient(135deg, ${displayedCardBackground}, #ffffff)`,
-                    border: `3px solid ${displayedPromptColor}`,
-                  }}
-                >
-                  <div
-                    className="mb-4 inline-block rounded-full px-5 py-2 text-sm font-black uppercase tracking-wide text-white shadow-md"
-                    style={{ backgroundColor: displayedButtonColor }}
-                  >
-                    🎤 YOUR SPEAKING TASK
+                <div className="rounded-[30px] border-2 border-violet-300 bg-gradient-to-r from-violet-100 via-pink-50 to-white p-5 shadow-md">
+                  <div className="mb-4 inline-flex items-center rounded-full bg-violet-700 px-4 py-2 text-sm font-black uppercase tracking-wide text-white shadow-sm">
+                    Speaking task
                   </div>
 
                   <div
-                    className="rounded-[20px] p-6 text-center shadow-inner"
+                    className="rounded-[24px] border-2 p-8 shadow-sm"
                     style={{
-                      backgroundColor: "#ffffff",
-                      border: `2px dashed ${displayedPromptColor}`,
+                      background: `linear-gradient(135deg, ${displayedCardBackground}, #ffffff)`,
+                      borderColor: displayedPromptColor,
                     }}
                   >
-                    <p
-                      className="text-[2.6rem] font-black leading-tight"
+                    <div
+                      className="text-[2.2rem] font-black leading-snug"
                       style={{ color: displayedPromptColor }}
                     >
                       {displayedPrompt}
-                    </p>
+                    </div>
                   </div>
-
-                  <p className="mt-4 text-center text-sm font-semibold text-slate-600">
-                    Speak clearly and record your answer below
-                  </p>
                 </div>
 
                 <div className="space-y-3">
@@ -1210,6 +1233,16 @@ export default function ESLAudioPromptApp() {
                       Create new prompt
                     </>
                   )}
+                </AppButton>
+
+                <AppButton
+                  onClick={updateActivePromptTheme}
+                  disabled={!activePrompt}
+                  className="w-full"
+                  variant="outline"
+                >
+                  <Palette className="mr-2 h-4 w-4" />
+                  Apply theme to active prompt
                 </AppButton>
 
                 {promptSuccess && <AlertBox tone="success">{promptSuccess}</AlertBox>}
