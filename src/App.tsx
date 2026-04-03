@@ -512,9 +512,13 @@ export default function ESLAudioPromptApp() {
   }, []);
 
   useEffect(() => {
+    if (activeView === "student") {
+      void fetchActivePrompt();
+    }
     if (activeView === "teacher") {
       void fetchSubmissions();
       void fetchPrompts();
+      void fetchActivePrompt();
     }
   }, [activeView]);
 
@@ -979,7 +983,7 @@ export default function ESLAudioPromptApp() {
                   <TextArea
                     value={newExampleText}
                     onChange={(e) => setNewExampleText(e.target.value)}
-                    placeholder={`Example:\nI wake up at 7.\nI drink coffee.\nYou can also use **bold** here.`}
+                    placeholder={`Example:\nI wake up at 7.\nI drink **coffee**.\nYou can also use **bold** here.`}
                   />
                 </div>
 
@@ -1025,7 +1029,9 @@ export default function ESLAudioPromptApp() {
                     className="rounded-2xl border p-4"
                     style={{ backgroundColor: safeColor(newCardBackground, "#ffffff") }}
                   >
-                    <p className="text-sm text-slate-500">{newPromptTitle || "Prompt title preview"}</p>
+                    <p className="text-sm text-slate-500">
+                      {newPromptTitle || "Prompt title preview"}
+                    </p>
                     <div
                       className="mt-2 text-base font-semibold"
                       style={{ color: safeColor(newPromptColor, "#0f172a") }}
@@ -1178,7 +1184,9 @@ export default function ESLAudioPromptApp() {
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <p className="font-semibold">{item.student_name}</p>
-                            <p className="text-xs text-slate-500">{formatDate(item.created_at)}</p>
+                            <p className="text-xs text-slate-500">
+                              {formatDate(item.created_at)}
+                            </p>
                           </div>
                           <span className="rounded-full border px-2 py-1 text-xs">
                             {item.feedback_audio_url ? "Feedback sent" : "Needs feedback"}
