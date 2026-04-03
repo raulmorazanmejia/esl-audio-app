@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type User as SupabaseUser } from "@supabase/supabase-js";
 import {
   Mic,
   Square,
@@ -19,6 +19,8 @@ import {
 
 type Submission = {
   id: string;
+  student_email?: string | null;
+  student_auth_id?: string | null;
   student_name: string;
   prompt_text: string;
   audio_path: string;
@@ -286,6 +288,11 @@ export default function ESLAudioPromptApp() {
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
   const [studentName, setStudentName] = useState("");
+  const [studentEmail, setStudentEmail] = useState("");
+  const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMessage, setAuthMessage] = useState("");
+  const [studentFeedbackSubmission, setStudentFeedbackSubmission] = useState<Submission | null>(null);
   const [permissionState, setPermissionState] = useState("idle");
   const [isStudentRecording, setIsStudentRecording] = useState(false);
   const [audioURL, setAudioURL] = useState("");
@@ -335,6 +342,41 @@ export default function ESLAudioPromptApp() {
       }
     };
   }, [audioURL, teacherAudioURL]);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+      setAuthUser(session?.user ?? null);
+      setStudentEmail(session?.user?.email ?? "");
+      setAuthLoading(false);
+    };
+
+    void loadSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+      setStudentEmail(session?.user?.email ?? "");
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
 
   const stopStudentTimer = () => {
     if (studentTimerRef.current) {
@@ -498,6 +540,44 @@ export default function ESLAudioPromptApp() {
     }
   };
 
+  const sendMagicLink = async () => {
+    if (!supabase) {
+      setAuthMessage("Supabase is not configured.");
+      return;
+    }
+
+    if (!studentEmail.trim()) {
+      setAuthMessage("Enter your email first.");
+      return;
+    }
+
+    setAuthMessage("Sending magic link...");
+
+    try {
+      const redirectTo = typeof window !== "undefined" ? window.location.origin : undefined;
+      const { error } = await supabase.auth.signInWithOtp({
+        email: studentEmail.trim(),
+        options: {
+          emailRedirectTo: redirectTo,
+        },
+      });
+
+      if (error) throw error;
+      setAuthMessage("Magic link sent. Open your email on this phone and tap the sign-in link.");
+    } catch (error) {
+      console.error(error);
+      setAuthMessage(error instanceof Error ? error.message : "Could not send magic link.");
+    }
+  };
+
+  const signOutStudent = async () => {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setStudentFeedbackSubmission(null);
+    setSubmitted(false);
+    setAuthMessage("Signed out.");
+  };
+
   const sanitizeFilePart = (value: string) =>
     value
       .trim()
@@ -547,6 +627,34 @@ export default function ESLAudioPromptApp() {
     }
   };
 
+  const fetchStudentFeedback = async (user: SupabaseUser | null) => {
+    if (!supabase || !user) {
+      setStudentFeedbackSubmission(null);
+      return;
+    }
+
+    try {
+      let query = supabase
+        .from("student_submissions")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (user.id) {
+        query = query.eq("student_auth_id", user.id);
+      } else if (user.email) {
+        query = query.eq("student_email", user.email);
+      }
+
+      const { data, error } = await query.maybeSingle();
+
+      if (error) throw error;
+      setStudentFeedbackSubmission((data as Submission | null) || null);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
   const fetchSubmissions = async () => {
     if (!supabase) {
       setTeacherError("Supabase is not configured.");
@@ -583,13 +691,14 @@ export default function ESLAudioPromptApp() {
   useEffect(() => {
     if (activeView === "student") {
       void fetchActivePrompt();
+      void fetchStudentFeedback(authUser);
     }
     if (activeView === "teacher") {
       void fetchSubmissions();
       void fetchPrompts();
       void fetchActivePrompt();
     }
-  }, [activeView]);
+  }, [activeView, authUser]);
 
   const applyThemePreset = (theme: ThemePreset) => {
     setNewPromptColor(theme.promptColor);
@@ -750,6 +859,8 @@ export default function ESLAudioPromptApp() {
 
       const { error: insertError } = await supabase.from("student_submissions").insert({
         student_name: studentName.trim(),
+        student_email: authUser?.email ?? studentEmail.trim() || null,
+        student_auth_id: authUser?.id ?? null,
         prompt_text: activePrompt.prompt_text,
         audio_path: filePath,
         audio_url: publicData.publicUrl,
@@ -760,6 +871,7 @@ export default function ESLAudioPromptApp() {
 
       setSubmitted(true);
       setStatusText("Submission saved successfully.");
+      await fetchStudentFeedback(authUser);
       if (activeView === "teacher") {
         void fetchSubmissions();
       }
@@ -918,6 +1030,41 @@ export default function ESLAudioPromptApp() {
               </CardHeader>
 
               <CardContent className="space-y-7">
+                <div className="rounded-[26px] border border-slate-200 bg-slate-50/80 p-5 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-extrabold text-slate-900">Student sign-in</p>
+                      <p className="text-sm text-slate-600">
+                        Use your email once. On the same phone, you should stay signed in.
+                      </p>
+                    </div>
+                    {authUser && (
+                      <AppButton onClick={signOutStudent} variant="outline">
+                        Sign out
+                      </AppButton>
+                    )}
+                  </div>
+
+                  {!authUser ? (
+                    <div className="mt-4 space-y-3">
+                      <TextInput
+                        type="email"
+                        value={studentEmail}
+                        onChange={(e) => setStudentEmail(e.target.value)}
+                        placeholder="Enter your email"
+                      />
+                      <AppButton onClick={sendMagicLink} disabled={authLoading} className="w-full">
+                        {authLoading ? "Loading..." : "Email me a magic link"}
+                      </AppButton>
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                      Signed in as <strong>{authUser.email}</strong>
+                    </div>
+                  )}
+
+                  {authMessage && <p className="mt-3 text-sm text-slate-600">{authMessage}</p>}
+                </div>
                 <div className="rounded-[30px] border-2 border-violet-300 bg-gradient-to-r from-violet-100 via-pink-50 to-white p-5 shadow-md">
                   <div className="mb-4 inline-flex items-center rounded-full bg-violet-700 px-4 py-2 text-sm font-black uppercase tracking-wide text-white shadow-sm">
                     Speaking task
@@ -938,6 +1085,18 @@ export default function ESLAudioPromptApp() {
                     </div>
                   </div>
                 </div>
+
+                {studentFeedbackSubmission?.feedback_audio_url && (
+                  <div className="rounded-[26px] border border-emerald-200 bg-emerald-50/80 p-5 shadow-sm">
+                    <p className="text-lg font-extrabold text-emerald-900">Your teacher feedback</p>
+                    <p className="mt-1 text-sm text-emerald-800">
+                      If your teacher has already responded, you can play it here.
+                    </p>
+                    <div className="mt-4">
+                      <audio controls src={studentFeedbackSubmission.feedback_audio_url} className="w-full" />
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   <label htmlFor="studentName" className="text-xl font-extrabold text-slate-900">
@@ -1009,7 +1168,7 @@ export default function ESLAudioPromptApp() {
 
                 <AppButton
                   onClick={submitToSupabase}
-                  disabled={!studentName.trim() || !audioBlob || isSubmitting || !activePrompt}
+                  disabled={!authUser || !studentName.trim() || !audioBlob || isSubmitting || !activePrompt}
                   className="h-12 w-full text-base hover:scale-[1.01]"
                   style={studentPrimaryButtonStyle}
                 >
