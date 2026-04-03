@@ -13,6 +13,8 @@ import {
   ListMusic,
   PencilLine,
   Check,
+  Sparkles,
+  Palette,
 } from "lucide-react";
 
 type Submission = {
@@ -42,6 +44,46 @@ type PromptRow = {
   created_at: string;
 };
 
+type ThemePreset = {
+  name: string;
+  promptColor: string;
+  buttonColor: string;
+  cardBackground: string;
+};
+
+const THEME_PRESETS: ThemePreset[] = [
+  {
+    name: "Cute Pink",
+    promptColor: "#9d174d",
+    buttonColor: "#ec4899",
+    cardBackground: "#fdf2f8",
+  },
+  {
+    name: "Calm Blue",
+    promptColor: "#1d4ed8",
+    buttonColor: "#3b82f6",
+    cardBackground: "#eff6ff",
+  },
+  {
+    name: "Lavender Pop",
+    promptColor: "#6d28d9",
+    buttonColor: "#8b5cf6",
+    cardBackground: "#f5f3ff",
+  },
+  {
+    name: "Mint Fresh",
+    promptColor: "#0f766e",
+    buttonColor: "#14b8a6",
+    cardBackground: "#f0fdfa",
+  },
+  {
+    name: "Peach Soft",
+    promptColor: "#c2410c",
+    buttonColor: "#fb7185",
+    cardBackground: "#fff7ed",
+  },
+];
+
 function formatDate(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -63,7 +105,9 @@ function renderBasicRichText(text?: string | null) {
 function safeColor(value: string | null | undefined, fallback: string) {
   if (!value) return fallback;
   const trimmed = value.trim();
-  return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed) ? trimmed : fallback;
+  return /^#([0-9a-fA-F]{6})$/.test(trimmed) || /^#([0-9a-fA-F]{3})$/.test(trimmed)
+    ? trimmed
+    : fallback;
 }
 
 function Card({
@@ -75,7 +119,7 @@ function Card({
 }) {
   return (
     <div
-      className={`rounded-[28px] border border-slate-200/80 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur ${className}`}
+      className={`rounded-[30px] border border-slate-200/80 bg-white/90 shadow-[0_14px_45px_rgba(15,23,42,0.08)] backdrop-blur ${className}`}
     >
       {children}
     </div>
@@ -109,7 +153,7 @@ function CardTitle({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <h2 className={`font-bold tracking-tight ${className}`}>{children}</h2>;
+  return <h2 className={`font-black tracking-tight ${className}`}>{children}</h2>;
 }
 
 function AppButton({
@@ -130,7 +174,7 @@ function AppButton({
   style?: CSSProperties;
 }) {
   let styles =
-    "inline-flex items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
+    "inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50";
 
   if (variant === "default") {
     styles += " bg-slate-900 text-white hover:bg-slate-800 shadow-sm";
@@ -187,6 +231,33 @@ function AlertBox({
   return <div className={styles}>{children}</div>;
 }
 
+function ColorPickerRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="text-sm font-semibold text-slate-700">{label}</label>
+      <div className="flex items-center gap-3 rounded-2xl border border-slate-300 bg-white p-3">
+        <input
+          type="color"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-10 w-14 cursor-pointer rounded-lg border-0 bg-transparent"
+        />
+        <span className="rounded-xl bg-slate-100 px-3 py-2 font-mono text-sm text-slate-700">
+          {value}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function ESLAudioPromptApp() {
   const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
   const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
@@ -208,9 +279,9 @@ export default function ESLAudioPromptApp() {
   const [newPromptTitle, setNewPromptTitle] = useState("");
   const [newPromptText, setNewPromptText] = useState("");
   const [newExampleText, setNewExampleText] = useState("");
-  const [newPromptColor, setNewPromptColor] = useState("#5b21b6");
+  const [newPromptColor, setNewPromptColor] = useState("#9d174d");
   const [newButtonColor, setNewButtonColor] = useState("#ec4899");
-  const [newCardBackground, setNewCardBackground] = useState("#fdf4ff");
+  const [newCardBackground, setNewCardBackground] = useState("#fdf2f8");
   const [newShowExample, setNewShowExample] = useState(true);
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
 
@@ -520,6 +591,12 @@ export default function ESLAudioPromptApp() {
     }
   }, [activeView]);
 
+  const applyThemePreset = (theme: ThemePreset) => {
+    setNewPromptColor(theme.promptColor);
+    setNewButtonColor(theme.buttonColor);
+    setNewCardBackground(theme.cardBackground);
+  };
+
   const createPrompt = async () => {
     if (!supabase) {
       setPromptError("Supabase is not configured.");
@@ -541,9 +618,9 @@ export default function ESLAudioPromptApp() {
         prompt_text: newPromptText.trim(),
         example_text: newExampleText.trim() || null,
         is_active: false,
-        prompt_color: safeColor(newPromptColor, "#5b21b6"),
+        prompt_color: safeColor(newPromptColor, "#9d174d"),
         button_color: safeColor(newButtonColor, "#ec4899"),
-        card_background: safeColor(newCardBackground, "#fdf4ff"),
+        card_background: safeColor(newCardBackground, "#fdf2f8"),
         show_example: newShowExample,
       });
 
@@ -552,9 +629,9 @@ export default function ESLAudioPromptApp() {
       setNewPromptTitle("");
       setNewPromptText("");
       setNewExampleText("");
-      setNewPromptColor("#5b21b6");
+      setNewPromptColor("#9d174d");
       setNewButtonColor("#ec4899");
-      setNewCardBackground("#fdf4ff");
+      setNewCardBackground("#fdf2f8");
       setNewShowExample(true);
 
       setPromptSuccess("Prompt created successfully.");
@@ -730,15 +807,15 @@ export default function ESLAudioPromptApp() {
   const displayedTitle = activePrompt?.prompt_title?.trim() || "Student speaking task";
   const displayedPrompt = activePrompt?.prompt_text || "No active prompt yet.";
   const displayedExample = activePrompt?.example_text || "";
-  const displayedPromptColor = safeColor(activePrompt?.prompt_color, "#5b21b6");
+  const displayedPromptColor = safeColor(activePrompt?.prompt_color, "#9d174d");
   const displayedButtonColor = safeColor(activePrompt?.button_color, "#ec4899");
-  const displayedCardBackground = safeColor(activePrompt?.card_background, "#fdf4ff");
+  const displayedCardBackground = safeColor(activePrompt?.card_background, "#fdf2f8");
   const displayedShowExample = activePrompt?.show_example ?? true;
 
   const studentPrimaryButtonStyle: CSSProperties = {
     backgroundColor: displayedButtonColor,
     color: "#ffffff",
-    boxShadow: "0 10px 25px rgba(236, 72, 153, 0.22)",
+    boxShadow: `0 12px 26px ${displayedButtonColor}55`,
   };
 
   return (
@@ -796,6 +873,7 @@ export default function ESLAudioPromptApp() {
               <div className="h-3 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500" />
               <CardHeader className="space-y-4">
                 <div className="inline-flex w-fit items-center rounded-full border border-violet-200 bg-violet-50 px-4 py-1.5 text-sm font-semibold text-violet-800">
+                  <Sparkles className="mr-2 h-4 w-4" />
                   {displayedTitle}
                 </div>
                 <CardTitle className="text-4xl leading-tight text-slate-900">
@@ -808,14 +886,18 @@ export default function ESLAudioPromptApp() {
 
               <CardContent className="space-y-7">
                 <div
-                  className="rounded-[26px] border border-violet-100 p-7 shadow-inner"
-                  style={{ backgroundColor: displayedCardBackground }}
+                  className="rounded-[30px] border p-8 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]"
+                  style={{
+                    background: `linear-gradient(135deg, ${displayedCardBackground}, #ffffff)`,
+                    borderColor: `${displayedPromptColor}33`,
+                  }}
                 >
                   <div
-                    className="text-3xl font-extrabold leading-snug"
+                    className="text-4xl font-black leading-snug"
                     style={{ color: displayedPromptColor }}
-                    dangerouslySetInnerHTML={{ __html: renderBasicRichText(displayedPrompt) }}
-                  />
+                  >
+                    {displayedPrompt}
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -840,7 +922,7 @@ export default function ESLAudioPromptApp() {
                       <AppButton
                         onClick={startStudentRecording}
                         style={studentPrimaryButtonStyle}
-                        className="text-base"
+                        className="text-base hover:scale-[1.02]"
                       >
                         <Mic className="mr-2 h-5 w-5" />
                         Start recording
@@ -889,7 +971,7 @@ export default function ESLAudioPromptApp() {
                 <AppButton
                   onClick={submitToSupabase}
                   disabled={!studentName.trim() || !audioBlob || isSubmitting || !activePrompt}
-                  className="h-12 w-full text-base"
+                  className="h-12 w-full text-base hover:scale-[1.01]"
                   style={studentPrimaryButtonStyle}
                 >
                   {isSubmitting ? (
@@ -936,10 +1018,7 @@ export default function ESLAudioPromptApp() {
                 </div>
                 <div className="rounded-[24px] border border-violet-100 bg-violet-50/60 p-5">
                   <p className="text-2xl font-extrabold text-violet-900">Prompt</p>
-                  <div
-                    className="mt-3 text-xl leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: renderBasicRichText(displayedPrompt) }}
-                  />
+                  <div className="mt-3 text-xl font-semibold leading-relaxed">{displayedPrompt}</div>
                 </div>
                 {displayedShowExample && displayedExample && (
                   <div className="rounded-[24px] border border-sky-100 bg-sky-50/70 p-5">
@@ -955,18 +1034,18 @@ export default function ESLAudioPromptApp() {
             </Card>
           </div>
         ) : (
-          <div className="grid gap-6 xl:grid-cols-[0.95fr_1fr_1fr]">
+          <div className="grid gap-6 xl:grid-cols-[1.05fr_1fr_1fr]">
             <Card className="overflow-hidden">
               <div className="h-3 bg-gradient-to-r from-violet-500 via-fuchsia-500 to-pink-500" />
               <CardHeader className="space-y-2">
                 <CardTitle className="text-2xl">Prompt manager</CardTitle>
                 <p className="text-sm text-slate-600">
-                  Create prompts, basic styling, and choose which one students see.
+                  Create prompts, choose a theme, and decide what students see.
                 </p>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-5">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Prompt title</label>
+                  <label className="text-sm font-semibold text-slate-700">Prompt title</label>
                   <TextInput
                     value={newPromptTitle}
                     onChange={(e) => setNewPromptTitle(e.target.value)}
@@ -975,51 +1054,75 @@ export default function ESLAudioPromptApp() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Prompt text</label>
+                  <label className="text-sm font-semibold text-slate-700">Prompt text</label>
                   <TextArea
                     value={newPromptText}
                     onChange={(e) => setNewPromptText(e.target.value)}
-                    placeholder={`Example:\nDescribe your morning routine.\nYou can use **bold** text.`}
+                    placeholder={`Example:\nDescribe your morning routine.`}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Example text</label>
+                  <label className="text-sm font-semibold text-slate-700">Example text</label>
                   <TextArea
                     value={newExampleText}
                     onChange={(e) => setNewExampleText(e.target.value)}
-                    placeholder={`Example:\nI wake up at 7.\nI drink **coffee**.\nYou can also use **bold** here.`}
+                    placeholder={`Example:\nI wake up at 7.\nI drink coffee.`}
                   />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Prompt text color</label>
-                    <TextInput
-                      value={newPromptColor}
-                      onChange={(e) => setNewPromptColor(e.target.value)}
-                      placeholder="#5b21b6"
-                    />
+                <div className="rounded-[24px] border border-violet-100 bg-violet-50/50 p-4">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-violet-700" />
+                    <p className="font-semibold text-violet-900">Theme presets</p>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Recording button color</label>
-                    <TextInput
-                      value={newButtonColor}
-                      onChange={(e) => setNewButtonColor(e.target.value)}
-                      placeholder="#ec4899"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Prompt card background</label>
-                    <TextInput
-                      value={newCardBackground}
-                      onChange={(e) => setNewCardBackground(e.target.value)}
-                      placeholder="#fdf4ff"
-                    />
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {THEME_PRESETS.map((theme) => (
+                      <button
+                        key={theme.name}
+                        type="button"
+                        onClick={() => applyThemePreset(theme)}
+                        className="flex items-center justify-between rounded-2xl border border-white/70 bg-white px-3 py-3 text-left transition hover:scale-[1.01] hover:shadow-sm"
+                      >
+                        <span className="text-sm font-semibold text-slate-800">{theme.name}</span>
+                        <span className="flex gap-1">
+                          <span
+                            className="h-4 w-4 rounded-full border border-white shadow-sm"
+                            style={{ backgroundColor: theme.promptColor }}
+                          />
+                          <span
+                            className="h-4 w-4 rounded-full border border-white shadow-sm"
+                            style={{ backgroundColor: theme.buttonColor }}
+                          />
+                          <span
+                            className="h-4 w-4 rounded-full border border-slate-200 shadow-sm"
+                            style={{ backgroundColor: theme.cardBackground }}
+                          />
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <label className="flex items-center gap-2 text-sm font-medium">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <ColorPickerRow
+                    label="Prompt color"
+                    value={newPromptColor}
+                    onChange={setNewPromptColor}
+                  />
+                  <ColorPickerRow
+                    label="Button color"
+                    value={newButtonColor}
+                    onChange={setNewButtonColor}
+                  />
+                  <ColorPickerRow
+                    label="Card background"
+                    value={newCardBackground}
+                    onChange={setNewCardBackground}
+                  />
+                </div>
+
+                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
                   <input
                     type="checkbox"
                     checked={newShowExample}
@@ -1029,27 +1132,41 @@ export default function ESLAudioPromptApp() {
                 </label>
 
                 <div className="rounded-[24px] border border-violet-100 bg-violet-50/50 p-4">
-                  <p className="mb-2 font-semibold text-violet-900">Preview</p>
+                  <p className="mb-3 font-semibold text-violet-900">Preview</p>
                   <div
-                    className="rounded-[20px] border border-white/70 p-4"
-                    style={{ backgroundColor: safeColor(newCardBackground, "#fdf4ff") }}
+                    className="rounded-[22px] border p-5"
+                    style={{
+                      background: `linear-gradient(135deg, ${safeColor(newCardBackground, "#fdf2f8")}, #ffffff)`,
+                      borderColor: `${safeColor(newPromptColor, "#9d174d")}33`,
+                    }}
                   >
                     <p className="text-sm font-semibold text-slate-500">
                       {newPromptTitle || "Prompt title preview"}
                     </p>
                     <div
-                      className="mt-2 text-base font-semibold"
-                      style={{ color: safeColor(newPromptColor, "#5b21b6") }}
-                      dangerouslySetInnerHTML={{
-                        __html: renderBasicRichText(newPromptText || "Your prompt preview appears here."),
-                      }}
-                    />
+                      className="mt-3 text-2xl font-black leading-snug"
+                      style={{ color: safeColor(newPromptColor, "#9d174d") }}
+                    >
+                      {newPromptText || "Your prompt preview appears here."}
+                    </div>
                     {newShowExample && newExampleText && (
                       <div
-                        className="mt-2 text-sm text-slate-600"
+                        className="mt-3 text-sm text-slate-600"
                         dangerouslySetInnerHTML={{ __html: renderBasicRichText(newExampleText) }}
                       />
                     )}
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        className="rounded-2xl px-4 py-2 text-sm font-bold text-white"
+                        style={{
+                          backgroundColor: safeColor(newButtonColor, "#ec4899"),
+                          boxShadow: `0 10px 24px ${safeColor(newButtonColor, "#ec4899")}55`,
+                        }}
+                      >
+                        Recording button preview
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1060,7 +1177,7 @@ export default function ESLAudioPromptApp() {
                   style={{
                     backgroundColor: safeColor(newButtonColor, "#ec4899"),
                     color: "#ffffff",
-                    boxShadow: "0 10px 25px rgba(236,72,153,0.22)",
+                    boxShadow: `0 10px 25px ${safeColor(newButtonColor, "#ec4899")}55`,
                   }}
                 >
                   {isSavingPrompt ? (
@@ -1123,7 +1240,7 @@ export default function ESLAudioPromptApp() {
                           />
                           {promptItem.show_example && promptItem.example_text && (
                             <div
-                              className="mt-2 text-sm text-slate-600 leading-relaxed"
+                              className="mt-2 text-sm leading-relaxed text-slate-600"
                               dangerouslySetInnerHTML={{
                                 __html: renderBasicRichText(promptItem.example_text),
                               }}
