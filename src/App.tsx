@@ -112,6 +112,30 @@ function safeColor(value: string | null | undefined, fallback: string) {
     : fallback;
 }
 
+function getBestAudioMimeType() {
+  const candidates = [
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/webm;codecs=opus",
+    "audio/mp4",
+    "audio/webm",
+  ];
+
+  for (const type of candidates) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+
+  return "";
+}
+
+function getAudioExtension(mimeType?: string) {
+  if (!mimeType) return "bin";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("webm")) return "webm";
+  return "bin";
+}
+
 function Card({
   children,
   className = "",
@@ -454,8 +478,8 @@ export default function ESLAudioPromptApp() {
     if (!stream) return;
 
     studentChunksRef.current = [];
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-    const recorder = new MediaRecorder(stream, { mimeType });
+    const mimeType = getBestAudioMimeType();
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
     studentRecorderRef.current = recorder;
 
     recorder.ondataavailable = (event) => {
@@ -503,8 +527,8 @@ export default function ESLAudioPromptApp() {
     if (!stream) return;
 
     teacherChunksRef.current = [];
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "audio/mp4";
-    const recorder = new MediaRecorder(stream, { mimeType });
+    const mimeType = getBestAudioMimeType();
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
     teacherRecorderRef.current = recorder;
 
     recorder.ondataavailable = (event) => {
@@ -841,7 +865,7 @@ export default function ESLAudioPromptApp() {
     setStatusText("Uploading recording...");
 
     try {
-      const extension = audioBlob.type.includes("mp4") ? "mp4" : "webm";
+      const extension = getAudioExtension(audioBlob.type);
       const fileName = `${Date.now()}-${sanitizeFilePart(studentName)}.${extension}`;
       const filePath = `submissions/${fileName}`;
 
@@ -900,7 +924,7 @@ export default function ESLAudioPromptApp() {
     setTeacherStatusText("Uploading feedback...");
 
     try {
-      const extension = teacherAudioBlob.type.includes("mp4") ? "mp4" : "webm";
+      const extension = getAudioExtension(teacherAudioBlob.type);
       const fileName = `${Date.now()}-${sanitizeFilePart(
         selectedSubmission.student_name
       )}-feedback.${extension}`;
@@ -1149,7 +1173,8 @@ export default function ESLAudioPromptApp() {
                             const a = document.createElement("a");
                             a.href = audioURL;
                             const safeName = (studentName || "student").trim().replace(/\s+/g, "_");
-                            a.download = `${safeName}_response.webm`;
+                            const extension = getAudioExtension(audioBlob.type);
+                            a.download = `${safeName}_response.${extension}`;
                             a.click();
                           }}
                           variant="secondary"
