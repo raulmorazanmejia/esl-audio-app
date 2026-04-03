@@ -11,6 +11,8 @@ import {
   RefreshCcw,
   MessageSquare,
   ListMusic,
+  PencilLine,
+  Check,
 } from "lucide-react";
 
 type Submission = {
@@ -25,6 +27,14 @@ type Submission = {
   feedback_audio_url?: string | null;
   feedback_status?: string | null;
   feedback_created_at?: string | null;
+};
+
+type PromptRow = {
+  id: string;
+  prompt_text: string;
+  example_text?: string | null;
+  is_active: boolean;
+  created_at: string;
 };
 
 function formatDate(value?: string | null) {
@@ -122,6 +132,15 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={`min-h-[100px] w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-900 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200 ${props.className || ""}`}
+    />
+  );
+}
+
 function AlertBox({
   children,
   tone = "default",
@@ -141,15 +160,21 @@ export default function ESLAudioPromptApp() {
   const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
   const SUPABASE_BUCKET = import.meta.env.VITE_SUPABASE_BUCKET || "Student-audio";
 
-  const prompt = "Say two things you like about Texas.";
-  const example = 'Example: "I like the food. I like the weather."';
-
   const supabase = useMemo(() => {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }, [SUPABASE_URL, SUPABASE_ANON_KEY]);
 
   const [activeView, setActiveView] = useState<"student" | "teacher">("student");
+
+  const [activePrompt, setActivePrompt] = useState<PromptRow | null>(null);
+  const [prompts, setPrompts] = useState<PromptRow[]>([]);
+  const [loadingPrompts, setLoadingPrompts] = useState(false);
+  const [promptError, setPromptError] = useState("");
+  const [newPromptText, setNewPromptText] = useState("");
+  const [newExampleText, setNewExampleText] = useState("");
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [promptSuccess, setPromptSuccess] = useState("");
 
   const [studentName, setStudentName] = useState("");
   const [permissionState, setPermissionState] = useState("idle");
@@ -371,6 +396,48 @@ export default function ESLAudioPromptApp() {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "student";
 
+  const fetchActivePrompt = async () => {
+    if (!supabase) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("prompts")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      setActivePrompt(data || null);
+    } catch (error) {
+      console.error(error);
+      setPromptError(error instanceof Error ? error.message : "Could not load active prompt.");
+    }
+  };
+
+  const fetchPrompts = async () => {
+    if (!supabase) return;
+
+    setLoadingPrompts(true);
+    setPromptError("");
+
+    try {
+      const { data, error } = await supabase
+        .from("prompts")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setPrompts((data || []) as PromptRow[]);
+    } catch (error) {
+      console.error(error);
+      setPromptError(error instanceof Error ? error.message : "Could not load prompts.");
+    } finally {
+      setLoadingPrompts(false);
+    }
+  };
+
   const fetchSubmissions = async () => {
     if (!supabase) {
       setTeacherError("Supabase is not configured.");
@@ -401,16 +468,95 @@ export default function ESLAudioPromptApp() {
   };
 
   useEffect(() => {
+    void fetchActivePrompt();
+  }, []);
+
+  useEffect(() => {
     if (activeView === "teacher") {
       void fetchSubmissions();
+      void fetchPrompts();
     }
   }, [activeView]);
+
+  const createPrompt = async () => {
+    if (!supabase) {
+      setPromptError("Supabase is not configured.");
+      return;
+    }
+
+    if (!newPromptText.trim()) {
+      setPromptError("Prompt text is required.");
+      return;
+    }
+
+    setIsSavingPrompt(true);
+    setPromptError("");
+    setPromptSuccess("");
+
+    try {
+      const { error } = await supabase.from("prompts").insert({
+        prompt_text: newPromptText.trim(),
+        example_text: newExampleText.trim() || null,
+        is_active: false,
+      });
+
+      if (error) throw error;
+
+      setNewPromptText("");
+      setNewExampleText("");
+      setPromptSuccess("Prompt created successfully.");
+      await fetchPrompts();
+    } catch (error) {
+      console.error(error);
+      setPromptError(error instanceof Error ? error.message : "Could not create prompt.");
+    } finally {
+      setIsSavingPrompt(false);
+    }
+  };
+
+  const activatePrompt = async (promptId: string) => {
+    if (!supabase) {
+      setPromptError("Supabase is not configured.");
+      return;
+    }
+
+    setPromptError("");
+    setPromptSuccess("");
+
+    try {
+      const { error: clearError } = await supabase
+        .from("prompts")
+        .update({ is_active: false })
+        .neq("id", "");
+
+      if (clearError) throw clearError;
+
+      const { error: setError } = await supabase
+        .from("prompts")
+        .update({ is_active: true })
+        .eq("id", promptId);
+
+      if (setError) throw setError;
+
+      setPromptSuccess("Active prompt updated.");
+      await fetchPrompts();
+      await fetchActivePrompt();
+    } catch (error) {
+      console.error(error);
+      setPromptError(error instanceof Error ? error.message : "Could not activate prompt.");
+    }
+  };
 
   const submitToSupabase = async () => {
     if (!studentName.trim() || !audioBlob) return;
 
     if (!supabase) {
       setSubmitError("Supabase is not configured.");
+      return;
+    }
+
+    if (!activePrompt) {
+      setSubmitError("No active prompt found.");
       return;
     }
 
@@ -438,7 +584,7 @@ export default function ESLAudioPromptApp() {
 
       const { error: insertError } = await supabase.from("student_submissions").insert({
         student_name: studentName.trim(),
-        prompt_text: prompt,
+        prompt_text: activePrompt.prompt_text,
         audio_path: filePath,
         audio_url: publicData.publicUrl,
         status: "submitted",
@@ -528,6 +674,9 @@ export default function ESLAudioPromptApp() {
     return `${m}:${s}`;
   };
 
+  const displayedPrompt = activePrompt?.prompt_text || "No active prompt yet.";
+  const displayedExample = activePrompt?.example_text || "Add an example in the teacher dashboard.";
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -535,7 +684,7 @@ export default function ESLAudioPromptApp() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">ESL Audio App</h1>
             <p className="text-slate-600">
-              Student recording plus teacher dashboard and recorded feedback.
+              Student recording, teacher feedback, and admin prompt management.
             </p>
           </div>
           <div className="flex gap-2">
@@ -579,19 +728,18 @@ export default function ESLAudioPromptApp() {
             <Card>
               <CardHeader className="space-y-3">
                 <div className="inline-flex w-fit items-center rounded-full border px-3 py-1 text-sm">
-                  ESL speaking rehearsal app
+                  Student speaking task
                 </div>
                 <CardTitle className="text-3xl leading-tight">Student Recording Screen</CardTitle>
                 <p className="text-base text-slate-600">
-                  This version records in the browser, uploads audio to Supabase Storage, and saves
-                  a submission row in the database.
+                  This screen uses the active prompt from the teacher dashboard.
                 </p>
               </CardHeader>
 
               <CardContent className="space-y-6">
                 <div className="rounded-2xl border bg-white p-5">
-                  <p className="text-xl font-semibold">{prompt}</p>
-                  <p className="mt-2 text-sm text-slate-500">{example}</p>
+                  <p className="text-xl font-semibold">{displayedPrompt}</p>
+                  <p className="mt-2 text-sm text-slate-500">{displayedExample}</p>
                 </div>
 
                 <div className="space-y-2">
@@ -641,7 +789,7 @@ export default function ESLAudioPromptApp() {
                             const a = document.createElement("a");
                             a.href = audioURL;
                             const safeName = (studentName || "student").trim().replace(/\s+/g, "_");
-                            a.download = `${safeName}_texas_response.webm`;
+                            a.download = `${safeName}_response.webm`;
                             a.click();
                           }}
                           variant="secondary"
@@ -660,7 +808,7 @@ export default function ESLAudioPromptApp() {
 
                 <AppButton
                   onClick={submitToSupabase}
-                  disabled={!studentName.trim() || !audioBlob || isSubmitting}
+                  disabled={!studentName.trim() || !audioBlob || isSubmitting || !activePrompt}
                   className="h-11 w-full"
                 >
                   {isSubmitting ? (
@@ -697,39 +845,121 @@ export default function ESLAudioPromptApp() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-2xl">Deployment notes</CardTitle>
+                <CardTitle className="text-2xl">Current prompt</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm text-slate-700">
                 <div className="rounded-2xl border p-4">
-                  <p className="font-semibold">Env vars</p>
-                  <p className="mt-1">
-                    Set <code>VITE_SUPABASE_URL</code>, <code>VITE_SUPABASE_PUBLISHABLE_KEY</code>,
-                    and <code>VITE_SUPABASE_BUCKET</code>.
-                  </p>
+                  <p className="font-semibold">Active prompt</p>
+                  <p className="mt-2">{displayedPrompt}</p>
                 </div>
                 <div className="rounded-2xl border p-4">
-                  <p className="font-semibold">Bucket</p>
-                  <p className="mt-1">
-                    Public bucket named <code>{SUPABASE_BUCKET}</code>.
-                  </p>
+                  <p className="font-semibold">Example</p>
+                  <p className="mt-2">{displayedExample}</p>
                 </div>
-                <div className="rounded-2xl border p-4">
-                  <p className="font-semibold">Table</p>
-                  <p className="mt-1">
-                    Uses <code>student_submissions</code>.
-                  </p>
-                </div>
-                <div className="rounded-2xl border p-4">
-                  <p className="font-semibold">HTTPS</p>
-                  <p className="mt-1">
-                    Browser mic access requires a secure site, which Vercel provides.
-                  </p>
-                </div>
+                {promptError && <AlertBox tone="error">{promptError}</AlertBox>}
               </CardContent>
             </Card>
           </div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr_1fr]">
+            <Card>
+              <CardHeader className="space-y-2">
+                <CardTitle className="text-2xl">Prompt manager</CardTitle>
+                <p className="text-sm text-slate-600">
+                  Create prompts and choose which one students see.
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Prompt text</label>
+                  <TextArea
+                    value={newPromptText}
+                    onChange={(e) => setNewPromptText(e.target.value)}
+                    placeholder="Example: Describe your morning routine."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Example text</label>
+                  <TextArea
+                    value={newExampleText}
+                    onChange={(e) => setNewExampleText(e.target.value)}
+                    placeholder='Example: "I wake up at 7. I drink coffee."'
+                  />
+                </div>
+
+                <AppButton
+                  onClick={createPrompt}
+                  disabled={isSavingPrompt || !newPromptText.trim()}
+                  className="w-full"
+                >
+                  {isSavingPrompt ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving prompt...
+                    </>
+                  ) : (
+                    <>
+                      <PencilLine className="mr-2 h-4 w-4" />
+                      Create new prompt
+                    </>
+                  )}
+                </AppButton>
+
+                {promptSuccess && <AlertBox tone="success">{promptSuccess}</AlertBox>}
+                {promptError && <AlertBox tone="error">{promptError}</AlertBox>}
+
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold">Saved prompts</p>
+                    <AppButton onClick={() => void fetchPrompts()} variant="outline">
+                      <RefreshCcw className="mr-2 h-4 w-4" />
+                      Refresh
+                    </AppButton>
+                  </div>
+
+                  {loadingPrompts ? (
+                    <div className="rounded-2xl border p-4 text-sm text-slate-600">
+                      Loading prompts...
+                    </div>
+                  ) : prompts.length === 0 ? (
+                    <div className="rounded-2xl border p-4 text-sm text-slate-600">
+                      No prompts yet.
+                    </div>
+                  ) : (
+                    prompts.map((promptItem) => (
+                      <div key={promptItem.id} className="rounded-2xl border p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{promptItem.prompt_text}</p>
+                            {promptItem.example_text && (
+                              <p className="mt-1 text-sm text-slate-600">{promptItem.example_text}</p>
+                            )}
+                            <p className="mt-2 text-xs text-slate-500">
+                              Created: {formatDate(promptItem.created_at)}
+                            </p>
+                          </div>
+                          {promptItem.is_active ? (
+                            <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700">
+                              Active
+                            </span>
+                          ) : (
+                            <AppButton
+                              onClick={() => void activatePrompt(promptItem.id)}
+                              variant="outline"
+                            >
+                              <Check className="mr-2 h-4 w-4" />
+                              Make active
+                            </AppButton>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
