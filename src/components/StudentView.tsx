@@ -105,10 +105,11 @@ export default function StudentView() {
 
       setStatus("Analyzing...");
 
-      const ai = await analyzeSubmission(
-        audioUrl,
-        "Describe your work skills in 1 minute"
-      );
+     const ai = await analyzeSubmission(
+  audioUrl,
+  "Describe your work skills in 1 minute",
+  insert.data.id
+);
 
       if (!ai) {
         setStatus("AI failed ❌");
