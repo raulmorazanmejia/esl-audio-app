@@ -1,129 +1,300 @@
 import { useRef, useState } from "react";
+import { supabase } from "../lib/supabase";
+import { analyzeSubmission } from "../lib/analyzeSubmission";
 
 export default function StudentView() {
   const [name, setName] = useState("");
   const [recording, setRecording] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [status, setStatus] = useState("");
+  const [audioURL, setAudioURL] = useState("");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [status, setStatus] = useState("Ready");
 
-  const chunks = useRef<Blob[]>([]);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const recorder = new MediaRecorder(stream);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
 
-    recorder.ondataavailable = (e) => {
-      chunks.current.push(e.data);
-    };
+      recorderRef.current = recorder;
+      chunksRef.current = [];
 
-    recorder.onstop = () => {
-      const blob = new Blob(chunks.current, { type: "audio/webm" });
-      chunks.current = [];
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
-    };
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
 
-    recorder.start();
-    setMediaRecorder(recorder);
-    setRecording(true);
-    setStatus("Recording...");
+      recorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setAudioBlob(blob);
+        setAudioURL(url);
+        setStatus("Recording complete");
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      recorder.start();
+      setRecording(true);
+      setStatus("Recording...");
+    } catch (err) {
+      console.error("MIC ERROR:", err);
+      setStatus("Mic failed ❌");
+    }
   };
 
   const stopRecording = () => {
-    mediaRecorder?.stop();
+    recorderRef.current?.stop();
     setRecording(false);
-    setStatus("Recording complete");
   };
 
   const submit = async () => {
-    if (!audioUrl || !name) {
+    if (!audioBlob || !name) {
       setStatus("Missing name or recording ❌");
       return;
     }
 
-    setStatus("Submitting...");
-
     try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          audioUrl,
-          promptText: "Describe your work skills in 1 minute",
-          submissionId: crypto.randomUUID(),
-        }),
-      });
+      setStatus("Uploading...");
 
-      if (!res.ok) throw new Error();
+      const safeName = name.trim().replace(/\s+/g, "-").toLowerCase();
+      const fileName = `submissions/${Date.now()}-${safeName}.webm`;
+
+      const uploadRes = await supabase.storage
+        .from("Student-audio")
+        .upload(fileName, audioBlob, {
+          contentType: "audio/webm",
+          upsert: false,
+        });
+
+      if (uploadRes.error) {
+        console.error("UPLOAD ERROR FULL:", JSON.stringify(uploadRes.error, null, 2));
+        setStatus("Upload failed ❌");
+        return;
+      }
+
+      const { data: publicData } = supabase.storage
+        .from("Student-audio")
+        .getPublicUrl(fileName);
+
+      const audioUrl = publicData.publicUrl;
+
+      setStatus("Saving...");
+
+      const insert = await supabase
+        .from("student_submissions")
+        .insert({
+          student_name: name.trim(),
+          prompt_text: "Describe your work skills in 1 minute",
+          audio_path: fileName,
+          audio_url: audioUrl,
+          status: "submitted",
+          student_email: null,
+          student_auth_id: null,
+        })
+        .select()
+        .single();
+
+      if (insert.error || !insert.data) {
+        console.error("INSERT ERROR FULL:", JSON.stringify(insert.error, null, 2));
+        console.error("INSERT DATA:", insert.data);
+        setStatus("Insert failed ❌");
+        return;
+      }
+
+      setStatus("Analyzing...");
+
+      const ai = await analyzeSubmission(
+        audioUrl,
+        "Describe your work skills in 1 minute",
+        insert.data.id
+      );
+
+      if (!ai) {
+        setStatus("AI failed ❌");
+        return;
+      }
+
+      const update = await supabase
+        .from("student_submissions")
+        .update({
+          transcript: ai.transcript,
+          ai_score: ai.score,
+          ai_comment: ai.comment,
+        })
+        .eq("id", insert.data.id);
+
+      if (update.error) {
+        console.error("UPDATE ERROR FULL:", JSON.stringify(update.error, null, 2));
+        setStatus("Update failed ❌");
+        return;
+      }
 
       setStatus("Done ✅");
-    } catch {
+    } catch (err) {
+      console.error("UNEXPECTED ERROR FULL:", err);
       setStatus("Something broke ❌");
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 flex flex-col items-center gap-6">
-
-        {/* Name */}
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%)",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: "24px",
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "520px",
+          background: "#ffffff",
+          borderRadius: "28px",
+          boxShadow: "0 20px 60px rgba(15, 23, 42, 0.12)",
+          padding: "32px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "24px",
+        }}
+      >
         <input
           type="text"
           placeholder="Your Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full p-3 rounded-xl border border-gray-200 text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          style={{
+            width: "100%",
+            height: "54px",
+            borderRadius: "16px",
+            border: "1px solid #dbe3f0",
+            background: "#f8fafc",
+            fontSize: "20px",
+            textAlign: "center",
+            color: "#334155",
+            outline: "none",
+            boxSizing: "border-box",
+          }}
         />
 
-        {/* Title */}
-        <h1 className="text-2xl font-bold text-gray-800 tracking-wide">
+        <div
+          style={{
+            textAlign: "center",
+            fontSize: "24px",
+            fontWeight: 800,
+            letterSpacing: "0.03em",
+            color: "#0f172a",
+          }}
+        >
           SPEAKING TASK
-        </h1>
+        </div>
 
-        {/* Prompt */}
-        <div className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-gray-700 italic shadow-sm">
+        <div
+          style={{
+            background: "#f1f5f9",
+            border: "1px solid #dbe3f0",
+            borderRadius: "18px",
+            padding: "22px",
+            textAlign: "center",
+            fontSize: "18px",
+            fontStyle: "italic",
+            color: "#334155",
+            lineHeight: 1.5,
+          }}
+        >
           "Describe your work skills in 1 minute"
         </div>
 
-        {/* Mic */}
-        <div className="flex justify-center">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
           {!recording ? (
             <button
               onClick={startRecording}
-              className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-3xl shadow-lg hover:scale-105 transition"
+              style={{
+                width: "110px",
+                height: "110px",
+                borderRadius: "999px",
+                border: "none",
+                background: "linear-gradient(135deg, #4f6cf7 0%, #3b5bdb 100%)",
+                color: "#ffffff",
+                fontSize: "42px",
+                cursor: "pointer",
+                boxShadow: "0 16px 30px rgba(79, 108, 247, 0.35)",
+              }}
             >
               🎤
             </button>
           ) : (
             <button
               onClick={stopRecording}
-              className="w-20 h-20 rounded-full bg-red-500 text-white text-lg shadow-lg animate-pulse"
+              style={{
+                width: "110px",
+                height: "110px",
+                borderRadius: "999px",
+                border: "none",
+                background: "#ef4444",
+                color: "#ffffff",
+                fontSize: "20px",
+                fontWeight: 700,
+                cursor: "pointer",
+                boxShadow: "0 16px 30px rgba(239, 68, 68, 0.3)",
+              }}
             >
               STOP
             </button>
           )}
         </div>
 
-        {/* Audio */}
-        {audioUrl && (
-          <audio controls src={audioUrl} className="w-full" />
+        {audioURL && (
+          <div
+            style={{
+              background: "#f8fafc",
+              borderRadius: "18px",
+              padding: "14px",
+              border: "1px solid #e2e8f0",
+            }}
+          >
+            <audio controls src={audioURL} style={{ width: "100%" }} />
+          </div>
         )}
 
-        {/* Submit */}
         <button
           onClick={submit}
-          className="w-full bg-gradient-to-r from-gray-800 to-black text-white py-3 rounded-xl font-medium hover:opacity-90 transition"
+          style={{
+            width: "100%",
+            height: "54px",
+            borderRadius: "16px",
+            border: "none",
+            background: "#0f172a",
+            color: "#ffffff",
+            fontSize: "18px",
+            fontWeight: 700,
+            cursor: "pointer",
+            boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
+          }}
         >
           Submit
         </button>
 
-        {/* Status */}
-        {status && (
-          <div className="text-sm text-gray-500 text-center">
-            {status}
-          </div>
-        )}
+        <div
+          style={{
+            textAlign: "center",
+            fontSize: "18px",
+            color: "#64748b",
+            minHeight: "24px",
+          }}
+        >
+          {status}
+        </div>
       </div>
     </div>
   );
