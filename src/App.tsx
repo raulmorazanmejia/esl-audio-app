@@ -2,17 +2,24 @@ import { useState } from "react";
 import StudentView from "./components/StudentView";
 import TeacherDashboard from "./components/TeacherDashboard";
 
-const TEACHER_PASSWORD = "teach123";
+const TEACHER_PASSWORD = "intel123";
+
+function getModeFromUrl(): "student" | "teacher" {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("mode") === "teacher" ? "teacher" : "student";
+}
 
 export default function App() {
-  const [view, setView] = useState<"student" | "teacher">("student");
+  const [view, setView] = useState<"student" | "teacher">(getModeFromUrl());
   const [teacherUnlocked, setTeacherUnlocked] = useState(false);
   const [passwordInput, setPasswordInput] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
-  const openTeacher = () => {
-    setView("teacher");
+  const switchMode = (newMode: "student" | "teacher") => {
+    setView(newMode);
+    window.history.pushState({}, "", `/?mode=${newMode}`);
     setPasswordError("");
+    setPasswordInput("");
   };
 
   const unlockTeacher = () => {
@@ -23,12 +30,6 @@ export default function App() {
     } else {
       setPasswordError("Wrong password ❌");
     }
-  };
-
-  const backToStudent = () => {
-    setView("student");
-    setPasswordError("");
-    setPasswordInput("");
   };
 
   return (
@@ -44,8 +45,12 @@ export default function App() {
           zIndex: 1000,
         }}
       >
-        <button
-          onClick={backToStudent}
+        <a
+          href="/?mode=student"
+          onClick={(e) => {
+            e.preventDefault();
+            switchMode("student");
+          }}
           style={{
             height: "42px",
             padding: "0 18px",
@@ -55,13 +60,21 @@ export default function App() {
             color: view === "student" ? "#ffffff" : "#334155",
             fontWeight: 700,
             cursor: "pointer",
+            textDecoration: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           Student
-        </button>
+        </a>
 
-        <button
-          onClick={openTeacher}
+        <a
+          href="/?mode=teacher"
+          onClick={(e) => {
+            e.preventDefault();
+            switchMode("teacher");
+          }}
           style={{
             height: "42px",
             padding: "0 18px",
@@ -71,10 +84,14 @@ export default function App() {
             color: view === "teacher" ? "#ffffff" : "#334155",
             fontWeight: 700,
             cursor: "pointer",
+            textDecoration: "none",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
           }}
         >
           Teacher
-        </button>
+        </a>
       </div>
 
       {view === "student" && <StudentView />}
