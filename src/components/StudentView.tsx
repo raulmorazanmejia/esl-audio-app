@@ -49,115 +49,82 @@ export default function StudentView() {
     setRecording(false);
   };
 
-  const submit = async () => {
-    if (!audioBlob || !name) {
-      setStatus("Missing name or recording ❌");
+ const submit = async () => {
+  if (!audioBlob || !name) {
+    setStatus("Missing name or recording ❌");
+    return;
+  }
+
+  try {
+    setStatus("Uploading...");
+
+    const fileName = `${Date.now()}-${name}.webm`;
+
+    const uploadRes = await supabase.storage
+      .from("Student-audio")
+      .upload(fileName, audioBlob);
+
+    if (uploadRes.error) {
+      console.error("UPLOAD ERROR FULL:", JSON.stringify(uploadRes.error, null, 2));
+      setStatus("Upload failed ❌");
       return;
     }
 
-    try {
-      setStatus("Uploading...");
+    const { data: publicData } = supabase.storage
+      .from("Student-audio")
+      .getPublicUrl(fileName);
 
-      const fileName = `${Date.now()}-${name}.webm`;
+    const audioUrl = publicData.publicUrl;
 
-      const uploadRes = await supabase.storage
-        .from("Student-audio")
-        .upload(fileName, audioBlob);
+    setStatus("Saving...");
 
-      if (uploadRes.error) {
-        console.error("UPLOAD ERROR:", uploadRes.error);
-        setStatus("Upload failed ❌");
-        return;
-      }
+    const insert = await supabase
+      .from("student_submissions")
+      .insert({
+        student_name: name,
+        audio_url: audioUrl,
+        prompt_text: "Describe your work skills in 1 minute",
+      })
+      .select()
+      .single();
 
-      const { data: publicData } = supabase.storage
-        .from("Student-audio")
-        .getPublicUrl(fileName);
-
-      const audioUrl = publicData.publicUrl;
-
-      setStatus("Saving...");
-
-      const insert = await supabase
-        .from("student_submissions")
-        .insert({
-          student_name: name,
-          audio_url: audioUrl,
-          prompt_text: "Describe your work skills in 1 minute",
-        })
-        .select()
-        .single();
-
-      if (insert.error || !insert.data) {
-        console.error("INSERT ERROR:", insert.error);
-        setStatus("Insert failed ❌");
-        return;
-      }
-
-      setStatus("Analyzing...");
-
-      const ai = await analyzeSubmission(
-        audioUrl,
-        "Describe your work skills in 1 minute"
-      );
-
-      if (!ai) {
-        setStatus("AI failed ❌");
-        return;
-      }
-
-      const update = await supabase
-        .from("student_submissions")
-        .update({
-          transcript: ai.transcript,
-          ai_score: ai.score,
-          ai_comment: ai.comment,
-        })
-        .eq("id", insert.data.id);
-
-      if (update.error) {
-        console.error("UPDATE ERROR:", update.error);
-        setStatus("Update failed ❌");
-        return;
-      }
-
-      setStatus("Done ✅");
-    } catch (err) {
-      console.error("UNEXPECTED ERROR:", err);
-      setStatus("Something broke ❌");
+    if (insert.error || !insert.data) {
+      console.error("INSERT ERROR FULL:", JSON.stringify(insert.error, null, 2));
+      console.error("INSERT DATA:", insert.data);
+      setStatus("Insert failed ❌");
+      return;
     }
-  };
 
-  return (
-    <div>
-      <h2>Student</h2>
+    setStatus("Analyzing...");
 
-      <input
-        placeholder="Your name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
+    const ai = await analyzeSubmission(
+      audioUrl,
+      "Describe your work skills in 1 minute"
+    );
 
-      <br />
-      <br />
+    if (!ai) {
+      setStatus("AI failed ❌");
+      return;
+    }
 
-      {!recording ? (
-        <button onClick={startRecording}>Start Recording</button>
-      ) : (
-        <button onClick={stopRecording}>Stop Recording</button>
-      )}
+    const update = await supabase
+      .from("student_submissions")
+      .update({
+        transcript: ai.transcript,
+        ai_score: ai.score,
+        ai_comment: ai.comment,
+      })
+      .eq("id", insert.data.id);
 
-      <br />
-      <br />
+    if (update.error) {
+      console.error("UPDATE ERROR FULL:", JSON.stringify(update.error, null, 2));
+      setStatus("Update failed ❌");
+      return;
+    }
 
-      {audioURL && <audio controls src={audioURL} />}
-
-      <br />
-      <br />
-
-      <button onClick={submit}>Submit</button>
-
-      <p>{status}</p>
-    </div>
-  );
-}
+    setStatus("Done ✅");
+  } catch (err) {
+    console.error("UNEXPECTED ERROR FULL:", err);
+    setStatus("Something broke ❌");
+  }
+};
