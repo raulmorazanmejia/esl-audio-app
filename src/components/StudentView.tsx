@@ -1,173 +1,130 @@
-import { useRef, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { analyzeSubmission } from "../lib/analyzeSubmission";
+import { useEffect, useRef, useState } from "react";
 
 export default function StudentView() {
   const [name, setName] = useState("");
   const [recording, setRecording] = useState(false);
-  const [audioURL, setAudioURL] = useState("");
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [status, setStatus] = useState("Ready");
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [status, setStatus] = useState("");
 
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const chunks = useRef<Blob[]>([]);
 
   const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
 
-      recorderRef.current = recorder;
-      chunksRef.current = [];
+    recorder.ondataavailable = (e) => {
+      chunks.current.push(e.data);
+    };
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
+    recorder.onstop = () => {
+      const blob = new Blob(chunks.current, { type: "audio/webm" });
+      chunks.current = [];
+      const url = URL.createObjectURL(blob);
+      setAudioUrl(url);
+    };
 
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const url = URL.createObjectURL(blob);
-        setAudioBlob(blob);
-        setAudioURL(url);
-        setStatus("Recorded");
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      recorder.start();
-      setRecording(true);
-      setStatus("Recording...");
-    } catch (err) {
-      console.error("MIC ERROR:", err);
-      setStatus("Mic failed ❌");
-    }
+    recorder.start();
+    setMediaRecorder(recorder);
+    setRecording(true);
+    setStatus("Recording...");
   };
 
   const stopRecording = () => {
-    recorderRef.current?.stop();
+    mediaRecorder?.stop();
     setRecording(false);
+    setStatus("Recording complete");
   };
 
   const submit = async () => {
-    if (!audioBlob || !name) {
+    if (!audioUrl || !name) {
       setStatus("Missing name or recording ❌");
       return;
     }
 
+    setStatus("Submitting...");
+
     try {
-      setStatus("Uploading...");
+      const res = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioUrl,
+          promptText: "Describe your work skills in 1 minute",
+          submissionId: crypto.randomUUID(),
+        }),
+      });
 
-      const safeName = name.trim().replace(/\s+/g, "-").toLowerCase();
-      const fileName = `submissions/${Date.now()}-${safeName}.webm`;
-
-      const uploadRes = await supabase.storage
-        .from("Student-audio")
-        .upload(fileName, audioBlob, {
-          contentType: "audio/webm",
-          upsert: false,
-        });
-
-      if (uploadRes.error) {
-        console.error("UPLOAD ERROR FULL:", JSON.stringify(uploadRes.error, null, 2));
-        setStatus("Upload failed ❌");
-        return;
-      }
-
-      const { data: publicData } = supabase.storage
-        .from("Student-audio")
-        .getPublicUrl(fileName);
-
-      const audioUrl = publicData.publicUrl;
-
-      setStatus("Saving...");
-
-      const insert = await supabase
-        .from("student_submissions")
-        .insert({
-          student_name: name.trim(),
-          prompt_text: "Describe your work skills in 1 minute",
-          audio_path: fileName,
-          audio_url: audioUrl,
-          status: "submitted",
-          student_email: null,
-          student_auth_id: null,
-        })
-        .select()
-        .single();
-
-      if (insert.error || !insert.data) {
-        console.error("INSERT ERROR FULL:", JSON.stringify(insert.error, null, 2));
-        console.error("INSERT DATA:", insert.data);
-        setStatus("Insert failed ❌");
-        return;
-      }
-
-      setStatus("Analyzing...");
-
-     const ai = await analyzeSubmission(
-  audioUrl,
-  "Describe your work skills in 1 minute",
-  insert.data.id
-);
-
-      if (!ai) {
-        setStatus("AI failed ❌");
-        return;
-      }
-
-      const update = await supabase
-        .from("student_submissions")
-        .update({
-          transcript: ai.transcript,
-          ai_score: ai.score,
-          ai_comment: ai.comment,
-        })
-        .eq("id", insert.data.id);
-
-      if (update.error) {
-        console.error("UPDATE ERROR FULL:", JSON.stringify(update.error, null, 2));
-        setStatus("Update failed ❌");
-        return;
-      }
+      if (!res.ok) throw new Error();
 
       setStatus("Done ✅");
-    } catch (err) {
-      console.error("UNEXPECTED ERROR FULL:", err);
+    } catch {
       setStatus("Something broke ❌");
     }
   };
 
   return (
-    <div>
-      <h2>Student</h2>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md space-y-6">
 
-      <input
-        placeholder="Your name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
+        {/* Name Input */}
+        <input
+          type="text"
+          placeholder="Your Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full p-3 rounded-xl border border-gray-200 text-center text-gray-700"
+        />
 
-      <br />
-      <br />
+        {/* Title */}
+        <h1 className="text-center text-xl font-semibold text-gray-800">
+          SPEAKING TASK
+        </h1>
 
-      {!recording ? (
-        <button onClick={startRecording}>Start Recording</button>
-      ) : (
-        <button onClick={stopRecording}>Stop Recording</button>
-      )}
+        {/* Prompt */}
+        <div className="bg-gray-100 rounded-xl p-4 text-center text-gray-600 italic">
+          "Describe your work skills in 1 minute"
+        </div>
 
-      <br />
-      <br />
+        {/* Mic Button */}
+        <div className="flex justify-center">
+          {!recording ? (
+            <button
+              onClick={startRecording}
+              className="w-20 h-20 rounded-full bg-blue-500 text-white text-2xl shadow-lg hover:bg-blue-600"
+            >
+              🎤
+            </button>
+          ) : (
+            <button
+              onClick={stopRecording}
+              className="w-20 h-20 rounded-full bg-red-500 text-white text-xl shadow-lg"
+            >
+              Stop
+            </button>
+          )}
+        </div>
 
-      {audioURL && <audio controls src={audioURL} />}
+        {/* Audio Preview */}
+        {audioUrl && (
+          <audio controls src={audioUrl} className="w-full" />
+        )}
 
-      <br />
-      <br />
+        {/* Submit */}
+        <button
+          onClick={submit}
+          className="w-full bg-gray-800 text-white py-2 rounded-xl hover:bg-gray-900"
+        >
+          Submit
+        </button>
 
-      <button onClick={submit}>Submit</button>
-
-      <p>{status}</p>
+        {/* Status */}
+        {status && (
+          <div className="text-center text-sm text-gray-500">
+            {status}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
