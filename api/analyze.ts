@@ -2,11 +2,22 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { audioUrl, promptText } = req.body;
+    const { audioUrl, promptText } = req.body ?? {};
 
+    if (!audioUrl || !promptText) {
+      return res.status(400).json({ error: "Missing audioUrl or promptText" });
+    }
+
+    // 1) Download audio from Supabase public URL
     const audioRes = await fetch(audioUrl);
-    const buffer = await audioRes.arrayBuffer();
+    if (!audioRes.ok) {
+      return res.status(400).json({ error: "Could not download audio file" });
+    }
 
+    const arrayBuffer = await audioRes.arrayBuffer();
+    const base64Audio = Buffer.from(arrayBuffer).toString("base64");
+
+    // 2) Transcribe with Responses API
     const transcriptionRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -20,9 +31,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             role: "user",
             content: [
               {
+                type: "input_text",
+                text: "Transcribe this audio exactly. Return only the transcript.",
+              },
+              {
                 type: "input_audio",
                 input_audio: {
-                  data: Buffer.from(buffer).toString("base64"),
+                  data: base64Audio,
                   format: "webm",
                 },
               },
@@ -32,15 +47,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }),
     });
 
-    const tData = await transcriptionRes.json();
-    console.log("TRANSCRIPTION RAW:", JSON.stringify(tData, null, 2));
+    const transcriptionJson = await transcriptionRes.json();
+    console.log("TRANSCRIPTION JSON:", JSON.stringify(transcriptionJson, null, 2));
+
+    if (!transcriptionRes.ok) {
+      return res.status(500).json({
+        error: "Transcription request failed",
+        details: transcriptionJson,
+      });
+    }
 
     const transcript =
-      tData.output_text ||
-      tData.output?.[0]?.content?.[0]?.text ||
-      tData.output?.[0]?.content?.[0]?.transcript ||
+      transcriptionJson.output_text ||
+      transcriptionJson.output?.[0]?.content?.[0]?.text ||
+      transcriptionJson.output?.[0]?.content?.find?.((c: any) => c.type === "output_text")?.text ||
       "";
 
+    // If transcription is empty, return early so we can see it clearly in the app
+    if (!transcript.trim()) {
+      return res.status(200).json({
+        transcript: "",
+        score: 1,
+        comment: "No transcript returned.",
+      });
+    }
+
+    // 3) Grade the transcript
     const gradingRes = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -49,42 +81,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        input: `
-Score this ESL response from 1 to 5.
-Give one short sentence only.
-
-Prompt: ${promptText}
-Answer: ${transcript}
-
-Return valid JSON only:
-{"score": number, "comment": string}
-`,
+        input: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  'You grade short ESL speaking responses. Return valid JSON only in this exact format: {"score": number, "comment": string}. Score from 1 to 5. Comment must be one short sentence.',
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `Prompt: ${promptText}\nStudent answer: ${transcript}`,
+              },
+            ],
+          },
+        ],
       }),
     });
 
-    const gData = await gradingRes.json();
-    console.log("GRADING RAW:", JSON.stringify(gData, null, 2));
+    const gradingJson = await gradingRes.json();
+    console.log("GRADING JSON:", JSON.stringify(gradingJson, null, 2));
 
-    let parsed = { score: 3, comment: "Basic response." };
+    let score = 3;
+    let comment = "Basic response.";
 
     try {
-      const rawText =
-        gData.output_text ||
-        gData.output?.[0]?.content?.[0]?.text ||
-        "";
+      const raw =
+        gradingJson.output_text ||
+        gradingJson.output?.[0]?.content?.[0]?.text ||
+        "{}";
 
-      parsed = JSON.parse(rawText);
-    } catch (e) {
-      console.error("GRADE PARSE ERROR:", e);
+      const parsed = JSON.parse(raw);
+      score = parsed.score ?? 3;
+      comment = parsed.comment ?? "Basic response.";
+    } catch (err) {
+      console.error("GRADE PARSE ERROR:", err);
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       transcript,
-      score: parsed.score,
-      comment: parsed.comment,
+      score,
+      comment,
     });
   } catch (err) {
     console.error("ANALYZE ERROR:", err);
-    res.status(500).json({ error: "failed" });
+    return res.status(500).json({ error: "failed" });
   }
 }
