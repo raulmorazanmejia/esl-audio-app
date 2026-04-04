@@ -1,3 +1,8 @@
+# FILE 1 — replace completely
+
+## `src/components/StudentView.tsx`
+
+```tsx
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { analyzeSubmission } from "../lib/analyzeSubmission";
@@ -8,13 +13,28 @@ type PromptRow = {
   is_active: boolean;
 };
 
+type ExistingSubmission = {
+  id: string;
+  student_name: string;
+  student_code?: string | null;
+  prompt_text: string;
+  audio_url?: string | null;
+  transcript?: string | null;
+  ai_score?: number | null;
+  ai_comment?: string | null;
+  feedback_audio_url?: string | null;
+  created_at: string;
+};
+
 export default function StudentView() {
   const [name, setName] = useState("");
+  const [studentCode, setStudentCode] = useState("");
   const [recording, setRecording] = useState(false);
   const [audioURL, setAudioURL] = useState("");
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [status, setStatus] = useState("Ready");
   const [activePrompt, setActivePrompt] = useState<PromptRow | null>(null);
+  const [latestSubmission, setLatestSubmission] = useState<ExistingSubmission | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -38,6 +58,40 @@ export default function StudentView() {
 
     loadPrompt();
   }, []);
+
+  const lookupStudent = async () => {
+    const code = studentCode.trim();
+
+    if (!code) {
+      setStatus("Enter your code first ❌");
+      return;
+    }
+
+    setStatus("Checking your feedback...");
+
+    const { data, error } = await supabase
+      .from("student_submissions")
+      .select("*")
+      .eq("student_code", code)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("LOOKUP ERROR:", error);
+      setStatus("Could not check your feedback ❌");
+      return;
+    }
+
+    setLatestSubmission((data as ExistingSubmission | null) || null);
+
+    if (data) {
+      setName(data.student_name || "");
+      setStatus("Previous submission found ✅");
+    } else {
+      setStatus("No previous submission found yet.");
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -77,8 +131,8 @@ export default function StudentView() {
   };
 
   const submit = async () => {
-    if (!audioBlob || !name || !activePrompt) {
-      setStatus("Missing name, prompt, or recording ❌");
+    if (!audioBlob || !name || !activePrompt || !studentCode.trim()) {
+      setStatus("Missing name, code, prompt, or recording ❌");
       return;
     }
 
@@ -113,6 +167,7 @@ export default function StudentView() {
         .from("student_submissions")
         .insert({
           student_name: name.trim(),
+          student_code: studentCode.trim(),
           prompt_text: activePrompt.prompt_text,
           audio_path: fileName,
           audio_url: audioUrl,
@@ -158,6 +213,14 @@ export default function StudentView() {
         return;
       }
 
+      setLatestSubmission({
+        ...(insert.data as ExistingSubmission),
+        transcript: ai.transcript,
+        ai_score: ai.score,
+        ai_comment: ai.comment,
+        feedback_audio_url: null,
+      });
+
       setStatus("Done ✅");
     } catch (err) {
       console.error("UNEXPECTED ERROR FULL:", err);
@@ -180,16 +243,54 @@ export default function StudentView() {
       <div
         style={{
           width: "100%",
-          maxWidth: "520px",
+          maxWidth: "560px",
           background: "#ffffff",
           borderRadius: "28px",
           boxShadow: "0 20px 60px rgba(15, 23, 42, 0.12)",
           padding: "32px",
           display: "flex",
           flexDirection: "column",
-          gap: "24px",
+          gap: "20px",
         }}
       >
+        <input
+          type="text"
+          placeholder="Your Code (example: R10)"
+          value={studentCode}
+          onChange={(e) => setStudentCode(e.target.value.toUpperCase())}
+          style={{
+            width: "100%",
+            height: "54px",
+            borderRadius: "16px",
+            border: "1px solid #dbe3f0",
+            background: "#f8fafc",
+            fontSize: "20px",
+            textAlign: "center",
+            color: "#334155",
+            outline: "none",
+            boxSizing: "border-box",
+            fontWeight: 700,
+            letterSpacing: "0.05em",
+          }}
+        />
+
+        <button
+          onClick={lookupStudent}
+          style={{
+            width: "100%",
+            height: "48px",
+            borderRadius: "14px",
+            border: "1px solid #cbd5e1",
+            background: "#ffffff",
+            color: "#334155",
+            fontSize: "16px",
+            fontWeight: 700,
+            cursor: "pointer",
+          }}
+        >
+          Find My Feedback
+        </button>
+
         <input
           type="text"
           placeholder="Your Name"
@@ -316,6 +417,42 @@ export default function StudentView() {
           Submit
         </button>
 
+        {latestSubmission && (
+          <div
+            style={{
+              borderRadius: "20px",
+              border: "1px solid #dbe3f0",
+              background: "#f8fafc",
+              padding: "18px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "10px",
+            }}
+          >
+            <div style={{ fontSize: "14px", fontWeight: 800, color: "#94a3b8" }}>
+              YOUR LATEST FEEDBACK
+            </div>
+            <div style={{ fontSize: "14px", color: "#334155" }}>
+              <strong>Transcript:</strong> {latestSubmission.transcript || "..."}
+            </div>
+            <div style={{ fontSize: "14px", color: "#334155" }}>
+              <strong>Score:</strong> {latestSubmission.ai_score ?? "-"}
+            </div>
+            <div style={{ fontSize: "14px", color: "#334155" }}>
+              <strong>Comment:</strong> {latestSubmission.ai_comment || "-"}
+            </div>
+
+            <div style={{ fontSize: "14px", fontWeight: 800, color: "#94a3b8", marginTop: "4px" }}>
+              TEACHER AUDIO FEEDBACK
+            </div>
+            {latestSubmission.feedback_audio_url ? (
+              <audio controls src={latestSubmission.feedback_audio_url} style={{ width: "100%" }} />
+            ) : (
+              <div style={{ color: "#94a3b8", fontStyle: "italic" }}>No teacher audio yet</div>
+            )}
+          </div>
+        )}
+
         <div
           style={{
             textAlign: "center",
@@ -330,3 +467,13 @@ export default function StudentView() {
     </div>
   );
 }
+```
+
+---
+
+# FILE 2 — run this once in Supabase SQL Editor
+
+```sql
+alter table public.student_submissions
+add column if not exists student_code text;
+```
