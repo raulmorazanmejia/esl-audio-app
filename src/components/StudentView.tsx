@@ -49,7 +49,7 @@ export default function StudentView() {
     setRecording(false);
   };
 
- const submit = async () => {
+const submit = async () => {
   if (!audioBlob || !name) {
     setStatus("Missing name or recording ❌");
     return;
@@ -58,11 +58,15 @@ export default function StudentView() {
   try {
     setStatus("Uploading...");
 
-    const fileName = `${Date.now()}-${name}.webm`;
+    const safeName = name.trim().replace(/\s+/g, "-").toLowerCase();
+    const fileName = `submissions/${Date.now()}-${safeName}.webm`;
 
     const uploadRes = await supabase.storage
       .from("Student-audio")
-      .upload(fileName, audioBlob);
+      .upload(fileName, audioBlob, {
+        contentType: "audio/webm",
+        upsert: false,
+      });
 
     if (uploadRes.error) {
       console.error("UPLOAD ERROR FULL:", JSON.stringify(uploadRes.error, null, 2));
@@ -81,9 +85,13 @@ export default function StudentView() {
     const insert = await supabase
       .from("student_submissions")
       .insert({
-        student_name: name,
-        audio_url: audioUrl,
+        student_name: name.trim(),
         prompt_text: "Describe your work skills in 1 minute",
+        audio_path: fileName,
+        audio_url: audioUrl,
+        status: "submitted",
+        student_email: null,
+        student_auth_id: null,
       })
       .select()
       .single();
