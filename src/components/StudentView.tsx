@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 export default function StudentView() {
   const [name, setName] = useState("");
@@ -64,48 +64,48 @@ export default function StudentView() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md space-y-6">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 flex flex-col items-center gap-6">
 
-        {/* Name Input */}
+        {/* Name */}
         <input
           type="text"
           placeholder="Your Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full p-3 rounded-xl border border-gray-200 text-center text-gray-700"
+          className="w-full p-3 rounded-xl border border-gray-200 text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
 
         {/* Title */}
-        <h1 className="text-center text-xl font-semibold text-gray-800">
+        <h1 className="text-2xl font-bold text-gray-800 tracking-wide">
           SPEAKING TASK
         </h1>
 
         {/* Prompt */}
-        <div className="bg-gray-100 rounded-xl p-4 text-center text-gray-600 italic">
+        <div className="w-full bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-gray-700 italic shadow-sm">
           "Describe your work skills in 1 minute"
         </div>
 
-        {/* Mic Button */}
+        {/* Mic */}
         <div className="flex justify-center">
           {!recording ? (
             <button
               onClick={startRecording}
-              className="w-20 h-20 rounded-full bg-blue-500 text-white text-2xl shadow-lg hover:bg-blue-600"
+              className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-3xl shadow-lg hover:scale-105 transition"
             >
               🎤
             </button>
           ) : (
             <button
               onClick={stopRecording}
-              className="w-20 h-20 rounded-full bg-red-500 text-white text-xl shadow-lg"
+              className="w-20 h-20 rounded-full bg-red-500 text-white text-lg shadow-lg animate-pulse"
             >
-              Stop
+              STOP
             </button>
           )}
         </div>
 
-        {/* Audio Preview */}
+        {/* Audio */}
         {audioUrl && (
           <audio controls src={audioUrl} className="w-full" />
         )}
@@ -113,14 +113,14 @@ export default function StudentView() {
         {/* Submit */}
         <button
           onClick={submit}
-          className="w-full bg-gray-800 text-white py-2 rounded-xl hover:bg-gray-900"
+          className="w-full bg-gradient-to-r from-gray-800 to-black text-white py-3 rounded-xl font-medium hover:opacity-90 transition"
         >
           Submit
         </button>
 
         {/* Status */}
         {status && (
-          <div className="text-center text-sm text-gray-500">
+          <div className="text-sm text-gray-500 text-center">
             {status}
           </div>
         )}
