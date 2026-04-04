@@ -1,8 +1,3 @@
-# FILE 1 — replace completely
-
-## `src/components/StudentView.tsx`
-
-```tsx
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { analyzeSubmission } from "../lib/analyzeSubmission";
@@ -467,13 +462,3 @@ export default function StudentView() {
     </div>
   );
 }
-```
-
----
-
-# FILE 2 — run this once in Supabase SQL Editor
-
-```sql
-alter table public.student_submissions
-add column if not exists student_code text;
-```
