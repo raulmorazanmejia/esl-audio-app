@@ -1,82 +1,66 @@
-import { useRef, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { analyzeSubmission } from "../lib/analyzeSubmission";
+const submit = async () => {
+  if (!audioBlob || !name) {
+    setStatus("Missing name or recording ❌");
+    return;
+  }
 
-export default function StudentView() {
-  const [name, setName] = useState("");
-  const [recording, setRecording] = useState(false);
-  const [audioURL, setAudioURL] = useState("");
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [status, setStatus] = useState("Ready");
-
-  const recorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  const startRecording = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    const recorder = new MediaRecorder(stream);
-    recorderRef.current = recorder;
-
-    chunksRef.current = [];
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunksRef.current.push(e.data);
-      }
-    };
-
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-      const url = URL.createObjectURL(blob);
-      setAudioBlob(blob);
-      setAudioURL(url);
-      setStatus("Recorded");
-    };
-
-    recorder.start();
-    setRecording(true);
-    setStatus("Recording...");
-  };
-
-  const stopRecording = () => {
-    recorderRef.current?.stop();
-    setRecording(false);
-  };
-
-  const submit = async () => {
-    if (!audioBlob || !name) return;
-
+  try {
     setStatus("Uploading...");
 
     const fileName = `${Date.now()}-${name}.webm`;
 
-    await supabase.storage
+    // Upload to Supabase Storage
+    const uploadRes = await supabase.storage
       .from("Student-audio")
       .upload(fileName, audioBlob);
 
-    const { data } = supabase.storage
+    if (uploadRes.error) {
+      console.error("UPLOAD ERROR:", uploadRes.error);
+      setStatus("Upload failed ❌");
+      return;
+    }
+
+    // Get public URL
+    const { data: publicData } = supabase.storage
       .from("Student-audio")
       .getPublicUrl(fileName);
 
+    const audioUrl = publicData.publicUrl;
+
+    setStatus("Saving...");
+
+    // Insert into database
     const insert = await supabase
       .from("student_submissions")
       .insert({
         student_name: name,
-        audio_url: data.publicUrl,
-        prompt_text: "Speaking prompt",
+        audio_url: audioUrl,
+        prompt_text: "Describe your work skills in 1 minute",
       })
       .select()
       .single();
 
+    if (insert.error || !insert.data) {
+      console.error("INSERT ERROR:", insert.error);
+      setStatus("Insert failed ❌");
+      return;
+    }
+
     setStatus("Analyzing...");
 
+    // Call AI
     const ai = await analyzeSubmission(
-      data.publicUrl,
-      "Speaking prompt"
+      audioUrl,
+      "Describe your work skills in 1 minute"
     );
 
-    await supabase
+    if (!ai) {
+      setStatus("AI failed ❌");
+      return;
+    }
+
+    // Update record with AI results
+    const update = await supabase
       .from("student_submissions")
       .update({
         transcript: ai.transcript,
@@ -85,36 +69,16 @@ export default function StudentView() {
       })
       .eq("id", insert.data.id);
 
+    if (update.error) {
+      console.error("UPDATE ERROR:", update.error);
+      setStatus("Update failed ❌");
+      return;
+    }
+
     setStatus("Done ✅");
-  };
 
-  return (
-    <div>
-      <h2>Student</h2>
-
-      <input
-        placeholder="Your name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-
-      <br /><br />
-
-      {!recording ? (
-        <button onClick={startRecording}>Start Recording</button>
-      ) : (
-        <button onClick={stopRecording}>Stop</button>
-      )}
-
-      <br /><br />
-
-      {audioURL && <audio controls src={audioURL} />}
-
-      <br /><br />
-
-      <button onClick={submit}>Submit</button>
-
-      <p>{status}</p>
-    </div>
-  );
-}
+  } catch (err) {
+    console.error("UNEXPECTED ERROR:", err);
+    setStatus("Something broke ❌");
+  }
+};
