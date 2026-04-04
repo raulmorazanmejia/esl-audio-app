@@ -49,90 +49,124 @@ export default function StudentView() {
     setRecording(false);
   };
 
-const submit = async () => {
-  if (!audioBlob || !name) {
-    setStatus("Missing name or recording ❌");
-    return;
-  }
-
-  try {
-    setStatus("Uploading...");
-
-    const safeName = name.trim().replace(/\s+/g, "-").toLowerCase();
-    const fileName = `submissions/${Date.now()}-${safeName}.webm`;
-
-    const uploadRes = await supabase.storage
-      .from("Student-audio")
-      .upload(fileName, audioBlob, {
-        contentType: "audio/webm",
-        upsert: false,
-      });
-
-    if (uploadRes.error) {
-      console.error("UPLOAD ERROR FULL:", JSON.stringify(uploadRes.error, null, 2));
-      setStatus("Upload failed ❌");
+  const submit = async () => {
+    if (!audioBlob || !name) {
+      setStatus("Missing name or recording ❌");
       return;
     }
 
-    const { data: publicData } = supabase.storage
-      .from("Student-audio")
-      .getPublicUrl(fileName);
+    try {
+      setStatus("Uploading...");
 
-    const audioUrl = publicData.publicUrl;
+      const safeName = name.trim().replace(/\s+/g, "-").toLowerCase();
+      const fileName = `submissions/${Date.now()}-${safeName}.webm`;
 
-    setStatus("Saving...");
+      const uploadRes = await supabase.storage
+        .from("Student-audio")
+        .upload(fileName, audioBlob, {
+          contentType: "audio/webm",
+          upsert: false,
+        });
 
-    const insert = await supabase
-      .from("student_submissions")
-      .insert({
-        student_name: name.trim(),
-        prompt_text: "Describe your work skills in 1 minute",
-        audio_path: fileName,
-        audio_url: audioUrl,
-        status: "submitted",
-        student_email: null,
-        student_auth_id: null,
-      })
-      .select()
-      .single();
+      if (uploadRes.error) {
+        console.error("UPLOAD ERROR FULL:", JSON.stringify(uploadRes.error, null, 2));
+        setStatus("Upload failed ❌");
+        return;
+      }
 
-    if (insert.error || !insert.data) {
-      console.error("INSERT ERROR FULL:", JSON.stringify(insert.error, null, 2));
-      console.error("INSERT DATA:", insert.data);
-      setStatus("Insert failed ❌");
-      return;
+      const { data: publicData } = supabase.storage
+        .from("Student-audio")
+        .getPublicUrl(fileName);
+
+      const audioUrl = publicData.publicUrl;
+
+      setStatus("Saving...");
+
+      const insert = await supabase
+        .from("student_submissions")
+        .insert({
+          student_name: name.trim(),
+          prompt_text: "Describe your work skills in 1 minute",
+          audio_path: fileName,
+          audio_url: audioUrl,
+          status: "submitted",
+          student_email: null,
+          student_auth_id: null,
+        })
+        .select()
+        .single();
+
+      if (insert.error || !insert.data) {
+        console.error("INSERT ERROR FULL:", JSON.stringify(insert.error, null, 2));
+        console.error("INSERT DATA:", insert.data);
+        setStatus("Insert failed ❌");
+        return;
+      }
+
+      setStatus("Analyzing...");
+
+      const ai = await analyzeSubmission(
+        audioUrl,
+        "Describe your work skills in 1 minute"
+      );
+
+      if (!ai) {
+        setStatus("AI failed ❌");
+        return;
+      }
+
+      const update = await supabase
+        .from("student_submissions")
+        .update({
+          transcript: ai.transcript,
+          ai_score: ai.score,
+          ai_comment: ai.comment,
+        })
+        .eq("id", insert.data.id);
+
+      if (update.error) {
+        console.error("UPDATE ERROR FULL:", JSON.stringify(update.error, null, 2));
+        setStatus("Update failed ❌");
+        return;
+      }
+
+      setStatus("Done ✅");
+    } catch (err) {
+      console.error("UNEXPECTED ERROR FULL:", err);
+      setStatus("Something broke ❌");
     }
+  };
 
-    setStatus("Analyzing...");
+  return (
+    <div>
+      <h2>Student</h2>
 
-    const ai = await analyzeSubmission(
-      audioUrl,
-      "Describe your work skills in 1 minute"
-    );
+      <input
+        placeholder="Your name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
 
-    if (!ai) {
-      setStatus("AI failed ❌");
-      return;
-    }
+      <br />
+      <br />
 
-    const update = await supabase
-      .from("student_submissions")
-      .update({
-        transcript: ai.transcript,
-        ai_score: ai.score,
-        ai_comment: ai.comment,
-      })
-      .eq("id", insert.data.id);
+      {!recording ? (
+        <button onClick={startRecording}>Start Recording</button>
+      ) : (
+        <button onClick={stopRecording}>Stop Recording</button>
+      )}
 
-    if (update.error) {
-      console.error("UPDATE ERROR FULL:", JSON.stringify(update.error, null, 2));
-      setStatus("Update failed ❌");
-      return;
-    }
+      <br />
+      <br />
 
-    setStatus("Done ✅");
-  } catch (err) {
-    console.error("UNEXPECTED ERROR FULL:", err);
-    setStatus("Something broke ❌");
-  }
-};
+      {audioURL && <audio controls src={audioURL} />}
+
+      <br />
+      <br />
+
+      <button onClick={submit}>Submit</button>
+
+      <p>{status}</p>
+    </div>
+  );
+}
