@@ -311,6 +311,21 @@ function buildAudioLabel(url?: string | null) {
   return url ? "Saved teacher audio" : "No saved teacher audio yet";
 }
 
+function buildDraft(row: SubmissionRow, previous?: Partial<DraftState>): DraftState {
+  return {
+    score: previous?.score ?? clampScore(row.teacher_score ?? row.ai_score ?? 3),
+    comment: previous?.comment ?? row.teacher_comment ?? row.ai_comment ?? "",
+    savingOverride: false,
+    savingAudio: false,
+    savedMessage: previous?.savedMessage ?? "",
+    error: "",
+    teacherBlob: previous?.teacherBlob ?? null,
+    teacherPreviewUrl: previous?.teacherPreviewUrl ?? "",
+    isRecordingTeacher: false,
+    recordingError: "",
+  };
+}
+
 export default function TeacherDashboard() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
