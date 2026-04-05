@@ -1,413 +1,794 @@
-import { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
-
-type Submission = {
-  id: string;
-  student_name: string;
-  audio_url: string;
-  prompt_text: string;
-  transcript?: string | null;
-  ai_score?: number | null;
-  ai_comment?: string | null;
-  feedback_audio_url?: string | null;
-  created_at: string;
-};
 
 type PromptRow = {
   id: string;
-  prompt_text: string;
-  is_active: boolean;
-  created_at: string;
+  text: string | null;
+  is_active: boolean | null;
+  created_at?: string | null;
 };
 
-export default function TeacherDashboard() {
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+type SubmissionRow = {
+  id: string;
+  created_at: string | null;
+  student_code: string | null;
+  student_name: string | null;
+  audio_url: string | null;
+  transcript: string | null;
+  score: number | null;
+  comment: string | null;
+  prompt_text: string | null;
+  teacher_comment: string | null;
+  teacher_audio_url: string | null;
+};
+
+type DraftState = {
+  score: number;
+  comment: string;
+  savingOverride: boolean;
+  savingAudio: boolean;
+  savedMessage: string;
+  error: string;
+  teacherBlob: Blob | null;
+  teacherPreviewUrl: string;
+  isRecordingTeacher: boolean;
+  recordingError: string;
+};
+
+type DraftsById = Record<string, DraftState>;
+
+function clampScore(value: number) {
+  return Math.max(1, Math.min(5, Math.round(value)));
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function getMimeType() {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg;codecs=opus",
+  ];
+
+  for (const type of candidates) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+
+  return "";
+}
+
+function getFileExtension(mimeType: string) {
+  if (mimeType.includes("webm")) return "webm";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("mpeg")) return "mp3";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+function buildDraft(row: SubmissionRow, previous?: Partial<DraftState>): DraftState {
+  return {
+    score: previous?.score ?? clampScore(row.score ?? 3),
+    comment: previous?.comment ?? row.comment ?? "",
+    savingOverride: false,
+    savingAudio: false,
+    savedMessage: previous?.savedMessage ?? "",
+    error: "",
+    teacherBlob: previous?.teacherBlob ?? null,
+    teacherPreviewUrl: previous?.teacherPreviewUrl ?? "",
+    isRecordingTeacher: false,
+    recordingError: "",
+  };
+}
+
+function StarRow({ value }: { value: number }) {
+  return (
+    <div className="flex items-center gap-1 text-[28px] leading-none text-amber-400" aria-hidden="true">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <span key={n}>{n <= value ? "★" : "☆"}</span>
+      ))}
+    </div>
+  );
+}
+
+export default function TeacherView() {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const activeSubmissionIdRef = useRef<string | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+
   const [prompts, setPrompts] = useState<PromptRow[]>([]);
   const [newPrompt, setNewPrompt] = useState("");
-  const [status, setStatus] = useState("");
+  const [isSavingPrompt, setIsSavingPrompt] = useState(false);
+  const [promptError, setPromptError] = useState("");
 
-  const loadData = async () => {
-    setStatus("Loading...");
+  const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
+  const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState("");
+  const [drafts, setDrafts] = useState<DraftsById>({});
 
-    const { data: submissionData, error: submissionError } = await supabase
-      .from("student_submissions")
-      .select("*")
-      .order("created_at", { ascending: false });
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
 
-    if (submissionError) {
-      console.error("SUBMISSION LOAD ERROR:", submissionError);
-    } else {
-      setSubmissions((submissionData || []) as Submission[]);
+  const sortedPrompts = useMemo(() => {
+    return [...prompts].sort((a, b) => {
+      const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [prompts]);
+
+  const stopRecorderAndTracks = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.stop();
     }
 
-    const { data: promptData, error: promptError } = await supabase
-      .from("prompts")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (promptError) {
-      console.error("PROMPT LOAD ERROR:", promptError);
-    } else {
-      setPrompts((promptData || []) as PromptRow[]);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
     }
-
-    setStatus("");
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
-  const createPrompt = async () => {
-    const text = newPrompt.trim();
+  useEffect(() => {
+    return () => {
+      stopRecorderAndTracks();
+      Object.values(drafts).forEach((draft) => {
+        if (draft.teacherPreviewUrl) {
+          URL.revokeObjectURL(draft.teacherPreviewUrl);
+        }
+      });
+    };
+  }, [drafts, stopRecorderAndTracks]);
 
-    if (!text) {
-      setStatus("Type a prompt first ❌");
+  const hydrateDrafts = useCallback((rows: SubmissionRow[]) => {
+    setDrafts((prev) => {
+      const next: DraftsById = {};
+
+      for (const row of rows) {
+        next[row.id] = buildDraft(row, prev[row.id]);
+      }
+
+      Object.keys(prev).forEach((id) => {
+        if (!next[id] && prev[id]?.teacherPreviewUrl) {
+          URL.revokeObjectURL(prev[id].teacherPreviewUrl);
+        }
+      });
+
+      return next;
+    });
+  }, []);
+
+  const fetchPrompts = useCallback(async () => {
+    setPromptError("");
+
+    const { data, error } = await supabase
+      .from("prompts")
+      .select("id, text, is_active, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setPromptError(error.message);
       return;
     }
 
-    setStatus("Saving prompt...");
+    const rows = data ?? [];
+    setPrompts(rows);
+
+    const active = rows.find((row) => row.is_active);
+    setSelectedPromptId(active?.id ?? null);
+  }, []);
+
+  const fetchSubmissions = useCallback(async () => {
+    setIsLoadingSubmissions(true);
+    setSubmissionsError("");
+
+    const { data, error } = await supabase
+      .from("submissions")
+      .select(
+        "id, created_at, student_code, student_name, audio_url, transcript, score, comment, prompt_text, teacher_comment, teacher_audio_url"
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setSubmissionsError(error.message);
+      setIsLoadingSubmissions(false);
+      return;
+    }
+
+    const rows = (data ?? []) as SubmissionRow[];
+    setSubmissions(rows);
+    hydrateDrafts(rows);
+    setIsLoadingSubmissions(false);
+  }, [hydrateDrafts]);
+
+  useEffect(() => {
+    void fetchPrompts();
+    void fetchSubmissions();
+  }, [fetchPrompts, fetchSubmissions]);
+
+  async function handleSavePrompt() {
+    const text = newPrompt.trim();
+    if (!text) return;
+
+    setIsSavingPrompt(true);
+    setPromptError("");
 
     const { error } = await supabase.from("prompts").insert({
-      prompt_text: text,
-      is_active: prompts.length === 0,
+      text,
+      is_active: false,
     });
 
     if (error) {
-      console.error("CREATE PROMPT ERROR:", error);
-      setStatus("Could not save prompt ❌");
+      setPromptError(error.message);
+      setIsSavingPrompt(false);
       return;
     }
 
     setNewPrompt("");
-    setStatus("Prompt saved ✅");
-    await loadData();
-  };
+    setIsSavingPrompt(false);
+    await fetchPrompts();
+  }
 
-  const activatePrompt = async (promptId: string) => {
-    setStatus("Updating active prompt...");
+  async function handleUsePrompt(promptId: string) {
+    setPromptError("");
 
-    const { error: clearError } = await supabase
+    const { error: deactivateError } = await supabase
       .from("prompts")
       .update({ is_active: false })
       .neq("id", "00000000-0000-0000-0000-000000000000");
 
-    if (clearError) {
-      console.error("CLEAR ACTIVE ERROR:", clearError);
-      setStatus("Could not clear old active prompt ❌");
+    if (deactivateError) {
+      setPromptError(deactivateError.message);
       return;
     }
 
-    const { error: setError } = await supabase
+    const { error: activateError } = await supabase
       .from("prompts")
       .update({ is_active: true })
       .eq("id", promptId);
 
-    if (setError) {
-      console.error("SET ACTIVE ERROR:", setError);
-      setStatus("Could not activate prompt ❌");
+    if (activateError) {
+      setPromptError(activateError.message);
       return;
     }
 
-    setStatus("Active prompt updated ✅");
-    await loadData();
-  };
+    setSelectedPromptId(promptId);
+    await fetchPrompts();
+  }
+
+  function updateDraft(id: string, patch: Partial<DraftState>) {
+    setDrafts((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] ?? {
+          score: 3,
+          comment: "",
+          savingOverride: false,
+          savingAudio: false,
+          savedMessage: "",
+          error: "",
+          teacherBlob: null,
+          teacherPreviewUrl: "",
+          isRecordingTeacher: false,
+          recordingError: "",
+        }),
+        ...patch,
+      },
+    }));
+  }
+
+  async function handleSaveOverride(submission: SubmissionRow) {
+    const draft = drafts[submission.id];
+    if (!draft) return;
+
+    updateDraft(submission.id, {
+      savingOverride: true,
+      savedMessage: "",
+      error: "",
+    });
+
+    const payload = {
+      score: clampScore(draft.score),
+      comment: draft.comment.trim(),
+      teacher_comment: draft.comment.trim(),
+    };
+
+    const { data, error } = await supabase
+      .from("submissions")
+      .update(payload)
+      .eq("id", submission.id)
+      .select(
+        "id, created_at, student_code, student_name, audio_url, transcript, score, comment, prompt_text, teacher_comment, teacher_audio_url"
+      )
+      .single();
+
+    if (error) {
+      updateDraft(submission.id, {
+        savingOverride: false,
+        error: error.message,
+      });
+      return;
+    }
+
+    setSubmissions((prev) =>
+      prev.map((row) => (row.id === submission.id ? ((data as SubmissionRow) ?? row) : row))
+    );
+
+    updateDraft(submission.id, {
+      savingOverride: false,
+      savedMessage: "Override saved ✅",
+      error: "",
+    });
+  }
+
+  async function startTeacherRecording(submissionId: string) {
+    const current = activeSubmissionIdRef.current;
+    if (current && current !== submissionId) {
+      updateDraft(current, {
+        isRecordingTeacher: false,
+        recordingError: "Stopped because another recording started.",
+      });
+      stopRecorderAndTracks();
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+
+      const mimeType = getMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      activeSubmissionIdRef.current = submissionId;
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          chunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const targetId = activeSubmissionIdRef.current || submissionId;
+        const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: finalMimeType });
+
+        setDrafts((prev) => {
+          const existing = prev[targetId];
+          if (!existing) return prev;
+
+          if (existing.teacherPreviewUrl) {
+            URL.revokeObjectURL(existing.teacherPreviewUrl);
+          }
+
+          return {
+            ...prev,
+            [targetId]: {
+              ...existing,
+              teacherBlob: blob,
+              teacherPreviewUrl: URL.createObjectURL(blob),
+              isRecordingTeacher: false,
+              recordingError: "",
+              savedMessage: "Teacher audio recorded. Save it when ready.",
+              error: "",
+            },
+          };
+        });
+
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+        }
+
+        mediaRecorderRef.current = null;
+        activeSubmissionIdRef.current = null;
+      };
+
+      updateDraft(submissionId, {
+        isRecordingTeacher: true,
+        recordingError: "",
+        savedMessage: "",
+        error: "",
+      });
+
+      recorder.start();
+    } catch (error: any) {
+      updateDraft(submissionId, {
+        isRecordingTeacher: false,
+        recordingError: error?.message || "Microphone access failed.",
+      });
+    }
+  }
+
+  function stopTeacherRecording(submissionId: string) {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || activeSubmissionIdRef.current !== submissionId) return;
+    if (recorder.state === "inactive") return;
+    recorder.stop();
+  }
+
+  function clearTeacherRecording(submissionId: string) {
+    setDrafts((prev) => {
+      const existing = prev[submissionId];
+      if (!existing) return prev;
+
+      if (existing.teacherPreviewUrl) {
+        URL.revokeObjectURL(existing.teacherPreviewUrl);
+      }
+
+      return {
+        ...prev,
+        [submissionId]: {
+          ...existing,
+          teacherBlob: null,
+          teacherPreviewUrl: "",
+          recordingError: "",
+          savedMessage: "Teacher audio cleared.",
+          error: "",
+        },
+      };
+    });
+  }
+
+  async function handleSaveTeacherAudio(submission: SubmissionRow) {
+    const draft = drafts[submission.id];
+    if (!draft?.teacherBlob) {
+      updateDraft(submission.id, {
+        error: "Record teacher audio first.",
+        savedMessage: "",
+      });
+      return;
+    }
+
+    updateDraft(submission.id, {
+      savingAudio: true,
+      savedMessage: "",
+      error: "",
+    });
+
+    try {
+      const mimeType = draft.teacherBlob.type || "audio/webm";
+      const ext = getFileExtension(mimeType);
+      const filePath = `${submission.id}/teacher-feedback-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("teacher-audio")
+        .upload(filePath, draft.teacherBlob, {
+          cacheControl: "3600",
+          contentType: mimeType,
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("teacher-audio").getPublicUrl(filePath);
+
+      const { data, error } = await supabase
+        .from("submissions")
+        .update({ teacher_audio_url: publicUrl })
+        .eq("id", submission.id)
+        .select(
+          "id, created_at, student_code, student_name, audio_url, transcript, score, comment, prompt_text, teacher_comment, teacher_audio_url"
+        )
+        .single();
+
+      if (error) throw error;
+
+      setSubmissions((prev) =>
+        prev.map((row) => (row.id === submission.id ? ((data as SubmissionRow) ?? row) : row))
+      );
+
+      updateDraft(submission.id, {
+        savingAudio: false,
+        savedMessage: "Teacher audio saved ✅",
+        error: "",
+      });
+    } catch (error: any) {
+      updateDraft(submission.id, {
+        savingAudio: false,
+        error: error?.message || "Teacher audio upload failed.",
+      });
+    }
+  }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%)",
-        padding: "96px 24px 32px",
-        boxSizing: "border-box",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "1400px",
-          margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: "1.05fr 1fr",
-          gap: "28px",
-          alignItems: "start",
-        }}
-      >
-        <div
-          style={{
-            background: "#ffffff",
-            borderRadius: "30px",
-            boxShadow: "0 20px 60px rgba(15,23,42,0.10)",
-            padding: "34px",
-          }}
+    <div className="mx-auto max-w-7xl px-6 py-6">
+      <div className="mb-6 flex justify-center gap-3">
+        <button
+          type="button"
+          className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-xl font-semibold text-slate-700"
         >
-          <div
-            style={{
-              fontSize: "14px",
-              fontWeight: 800,
-              letterSpacing: "0.10em",
-              color: "#94a3b8",
-              marginBottom: "18px",
-            }}
-          >
-            CLASSROOM PROMPTS
+          Student
+        </button>
+        <button
+          type="button"
+          className="rounded-2xl bg-slate-950 px-6 py-3 text-xl font-semibold text-white"
+        >
+          Teacher
+        </button>
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-[1.05fr_1fr]">
+        <section className="rounded-[32px] bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <div className="mb-5 text-sm font-extrabold uppercase tracking-[0.18em] text-slate-400">
+            Classroom Prompts
           </div>
 
-          <div style={{ display: "flex", gap: "12px", marginBottom: "18px" }}>
+          <div className="mb-6 flex gap-4">
             <input
-              type="text"
               value={newPrompt}
               onChange={(e) => setNewPrompt(e.target.value)}
               placeholder="Type a new prompt"
-              style={{
-                flex: 1,
-                height: "52px",
-                borderRadius: "16px",
-                border: "1px solid #dbe3f0",
-                background: "#f8fafc",
-                padding: "0 16px",
-                fontSize: "17px",
-                color: "#334155",
-                outline: "none",
-              }}
+              className="flex-1 rounded-3xl border border-slate-200 bg-slate-50 px-6 py-4 text-xl text-slate-700 outline-none focus:border-indigo-300"
             />
             <button
-              onClick={createPrompt}
-              style={{
-                height: "52px",
-                padding: "0 20px",
-                borderRadius: "16px",
-                border: "none",
-                background: "#0f172a",
-                color: "#ffffff",
-                fontSize: "16px",
-                fontWeight: 700,
-                cursor: "pointer",
-              }}
+              type="button"
+              onClick={() => void handleSavePrompt()}
+              disabled={isSavingPrompt}
+              className="rounded-3xl bg-slate-950 px-6 py-4 text-xl font-bold text-white disabled:opacity-60"
             >
-              Save
+              {isSavingPrompt ? "Saving..." : "Save"}
             </button>
           </div>
 
-          {status && (
-            <div
-              style={{
-                marginBottom: "18px",
-                fontSize: "15px",
-                color: "#64748b",
-              }}
-            >
-              {status}
+          {promptError ? (
+            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {promptError}
             </div>
-          )}
+          ) : null}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {prompts.map((prompt) => (
-              <div
-                key={prompt.id}
-                style={{
-                  borderRadius: "22px",
-                  border: prompt.is_active ? "2px solid #7c9cff" : "1px solid #dbe3f0",
-                  background: prompt.is_active ? "#eef4ff" : "#ffffff",
-                  padding: "20px 24px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: "16px",
-                }}
-              >
+          <div className="space-y-4">
+            {sortedPrompts.map((prompt) => {
+              const isActive = selectedPromptId === prompt.id || Boolean(prompt.is_active);
+
+              return (
                 <div
-                  style={{
-                    fontSize: "20px",
-                    fontWeight: 700,
-                    color: prompt.is_active ? "#4663de" : "#334155",
-                    lineHeight: 1.35,
-                  }}
+                  key={prompt.id}
+                  className={[
+                    "flex items-center justify-between rounded-[28px] border px-7 py-7 transition",
+                    isActive
+                      ? "border-indigo-400 bg-indigo-50 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.35)]"
+                      : "border-slate-200 bg-white",
+                  ].join(" ")}
                 >
-                  {prompt.prompt_text}
-                </div>
-
-                {prompt.is_active ? (
-                  <div
-                    style={{
-                      width: "42px",
-                      height: "42px",
-                      borderRadius: "999px",
-                      border: "2px solid #7c9cff",
-                      color: "#4663de",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "22px",
-                      fontWeight: 800,
-                      flexShrink: 0,
-                    }}
-                  >
-                    ✓
+                  <div className={isActive ? "text-2xl font-bold text-indigo-600" : "text-2xl font-bold text-slate-800"}>
+                    {prompt.text}
                   </div>
-                ) : (
+
                   <button
-                    onClick={() => activatePrompt(prompt.id)}
-                    style={{
-                      height: "42px",
-                      padding: "0 16px",
-                      borderRadius: "12px",
-                      border: "1px solid #cbd5e1",
-                      background: "#ffffff",
-                      color: "#334155",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      flexShrink: 0,
-                    }}
+                    type="button"
+                    onClick={() => void handleUsePrompt(prompt.id)}
+                    className={[
+                      "min-w-[84px] rounded-2xl border px-5 py-3 text-xl font-bold",
+                      isActive
+                        ? "border-indigo-400 bg-indigo-50 text-indigo-600"
+                        : "border-slate-200 bg-white text-slate-700",
+                    ].join(" ")}
                   >
-                    Use
+                    {isActive ? "✓" : "Use"}
                   </button>
-                )}
-              </div>
-            ))}
-
-            {prompts.length === 0 && (
-              <div style={{ color: "#94a3b8", fontSize: "16px" }}>No prompts yet.</div>
-            )}
+                </div>
+              );
+            })}
           </div>
-        </div>
+        </section>
 
-        <div
-          style={{
-            background: "#ffffff",
-            borderRadius: "30px",
-            boxShadow: "0 20px 60px rgba(15,23,42,0.10)",
-            padding: "34px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "14px",
-              fontWeight: 800,
-              letterSpacing: "0.10em",
-              color: "#94a3b8",
-              marginBottom: "18px",
-            }}
-          >
-            STUDENT SUBMISSIONS
+        <section className="rounded-[32px] bg-white p-8 shadow-sm ring-1 ring-slate-200">
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <div className="text-sm font-extrabold uppercase tracking-[0.18em] text-slate-400">
+              Student Submissions
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void fetchSubmissions()}
+              disabled={isLoadingSubmissions}
+              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-xl font-bold text-slate-700 disabled:opacity-60"
+            >
+              {isLoadingSubmissions ? "Refreshing..." : "Refresh"}
+            </button>
           </div>
 
-          <button
-            onClick={loadData}
-            style={{
-              marginBottom: "20px",
-              height: "44px",
-              padding: "0 18px",
-              borderRadius: "12px",
-              border: "1px solid #cbd5e1",
-              background: "#ffffff",
-              color: "#334155",
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            Refresh
-          </button>
+          {submissionsError ? (
+            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {submissionsError}
+            </div>
+          ) : null}
 
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "18px",
-              maxHeight: "70vh",
-              overflowY: "auto",
-              paddingRight: "4px",
-            }}
-          >
-            {submissions.map((s) => (
-              <div
-                key={s.id}
-                style={{
-                  borderRadius: "24px",
-                  border: "1px solid #dbe3f0",
-                  background: "#ffffff",
-                  padding: "24px",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "24px",
-                    fontWeight: 800,
-                    color: "#0f172a",
-                    marginBottom: "8px",
-                  }}
+          <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
+            {submissions.map((submission) => {
+              const draft = drafts[submission.id] ?? buildDraft(submission);
+
+              return (
+                <article
+                  key={submission.id}
+                  className="rounded-[28px] border border-slate-200 bg-white p-7"
                 >
-                  {s.student_name}
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    color: "#94a3b8",
-                    fontStyle: "italic",
-                    textTransform: "uppercase",
-                    marginBottom: "18px",
-                  }}
-                >
-                  "{s.prompt_text}"
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "14px",
-                    fontWeight: 800,
-                    color: "#94a3b8",
-                    marginBottom: "8px",
-                  }}
-                >
-                  STUDENT RECORDING
-                </div>
-
-                <audio controls src={s.audio_url} style={{ width: "100%", marginBottom: "16px" }} />
-
-                <div style={{ fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
-                  <strong>Transcript:</strong> {s.transcript || "..."}
-                </div>
-                <div style={{ fontSize: "14px", color: "#334155", marginBottom: "10px" }}>
-                  <strong>Score:</strong> {s.ai_score ?? "-"}
-                </div>
-                <div style={{ fontSize: "14px", color: "#334155", marginBottom: "14px" }}>
-                  <strong>Comment:</strong> {s.ai_comment || "-"}
-                </div>
-
-                <div
-                  style={{
-                    borderRadius: "20px",
-                    border: "1px solid #e2e8f0",
-                    background: "#f8fafc",
-                    padding: "18px",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "14px",
-                      fontWeight: 800,
-                      color: "#94a3b8",
-                      marginBottom: "10px",
-                    }}
-                  >
-                    YOUR FEEDBACK
+                  <div className="mb-2 text-[46px] font-black leading-none text-slate-950">
+                    {submission.student_code || submission.student_name || "No code"}
                   </div>
 
-                  {s.feedback_audio_url ? (
-                    <audio controls src={s.feedback_audio_url} style={{ width: "100%" }} />
-                  ) : (
-                    <div style={{ color: "#94a3b8", fontStyle: "italic" }}>No feedback yet</div>
-                  )}
-                </div>
-              </div>
-            ))}
+                  {submission.student_name ? (
+                    <div className="mb-2 text-lg text-slate-500">{submission.student_name}</div>
+                  ) : null}
 
-            {submissions.length === 0 && (
-              <div style={{ color: "#94a3b8", fontSize: "16px" }}>No submissions yet.</div>
-            )}
+                  <div className="mb-3 text-sm font-black uppercase italic tracking-wide text-slate-400">
+                    "{submission.prompt_text || "No prompt saved"}"
+                  </div>
+
+                  <div className="mb-2 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                    Student recording
+                  </div>
+
+                  {submission.audio_url ? (
+                    <audio controls src={submission.audio_url} className="mb-5 w-full" />
+                  ) : (
+                    <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-500">
+                      No student audio found.
+                    </div>
+                  )}
+
+                  <div className="mb-4 space-y-2 text-lg text-slate-700">
+                    <div>
+                      <span className="font-bold text-slate-800">Transcript:</span>{" "}
+                      {submission.transcript || "Pending"}
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-800">Date:</span>{" "}
+                      {formatDate(submission.created_at) || "Unknown"}
+                    </div>
+                  </div>
+
+                  <div className="mb-4 rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                    <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                      Override score and comment
+                    </div>
+
+                    <div className="mb-3 flex items-center justify-between gap-4">
+                      <label className="text-lg font-bold text-slate-800">
+                        Score: {draft.score}/5
+                      </label>
+                      <StarRow value={draft.score} />
+                    </div>
+
+                    <input
+                      type="range"
+                      min={1}
+                      max={5}
+                      step={1}
+                      value={draft.score}
+                      onChange={(e) =>
+                        updateDraft(submission.id, {
+                          score: clampScore(Number(e.target.value)),
+                          savedMessage: "",
+                          error: "",
+                        })
+                      }
+                      className="mb-5 w-full"
+                    />
+
+                    <textarea
+                      value={draft.comment}
+                      onChange={(e) =>
+                        updateDraft(submission.id, {
+                          comment: e.target.value,
+                          savedMessage: "",
+                          error: "",
+                        })
+                      }
+                      rows={4}
+                      placeholder="Write or edit the feedback here"
+                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-lg text-slate-800 outline-none focus:border-indigo-300"
+                    />
+
+                    <div className="mt-4 flex items-center justify-between gap-4">
+                      <div className="text-sm">
+                        {draft.error ? (
+                          <span className="text-red-600">{draft.error}</span>
+                        ) : draft.savedMessage ? (
+                          <span className="text-emerald-600">{draft.savedMessage}</span>
+                        ) : (
+                          <span className="text-slate-400">Save only if you want to override the AI.</span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveOverride(submission)}
+                        disabled={draft.savingOverride}
+                        className="rounded-2xl bg-slate-950 px-5 py-3 text-lg font-bold text-white disabled:opacity-60"
+                      >
+                        {draft.savingOverride ? "Saving..." : "Save override"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                    <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                      Teacher audio feedback
+                    </div>
+
+                    <div className="mb-4 flex flex-wrap gap-3">
+                      {!draft.isRecordingTeacher ? (
+                        <button
+                          type="button"
+                          onClick={() => void startTeacherRecording(submission.id)}
+                          className="rounded-2xl bg-indigo-600 px-5 py-3 text-lg font-bold text-white"
+                        >
+                          Start recording
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => stopTeacherRecording(submission.id)}
+                          className="rounded-2xl bg-rose-600 px-5 py-3 text-lg font-bold text-white"
+                        >
+                          Stop recording
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveTeacherAudio(submission)}
+                        disabled={!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher}
+                        className="rounded-2xl bg-slate-950 px-5 py-3 text-lg font-bold text-white disabled:opacity-60"
+                      >
+                        {draft.savingAudio ? "Saving audio..." : "Save teacher audio"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => clearTeacherRecording(submission.id)}
+                        disabled={!draft.teacherBlob || draft.isRecordingTeacher}
+                        className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-lg font-bold text-slate-700 disabled:opacity-60"
+                      >
+                        Clear
+                      </button>
+                    </div>
+
+                    {draft.isRecordingTeacher ? (
+                      <div className="mb-3 text-sm font-medium text-rose-700">Recording in progress...</div>
+                    ) : null}
+
+                    {draft.recordingError ? (
+                      <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {draft.recordingError}
+                      </div>
+                    ) : null}
+
+                    {draft.teacherPreviewUrl ? (
+                      <div className="mb-4">
+                        <div className="mb-2 text-sm font-semibold text-slate-600">Preview new teacher audio</div>
+                        <audio controls src={draft.teacherPreviewUrl} className="w-full" />
+                      </div>
+                    ) : null}
+
+                    {submission.teacher_audio_url ? (
+                      <div>
+                        <div className="mb-2 text-sm font-semibold text-slate-600">Saved teacher audio</div>
+                        <audio controls src={submission.teacher_audio_url} className="w-full" />
+                      </div>
+                    ) : (
+                      !draft.teacherPreviewUrl && (
+                        <div className="italic text-slate-400">No saved teacher audio yet</div>
+                      )
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
