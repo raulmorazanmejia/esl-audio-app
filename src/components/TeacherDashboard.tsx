@@ -154,13 +154,18 @@ export default function TeacherView() {
   useEffect(() => {
     return () => {
       stopRecorderAndTracks();
+    };
+  }, [stopRecorderAndTracks]);
+
+  useEffect(() => {
+    return () => {
       Object.values(drafts).forEach((draft) => {
         if (draft.teacherPreviewUrl) {
           URL.revokeObjectURL(draft.teacherPreviewUrl);
         }
       });
     };
-  }, [drafts, stopRecorderAndTracks]);
+  }, []);
 
   const hydrateDrafts = useCallback((rows: SubmissionRow[]) => {
     setDrafts((prev) => {
@@ -514,7 +519,7 @@ export default function TeacherView() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-6">
+    <div className="mx-auto max-w-7xl px-6 py-6 text-slate-900">
       <div className="mb-6 flex justify-center gap-3">
         <button
           type="button"
