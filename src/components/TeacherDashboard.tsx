@@ -751,8 +751,18 @@ export default function TeacherDashboard() {
               {submissions.map((submission) => {
                 const draft = drafts[submission.id] ?? buildDraft(submission);
                 const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
+                const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
                 return (
-                  <article key={submission.id} style={styles.submissionCard}>
+                  <article
+                    key={submission.id}
+                    style={{
+                      ...styles.submissionCard,
+                      borderColor: needsTeacherReview ? "#f59e0b" : "#e2e8f0",
+                      boxShadow: needsTeacherReview
+                        ? "0 0 0 2px rgba(245, 158, 11, 0.18)"
+                        : undefined,
+                    }}
+                  >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "18px", flexWrap: "wrap", marginBottom: "16px" }}>
                       <div>
                         <div style={styles.studentCode}>{submission.student_code || submission.student_name || "No code"}</div>
@@ -761,6 +771,18 @@ export default function TeacherDashboard() {
                       <div style={styles.pillRow}>
                         <span style={styles.pill}>{submission.status || "unknown"}</span>
                         <span style={styles.pill}>{submission.feedback_status || "no feedback audio"}</span>
+                        {needsTeacherReview ? (
+                          <span
+                            style={{
+                              ...styles.pill,
+                              borderColor: "#f59e0b",
+                              color: "#b45309",
+                              background: "#fffbeb",
+                            }}
+                          >
+                            Needs review
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
