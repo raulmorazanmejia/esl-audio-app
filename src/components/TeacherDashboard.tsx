@@ -62,24 +62,6 @@ const styles = {
     maxWidth: "1360px",
     margin: "0 auto",
   },
-  topToggle: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "12px",
-    marginBottom: "24px",
-  },
-  toggleButton: {
-    height: "56px",
-    padding: "0 28px",
-    borderRadius: "18px",
-    border: "1px solid #cbd5e1",
-    fontSize: "18px",
-    fontWeight: 800,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
-  },
   grid: {
     display: "grid",
     gridTemplateColumns: "420px minmax(0, 1fr)",
@@ -685,20 +667,9 @@ export default function TeacherDashboard() {
     }
   }
 
-  const toggleBase = styles.toggleButton;
-
   return (
     <div style={styles.page}>
       <div style={styles.container}>
-        <div style={styles.topToggle}>
-          <button type="button" style={{ ...toggleBase, background: "#ffffff", color: "#334155" }}>
-            Student
-          </button>
-          <button type="button" style={{ ...toggleBase, background: "#0f172a", color: "#ffffff", border: "none" }}>
-            Teacher
-          </button>
-        </div>
-
         <div style={styles.grid}>
           <section style={styles.panel}>
             <div style={styles.panelLabel}>Classroom prompts</div>
@@ -805,15 +776,14 @@ export default function TeacherDashboard() {
                 const draft = drafts[submission.id] ?? buildDraft(submission);
                 const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
                 const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
+
                 return (
                   <article
                     key={submission.id}
                     style={{
                       ...styles.submissionCard,
                       borderColor: needsTeacherReview ? "#f59e0b" : "#e2e8f0",
-                      boxShadow: needsTeacherReview
-                        ? "0 0 0 2px rgba(245, 158, 11, 0.18)"
-                        : undefined,
+                      boxShadow: needsTeacherReview ? "0 0 0 2px rgba(245, 158, 11, 0.18)" : undefined,
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: "18px", flexWrap: "wrap", marginBottom: "16px" }}>
