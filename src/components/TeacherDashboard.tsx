@@ -299,16 +299,8 @@ const styles = {
   },
 } as const;
 
-function clampButton(disabled?: boolean, extra?: React.CSSProperties): React.CSSProperties {
-  return {
-    ...(extra || {}),
-    opacity: disabled ? 0.5 : 1,
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
-}
-
-function buildAudioLabel(url?: string | null) {
-  return url ? "Saved teacher audio" : "No saved teacher audio yet";
+function clampScore(value: number) {
+  return Math.max(1, Math.min(5, Math.round(value)));
 }
 
 function buildDraft(row: SubmissionRow, previous?: Partial<DraftState>): DraftState {
@@ -324,6 +316,63 @@ function buildDraft(row: SubmissionRow, previous?: Partial<DraftState>): DraftSt
     isRecordingTeacher: false,
     recordingError: "",
   };
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
+function getMimeType() {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/ogg;codecs=opus",
+  ];
+
+  for (const type of candidates) {
+    if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+
+  return "";
+}
+
+function getFileExtension(mimeType: string) {
+  if (mimeType.includes("webm")) return "webm";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("mpeg")) return "mp3";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}
+
+function StarRow({ value }: { value: number }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "2px", fontSize: "24px", lineHeight: 1, color: "#f59e0b" }} aria-hidden="true">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <span key={n}>{n <= value ? "★" : "☆"}</span>
+      ))}
+    </div>
+  );
+}
+
+function clampButton(disabled?: boolean, extra?: React.CSSProperties): React.CSSProperties {
+  return {
+    ...(extra || {}),
+    opacity: disabled ? 0.5 : 1,
+    cursor: disabled ? "not-allowed" : "pointer",
+  };
+}
+
+function buildAudioLabel(url?: string | null) {
+  return url ? "Saved teacher audio" : "No saved teacher audio yet";
 }
 
 export default function TeacherDashboard() {
