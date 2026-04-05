@@ -106,11 +106,19 @@ function buildDraft(row: SubmissionRow, previous?: Partial<DraftState>): DraftSt
 
 function StarRow({ value }: { value: number }) {
   return (
-    <div className="flex items-center gap-1 text-[28px] leading-none text-amber-400" aria-hidden="true">
+    <div className="flex items-center gap-1 text-[24px] leading-none text-amber-400" aria-hidden="true">
       {[1, 2, 3, 4, 5].map((n) => (
         <span key={n}>{n <= value ? "★" : "☆"}</span>
       ))}
     </div>
+  );
+}
+
+function StatusPill({ label }: { label: string }) {
+  return (
+    <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold uppercase tracking-wide text-slate-500">
+      {label}
+    </span>
   );
 }
 
@@ -519,314 +527,336 @@ export default function TeacherView() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-6 py-6 text-slate-900">
-      <div className="mb-6 flex justify-center gap-3">
-        <button
-          type="button"
-          className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-xl font-semibold text-slate-700"
-        >
-          Student
-        </button>
-        <button
-          type="button"
-          className="rounded-2xl bg-slate-950 px-6 py-3 text-xl font-semibold text-white"
-        >
-          Teacher
-        </button>
-      </div>
+    <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 md:px-6">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 flex justify-center gap-3">
+          <button
+            type="button"
+            className="rounded-2xl border border-slate-300 bg-white px-6 py-3 text-xl font-semibold text-slate-700 shadow-sm"
+          >
+            Student
+          </button>
+          <button
+            type="button"
+            className="rounded-2xl bg-slate-950 px-6 py-3 text-xl font-semibold text-white shadow-sm"
+          >
+            Teacher
+          </button>
+        </div>
 
-      <div className="grid gap-8 lg:grid-cols-[1.05fr_1fr]">
-        <section className="rounded-[32px] bg-white p-8 shadow-sm ring-1 ring-slate-200">
-          <div className="mb-5 text-sm font-extrabold uppercase tracking-[0.18em] text-slate-400">
-            Classroom Prompts
-          </div>
-
-          <div className="mb-6 flex gap-4">
-            <input
-              value={newPrompt}
-              onChange={(e) => setNewPrompt(e.target.value)}
-              placeholder="Type a new prompt"
-              className="flex-1 rounded-3xl border border-slate-200 bg-slate-50 px-6 py-4 text-xl text-slate-700 outline-none focus:border-indigo-300"
-            />
-            <button
-              type="button"
-              onClick={() => void handleSavePrompt()}
-              disabled={isSavingPrompt}
-              className="rounded-3xl bg-slate-950 px-6 py-4 text-xl font-bold text-white disabled:opacity-60"
-            >
-              {isSavingPrompt ? "Saving..." : "Save"}
-            </button>
-          </div>
-
-          {promptError ? (
-            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {promptError}
+        <div className="grid gap-8 xl:grid-cols-[420px_minmax(0,1fr)]">
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <div className="mb-5 text-sm font-extrabold uppercase tracking-[0.18em] text-slate-400">
+              Classroom prompts
             </div>
-          ) : null}
 
-          <div className="space-y-4">
-            {sortedPrompts.map((prompt) => {
-              const isActive = selectedPromptId === prompt.id || Boolean(prompt.is_active);
+            <div className="mb-6 flex gap-3">
+              <input
+                value={newPrompt}
+                onChange={(e) => setNewPrompt(e.target.value)}
+                placeholder="Type a new prompt"
+                className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-lg text-slate-700 outline-none focus:border-indigo-300"
+              />
+              <button
+                type="button"
+                onClick={() => void handleSavePrompt()}
+                disabled={isSavingPrompt}
+                className="rounded-2xl bg-slate-950 px-5 py-4 text-lg font-bold text-white shadow-sm disabled:opacity-60"
+              >
+                {isSavingPrompt ? "Saving..." : "Save"}
+              </button>
+            </div>
 
-              return (
-                <div
-                  key={prompt.id}
-                  className={[
-                    "flex items-center justify-between rounded-[28px] border px-7 py-7 transition",
-                    isActive
-                      ? "border-indigo-400 bg-indigo-50 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.35)]"
-                      : "border-slate-200 bg-white",
-                  ].join(" ")}
-                >
-                  <div className={isActive ? "text-2xl font-bold text-indigo-600" : "text-2xl font-bold text-slate-800"}>
-                    {prompt.prompt_text}
-                  </div>
+            {promptError ? (
+              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {promptError}
+              </div>
+            ) : null}
 
-                  <button
-                    type="button"
-                    onClick={() => void handleUsePrompt(prompt.id)}
+            <div className="space-y-4">
+              {sortedPrompts.map((prompt) => {
+                const isActive = selectedPromptId === prompt.id || Boolean(prompt.is_active);
+
+                return (
+                  <div
+                    key={prompt.id}
                     className={[
-                      "min-w-[84px] rounded-2xl border px-5 py-3 text-xl font-bold",
+                      "rounded-[28px] border px-5 py-5 transition",
                       isActive
-                        ? "border-indigo-400 bg-indigo-50 text-indigo-600"
-                        : "border-slate-200 bg-white text-slate-700",
+                        ? "border-indigo-400 bg-indigo-50 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.25)]"
+                        : "border-slate-200 bg-white",
                     ].join(" ")}
                   >
-                    {isActive ? "✓" : "Use"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+                    <div className="mb-4 flex items-start justify-between gap-4">
+                      <div className={isActive ? "text-2xl font-bold leading-snug text-indigo-600" : "text-2xl font-bold leading-snug text-slate-800"}>
+                        {prompt.prompt_text}
+                      </div>
 
-        <section className="rounded-[32px] bg-white p-8 shadow-sm ring-1 ring-slate-200">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div className="text-sm font-extrabold uppercase tracking-[0.18em] text-slate-400">
-              Student Submissions
+                      <button
+                        type="button"
+                        onClick={() => void handleUsePrompt(prompt.id)}
+                        className={[
+                          "shrink-0 rounded-2xl border px-5 py-3 text-lg font-bold shadow-sm",
+                          isActive
+                            ? "border-indigo-400 bg-indigo-50 text-indigo-600"
+                            : "border-slate-200 bg-white text-slate-700",
+                        ].join(" ")}
+                      >
+                        {isActive ? "✓" : "Use"}
+                      </button>
+                    </div>
+
+                    {prompt.example_text ? (
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                        {prompt.example_text}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm md:p-8">
+            <div className="mb-5 flex items-center justify-between gap-4">
+              <div className="text-sm font-extrabold uppercase tracking-[0.18em] text-slate-400">
+                Student submissions
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void fetchSubmissions()}
+                disabled={isLoadingSubmissions}
+                className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-base font-bold text-slate-700 shadow-sm disabled:opacity-60"
+              >
+                {isLoadingSubmissions ? "Refreshing..." : "Refresh"}
+              </button>
             </div>
 
-            <button
-              type="button"
-              onClick={() => void fetchSubmissions()}
-              disabled={isLoadingSubmissions}
-              className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-xl font-bold text-slate-700 disabled:opacity-60"
-            >
-              {isLoadingSubmissions ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
+            {submissionsError ? (
+              <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {submissionsError}
+              </div>
+            ) : null}
 
-          {submissionsError ? (
-            <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {submissionsError}
-            </div>
-          ) : null}
+            <div className="max-h-[78vh] space-y-6 overflow-y-auto pr-1">
+              {submissions.map((submission) => {
+                const draft = drafts[submission.id] ?? buildDraft(submission);
+                const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
 
-          <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
-            {submissions.map((submission) => {
-              const draft = drafts[submission.id] ?? buildDraft(submission);
-              const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
-
-              return (
-                <article key={submission.id} className="rounded-[28px] border border-slate-200 bg-white p-7">
-                  <div className="mb-2 text-[46px] font-black leading-none text-slate-950">
-                    {submission.student_code || submission.student_name || "No code"}
-                  </div>
-
-                  {submission.student_name && submission.student_code ? (
-                    <div className="mb-2 text-lg text-slate-500">{submission.student_name}</div>
-                  ) : null}
-
-                  <div className="mb-3 text-sm font-black uppercase italic tracking-wide text-slate-400">
-                    "{submission.prompt_text || "No prompt saved"}"
-                  </div>
-
-                  <div className="mb-2 text-sm font-extrabold uppercase tracking-wide text-slate-400">
-                    Student recording
-                  </div>
-
-                  {submission.audio_url ? (
-                    <audio controls src={submission.audio_url} className="mb-5 w-full" />
-                  ) : (
-                    <div className="mb-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-500">
-                      No student audio found.
-                    </div>
-                  )}
-
-                  <div className="mb-4 grid gap-4 md:grid-cols-2">
-                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-                      <div className="mb-2 text-sm font-extrabold uppercase tracking-wide text-slate-400">
-                        AI feedback
-                      </div>
-                      <div className="mb-2 text-lg text-slate-700">
-                        <span className="font-bold text-slate-800">Transcript:</span>{" "}
-                        {submission.transcript || "Pending"}
-                      </div>
-                      <div className="mb-2 text-lg text-slate-700">
-                        <span className="font-bold text-slate-800">Score:</span>{" "}
-                        {submission.ai_score ?? "Pending"}
-                      </div>
-                      <div className="text-lg text-slate-700">
-                        <span className="font-bold text-slate-800">Comment:</span>{" "}
-                        {submission.ai_comment || "Pending"}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-                      <div className="mb-2 text-sm font-extrabold uppercase tracking-wide text-slate-400">
-                        Submission info
-                      </div>
-                      <div className="mb-2 text-lg text-slate-700">
-                        <span className="font-bold text-slate-800">Date:</span>{" "}
-                        {formatDate(submission.created_at) || "Unknown"}
-                      </div>
-                      <div className="mb-2 text-lg text-slate-700">
-                        <span className="font-bold text-slate-800">Status:</span>{" "}
-                        {submission.status || "Unknown"}
-                      </div>
-                      <div className="text-lg text-slate-700">
-                        <span className="font-bold text-slate-800">Student email:</span>{" "}
-                        {submission.student_email || "—"}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mb-4 rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-                    <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
-                      Override score and comment
-                    </div>
-
-                    <div className="mb-3 flex items-center justify-between gap-4">
-                      <label className="text-lg font-bold text-slate-800">Teacher score: {draft.score}/5</label>
-                      <StarRow value={draft.score} />
-                    </div>
-
-                    <input
-                      type="range"
-                      min={1}
-                      max={5}
-                      step={1}
-                      value={draft.score}
-                      onChange={(e) =>
-                        updateDraft(submission.id, {
-                          score: clampScore(Number(e.target.value)),
-                          savedMessage: "",
-                          error: "",
-                        })
-                      }
-                      className="mb-5 w-full"
-                    />
-
-                    <textarea
-                      value={draft.comment}
-                      onChange={(e) =>
-                        updateDraft(submission.id, {
-                          comment: e.target.value,
-                          savedMessage: "",
-                          error: "",
-                        })
-                      }
-                      rows={4}
-                      placeholder="Write or edit the teacher feedback here"
-                      className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-lg text-slate-800 outline-none focus:border-indigo-300"
-                    />
-
-                    <div className="mt-4 flex items-center justify-between gap-4">
-                      <div className="text-sm">
-                        {draft.error ? (
-                          <span className="text-red-600">{draft.error}</span>
-                        ) : draft.savedMessage ? (
-                          <span className="text-emerald-600">{draft.savedMessage}</span>
-                        ) : (
-                          <span className="text-slate-400">Save only if you want to override the AI.</span>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => void handleSaveOverride(submission)}
-                        disabled={draft.savingOverride}
-                        className="rounded-2xl bg-slate-950 px-5 py-3 text-lg font-bold text-white disabled:opacity-60"
-                      >
-                        {draft.savingOverride ? "Saving..." : "Save override"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-                    <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
-                      Teacher audio feedback
-                    </div>
-
-                    <div className="mb-4 flex flex-wrap gap-3">
-                      {!draft.isRecordingTeacher ? (
-                        <button
-                          type="button"
-                          onClick={() => void startTeacherRecording(submission.id)}
-                          className="rounded-2xl bg-indigo-600 px-5 py-3 text-lg font-bold text-white"
-                        >
-                          Start recording
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => stopTeacherRecording(submission.id)}
-                          className="rounded-2xl bg-rose-600 px-5 py-3 text-lg font-bold text-white"
-                        >
-                          Stop recording
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => void handleSaveTeacherAudio(submission)}
-                        disabled={!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher}
-                        className="rounded-2xl bg-slate-950 px-5 py-3 text-lg font-bold text-white disabled:opacity-60"
-                      >
-                        {draft.savingAudio ? "Saving audio..." : "Save teacher audio"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => clearTeacherRecording(submission.id)}
-                        disabled={!draft.teacherBlob || draft.isRecordingTeacher}
-                        className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-lg font-bold text-slate-700 disabled:opacity-60"
-                      >
-                        Clear
-                      </button>
-                    </div>
-
-                    {draft.isRecordingTeacher ? (
-                      <div className="mb-3 text-sm font-medium text-rose-700">Recording in progress...</div>
-                    ) : null}
-
-                    {draft.recordingError ? (
-                      <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                        {draft.recordingError}
-                      </div>
-                    ) : null}
-
-                    {draft.teacherPreviewUrl ? (
-                      <div className="mb-4">
-                        <div className="mb-2 text-sm font-semibold text-slate-600">Preview new teacher audio</div>
-                        <audio controls src={draft.teacherPreviewUrl} className="w-full" />
-                      </div>
-                    ) : null}
-
-                    {savedTeacherAudioUrl ? (
+                return (
+                  <article key={submission.id} className="rounded-[28px] border border-slate-200 bg-slate-50 p-6 shadow-sm">
+                    <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
                       <div>
-                        <div className="mb-2 text-sm font-semibold text-slate-600">Saved teacher audio</div>
-                        <audio controls src={savedTeacherAudioUrl} className="w-full" />
+                        <div className="text-[40px] font-black leading-none text-slate-950">
+                          {submission.student_code || submission.student_name || "No code"}
+                        </div>
+                        {submission.student_name && submission.student_code ? (
+                          <div className="mt-2 text-lg text-slate-500">{submission.student_name}</div>
+                        ) : null}
                       </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <StatusPill label={submission.status || "unknown"} />
+                        <StatusPill label={submission.feedback_status || "no feedback audio"} />
+                      </div>
+                    </div>
+
+                    <div className="mb-5 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-lg italic text-slate-700">
+                      “{submission.prompt_text || "No prompt saved"}”
+                    </div>
+
+                    <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                      Student recording
+                    </div>
+
+                    {submission.audio_url ? (
+                      <audio controls src={submission.audio_url} className="mb-6 w-full" />
                     ) : (
-                      !draft.teacherPreviewUrl && <div className="italic text-slate-400">No saved teacher audio yet</div>
+                      <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-500">
+                        No student audio found.
+                      </div>
                     )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
+
+                    <div className="mb-6 grid gap-4 lg:grid-cols-2">
+                      <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                        <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                          AI feedback
+                        </div>
+                        <div className="space-y-3 text-lg text-slate-700">
+                          <div>
+                            <span className="font-bold text-slate-800">Transcript:</span>{" "}
+                            {submission.transcript || "Pending"}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800">Score:</span>{" "}
+                            {submission.ai_score ?? "Pending"}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800">Comment:</span>{" "}
+                            {submission.ai_comment || "Pending"}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                        <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                          Submission info
+                        </div>
+                        <div className="space-y-3 text-lg text-slate-700">
+                          <div>
+                            <span className="font-bold text-slate-800">Date:</span>{" "}
+                            {formatDate(submission.created_at) || "Unknown"}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800">Student email:</span>{" "}
+                            {submission.student_email || "—"}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-800">Feedback created:</span>{" "}
+                            {submission.feedback_created_at ? formatDate(submission.feedback_created_at) : "—"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mb-6 rounded-[24px] border border-slate-200 bg-white p-5">
+                      <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                        Override score and comment
+                      </div>
+
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                        <label className="text-lg font-bold text-slate-800">Teacher score: {draft.score}/5</label>
+                        <StarRow value={draft.score} />
+                      </div>
+
+                      <input
+                        type="range"
+                        min={1}
+                        max={5}
+                        step={1}
+                        value={draft.score}
+                        onChange={(e) =>
+                          updateDraft(submission.id, {
+                            score: clampScore(Number(e.target.value)),
+                            savedMessage: "",
+                            error: "",
+                          })
+                        }
+                        className="mb-5 w-full"
+                      />
+
+                      <textarea
+                        value={draft.comment}
+                        onChange={(e) =>
+                          updateDraft(submission.id, {
+                            comment: e.target.value,
+                            savedMessage: "",
+                            error: "",
+                          })
+                        }
+                        rows={4}
+                        placeholder="Write or edit the teacher feedback here"
+                        className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-lg text-slate-800 outline-none focus:border-indigo-300"
+                      />
+
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+                        <div className="text-sm">
+                          {draft.error ? (
+                            <span className="text-red-600">{draft.error}</span>
+                          ) : draft.savedMessage ? (
+                            <span className="text-emerald-600">{draft.savedMessage}</span>
+                          ) : (
+                            <span className="text-slate-400">Save only if you want to override the AI.</span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveOverride(submission)}
+                          disabled={draft.savingOverride}
+                          className="rounded-2xl bg-slate-950 px-5 py-3 text-lg font-bold text-white shadow-sm disabled:opacity-60"
+                        >
+                          {draft.savingOverride ? "Saving..." : "Save override"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-slate-200 bg-white p-5">
+                      <div className="mb-3 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                        Teacher audio feedback
+                      </div>
+
+                      <div className="mb-4 flex flex-wrap gap-3">
+                        {!draft.isRecordingTeacher ? (
+                          <button
+                            type="button"
+                            onClick={() => void startTeacherRecording(submission.id)}
+                            className="rounded-2xl bg-indigo-600 px-5 py-3 text-base font-bold text-white shadow-sm"
+                          >
+                            Start recording
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => stopTeacherRecording(submission.id)}
+                            className="rounded-2xl bg-rose-600 px-5 py-3 text-base font-bold text-white shadow-sm"
+                          >
+                            Stop recording
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveTeacherAudio(submission)}
+                          disabled={!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher}
+                          className="rounded-2xl bg-slate-950 px-5 py-3 text-base font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {draft.savingAudio ? "Saving audio..." : "Save teacher audio"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => clearTeacherRecording(submission.id)}
+                          disabled={!draft.teacherBlob || draft.isRecordingTeacher}
+                          className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-base font-bold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Clear
+                        </button>
+                      </div>
+
+                      {draft.isRecordingTeacher ? (
+                        <div className="mb-3 text-sm font-medium text-rose-700">Recording in progress...</div>
+                      ) : null}
+
+                      {draft.recordingError ? (
+                        <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                          {draft.recordingError}
+                        </div>
+                      ) : null}
+
+                      {draft.teacherPreviewUrl ? (
+                        <div className="mb-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="mb-2 text-sm font-semibold text-slate-600">Preview new teacher audio</div>
+                          <audio controls src={draft.teacherPreviewUrl} className="w-full" />
+                        </div>
+                      ) : null}
+
+                      {savedTeacherAudioUrl ? (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <div className="mb-2 text-sm font-semibold text-slate-600">Saved teacher audio</div>
+                          <audio controls src={savedTeacherAudioUrl} className="w-full" />
+                        </div>
+                      ) : (
+                        !draft.teacherPreviewUrl && <div className="italic text-slate-400">No saved teacher audio yet</div>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );
