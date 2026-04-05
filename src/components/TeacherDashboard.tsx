@@ -391,6 +391,7 @@ export default function TeacherDashboard() {
   const [submissionsError, setSubmissionsError] = useState("");
   const [drafts, setDrafts] = useState<DraftsById>({});
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+  const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
 
   const sortedPrompts = useMemo(() => {
     return [...prompts].sort((a, b) => {
@@ -399,6 +400,17 @@ export default function TeacherDashboard() {
       return bTime - aTime;
     });
   }, [prompts]);
+
+  const filteredSubmissions = useMemo(() => {
+    return submissions.filter((submission) => {
+      const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
+      const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
+
+      if (reviewFilter === "needs_review") return needsTeacherReview;
+      if (reviewFilter === "reviewed") return !needsTeacherReview;
+      return true;
+    });
+  }, [submissions, reviewFilter]);
 
   const stopRecorderAndTracks = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -738,17 +750,58 @@ export default function TeacherDashboard() {
           </section>
 
           <section style={styles.panel}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "18px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "18px", flexWrap: "wrap" }}>
               <div style={styles.panelLabel}>Student submissions</div>
-              <button type="button" onClick={() => void fetchSubmissions()} disabled={isLoadingSubmissions} style={clampButton(isLoadingSubmissions, styles.secondaryButton)}>
-                {isLoadingSubmissions ? "Refreshing..." : "Refresh"}
-              </button>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter("all")}
+                  style={{
+                    ...styles.secondaryButton,
+                    minHeight: "44px",
+                    background: reviewFilter === "all" ? "#0f172a" : "#ffffff",
+                    color: reviewFilter === "all" ? "#ffffff" : "#334155",
+                    border: reviewFilter === "all" ? "none" : "1px solid #cbd5e1",
+                  }}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter("needs_review")}
+                  style={{
+                    ...styles.secondaryButton,
+                    minHeight: "44px",
+                    background: reviewFilter === "needs_review" ? "#fffbeb" : "#ffffff",
+                    color: reviewFilter === "needs_review" ? "#b45309" : "#334155",
+                    borderColor: reviewFilter === "needs_review" ? "#f59e0b" : "#cbd5e1",
+                  }}
+                >
+                  Needs review
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewFilter("reviewed")}
+                  style={{
+                    ...styles.secondaryButton,
+                    minHeight: "44px",
+                    background: reviewFilter === "reviewed" ? "#ecfdf5" : "#ffffff",
+                    color: reviewFilter === "reviewed" ? "#047857" : "#334155",
+                    borderColor: reviewFilter === "reviewed" ? "#10b981" : "#cbd5e1",
+                  }}
+                >
+                  Reviewed
+                </button>
+                <button type="button" onClick={() => void fetchSubmissions()} disabled={isLoadingSubmissions} style={clampButton(isLoadingSubmissions, styles.secondaryButton)}>
+                  {isLoadingSubmissions ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
             </div>
 
             {submissionsError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{submissionsError}</div> : null}
 
             <div style={styles.submissionsScroller}>
-              {submissions.map((submission) => {
+              {filteredSubmissions.map((submission) => {
                 const draft = drafts[submission.id] ?? buildDraft(submission);
                 const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
                 const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
