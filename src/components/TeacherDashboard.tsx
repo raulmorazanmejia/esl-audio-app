@@ -3,7 +3,8 @@ import { supabase } from "../lib/supabase";
 
 type PromptRow = {
   id: string;
-  text: string | null;
+  prompt_text: string | null;
+  example_text: string | null;
   is_active: boolean | null;
   created_at?: string | null;
 };
@@ -21,6 +22,9 @@ type SubmissionRow = {
   teacher_comment: string | null;
   teacher_audio_url: string | null;
 };
+
+const SUBMISSION_SELECT =
+  "id, created_at, student_code, student_name, audio_url, transcript, score, comment, prompt_text, teacher_comment, teacher_audio_url";
 
 type DraftState = {
   score: number;
@@ -172,7 +176,7 @@ export default function TeacherView() {
 
     const { data, error } = await supabase
       .from("prompts")
-      .select("id, text, is_active, created_at")
+      .select("id, prompt_text, example_text, is_active, created_at")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -180,7 +184,7 @@ export default function TeacherView() {
       return;
     }
 
-    const rows = data ?? [];
+    const rows = (data ?? []) as PromptRow[];
     setPrompts(rows);
 
     const active = rows.find((row) => row.is_active);
@@ -192,10 +196,8 @@ export default function TeacherView() {
     setSubmissionsError("");
 
     const { data, error } = await supabase
-      .from("submissions")
-      .select(
-        "id, created_at, student_code, student_name, audio_url, transcript, score, comment, prompt_text, teacher_comment, teacher_audio_url"
-      )
+      .from("student_submissions")
+      .select(SUBMISSION_SELECT)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -223,7 +225,7 @@ export default function TeacherView() {
     setPromptError("");
 
     const { error } = await supabase.from("prompts").insert({
-      text,
+      prompt_text: text,
       is_active: false,
     });
 
@@ -303,12 +305,10 @@ export default function TeacherView() {
     };
 
     const { data, error } = await supabase
-      .from("submissions")
+      .from("student_submissions")
       .update(payload)
       .eq("id", submission.id)
-      .select(
-        "id, created_at, student_code, student_name, audio_url, transcript, score, comment, prompt_text, teacher_comment, teacher_audio_url"
-      )
+      .select(SUBMISSION_SELECT)
       .single();
 
     if (error) {
@@ -474,12 +474,10 @@ export default function TeacherView() {
       } = supabase.storage.from("teacher-audio").getPublicUrl(filePath);
 
       const { data, error } = await supabase
-        .from("submissions")
+        .from("student_submissions")
         .update({ teacher_audio_url: publicUrl })
         .eq("id", submission.id)
-        .select(
-          "id, created_at, student_code, student_name, audio_url, transcript, score, comment, prompt_text, teacher_comment, teacher_audio_url"
-        )
+        .select(SUBMISSION_SELECT)
         .single();
 
       if (error) throw error;
@@ -562,7 +560,7 @@ export default function TeacherView() {
                   ].join(" ")}
                 >
                   <div className={isActive ? "text-2xl font-bold text-indigo-600" : "text-2xl font-bold text-slate-800"}>
-                    {prompt.text}
+                    {prompt.prompt_text}
                   </div>
 
                   <button
@@ -610,10 +608,7 @@ export default function TeacherView() {
               const draft = drafts[submission.id] ?? buildDraft(submission);
 
               return (
-                <article
-                  key={submission.id}
-                  className="rounded-[28px] border border-slate-200 bg-white p-7"
-                >
+                <article key={submission.id} className="rounded-[28px] border border-slate-200 bg-white p-7">
                   <div className="mb-2 text-[46px] font-black leading-none text-slate-950">
                     {submission.student_code || submission.student_name || "No code"}
                   </div>
@@ -655,9 +650,7 @@ export default function TeacherView() {
                     </div>
 
                     <div className="mb-3 flex items-center justify-between gap-4">
-                      <label className="text-lg font-bold text-slate-800">
-                        Score: {draft.score}/5
-                      </label>
+                      <label className="text-lg font-bold text-slate-800">Score: {draft.score}/5</label>
                       <StarRow value={draft.score} />
                     </div>
 
@@ -779,9 +772,7 @@ export default function TeacherView() {
                         <audio controls src={submission.teacher_audio_url} className="w-full" />
                       </div>
                     ) : (
-                      !draft.teacherPreviewUrl && (
-                        <div className="italic text-slate-400">No saved teacher audio yet</div>
-                      )
+                      !draft.teacherPreviewUrl && <div className="italic text-slate-400">No saved teacher audio yet</div>
                     )}
                   </div>
                 </article>
