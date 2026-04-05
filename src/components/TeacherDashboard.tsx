@@ -11,20 +11,29 @@ type PromptRow = {
 
 type SubmissionRow = {
   id: string;
-  created_at: string | null;
-  student_code: string | null;
   student_name: string | null;
-  audio_url: string | null;
-  transcript: string | null;
-  score: number | null;
-  comment: string | null;
   prompt_text: string | null;
+  audio_path: string | null;
+  audio_url: string | null;
+  status: string | null;
+  created_at: string | null;
+  feedback_audio_path: string | null;
+  feedback_audio_url: string | null;
+  feedback_status: string | null;
+  feedback_created_at: string | null;
+  student_email: string | null;
+  student_auth_id: string | null;
+  feedback_url: string | null;
+  transcript: string | null;
+  ai_score: number | null;
+  ai_comment: string | null;
+  teacher_score: number | null;
   teacher_comment: string | null;
-  teacher_audio_url: string | null;
+  student_code: string | null;
 };
 
 const SUBMISSION_SELECT =
-  "id, created_at, student_code, student_name, audio_url, transcript, score, comment, prompt_text, teacher_comment, teacher_audio_url";
+  "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 
 type DraftState = {
   score: number;
@@ -82,8 +91,8 @@ function getFileExtension(mimeType: string) {
 
 function buildDraft(row: SubmissionRow, previous?: Partial<DraftState>): DraftState {
   return {
-    score: previous?.score ?? clampScore(row.score ?? 3),
-    comment: previous?.comment ?? row.comment ?? "",
+    score: previous?.score ?? clampScore(row.teacher_score ?? row.ai_score ?? 3),
+    comment: previous?.comment ?? row.teacher_comment ?? row.ai_comment ?? "",
     savingOverride: false,
     savingAudio: false,
     savedMessage: previous?.savedMessage ?? "",
@@ -299,8 +308,7 @@ export default function TeacherView() {
     });
 
     const payload = {
-      score: clampScore(draft.score),
-      comment: draft.comment.trim(),
+      teacher_score: clampScore(draft.score),
       teacher_comment: draft.comment.trim(),
     };
 
@@ -475,7 +483,13 @@ export default function TeacherView() {
 
       const { data, error } = await supabase
         .from("student_submissions")
-        .update({ teacher_audio_url: publicUrl })
+        .update({
+          feedback_audio_path: filePath,
+          feedback_audio_url: publicUrl,
+          feedback_url: publicUrl,
+          feedback_status: "saved",
+          feedback_created_at: new Date().toISOString(),
+        })
         .eq("id", submission.id)
         .select(SUBMISSION_SELECT)
         .single();
@@ -606,6 +620,7 @@ export default function TeacherView() {
           <div className="max-h-[70vh] space-y-5 overflow-y-auto pr-1">
             {submissions.map((submission) => {
               const draft = drafts[submission.id] ?? buildDraft(submission);
+              const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
 
               return (
                 <article key={submission.id} className="rounded-[28px] border border-slate-200 bg-white p-7">
@@ -613,7 +628,7 @@ export default function TeacherView() {
                     {submission.student_code || submission.student_name || "No code"}
                   </div>
 
-                  {submission.student_name ? (
+                  {submission.student_name && submission.student_code ? (
                     <div className="mb-2 text-lg text-slate-500">{submission.student_name}</div>
                   ) : null}
 
@@ -633,14 +648,41 @@ export default function TeacherView() {
                     </div>
                   )}
 
-                  <div className="mb-4 space-y-2 text-lg text-slate-700">
-                    <div>
-                      <span className="font-bold text-slate-800">Transcript:</span>{" "}
-                      {submission.transcript || "Pending"}
+                  <div className="mb-4 grid gap-4 md:grid-cols-2">
+                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                      <div className="mb-2 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                        AI feedback
+                      </div>
+                      <div className="mb-2 text-lg text-slate-700">
+                        <span className="font-bold text-slate-800">Transcript:</span>{" "}
+                        {submission.transcript || "Pending"}
+                      </div>
+                      <div className="mb-2 text-lg text-slate-700">
+                        <span className="font-bold text-slate-800">Score:</span>{" "}
+                        {submission.ai_score ?? "Pending"}
+                      </div>
+                      <div className="text-lg text-slate-700">
+                        <span className="font-bold text-slate-800">Comment:</span>{" "}
+                        {submission.ai_comment || "Pending"}
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-bold text-slate-800">Date:</span>{" "}
-                      {formatDate(submission.created_at) || "Unknown"}
+
+                    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                      <div className="mb-2 text-sm font-extrabold uppercase tracking-wide text-slate-400">
+                        Submission info
+                      </div>
+                      <div className="mb-2 text-lg text-slate-700">
+                        <span className="font-bold text-slate-800">Date:</span>{" "}
+                        {formatDate(submission.created_at) || "Unknown"}
+                      </div>
+                      <div className="mb-2 text-lg text-slate-700">
+                        <span className="font-bold text-slate-800">Status:</span>{" "}
+                        {submission.status || "Unknown"}
+                      </div>
+                      <div className="text-lg text-slate-700">
+                        <span className="font-bold text-slate-800">Student email:</span>{" "}
+                        {submission.student_email || "—"}
+                      </div>
                     </div>
                   </div>
 
@@ -650,7 +692,7 @@ export default function TeacherView() {
                     </div>
 
                     <div className="mb-3 flex items-center justify-between gap-4">
-                      <label className="text-lg font-bold text-slate-800">Score: {draft.score}/5</label>
+                      <label className="text-lg font-bold text-slate-800">Teacher score: {draft.score}/5</label>
                       <StarRow value={draft.score} />
                     </div>
 
@@ -680,7 +722,7 @@ export default function TeacherView() {
                         })
                       }
                       rows={4}
-                      placeholder="Write or edit the feedback here"
+                      placeholder="Write or edit the teacher feedback here"
                       className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-lg text-slate-800 outline-none focus:border-indigo-300"
                     />
 
@@ -766,10 +808,10 @@ export default function TeacherView() {
                       </div>
                     ) : null}
 
-                    {submission.teacher_audio_url ? (
+                    {savedTeacherAudioUrl ? (
                       <div>
                         <div className="mb-2 text-sm font-semibold text-slate-600">Saved teacher audio</div>
-                        <audio controls src={submission.teacher_audio_url} className="w-full" />
+                        <audio controls src={savedTeacherAudioUrl} className="w-full" />
                       </div>
                     ) : (
                       !draft.teacherPreviewUrl && <div className="italic text-slate-400">No saved teacher audio yet</div>
