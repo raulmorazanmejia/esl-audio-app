@@ -36,18 +36,11 @@ export default function App() {
     <div>
       <div
         style={{
-          <div
-  style={{
-    display: "flex",
-    justifyContent: "center",
-    gap: "10px",
-    marginTop: "20px",
-    marginBottom: "20px",
-  }}
->
           display: "flex",
+          justifyContent: "center",
           gap: "10px",
-          zIndex: 1000,
+          marginTop: "20px",
+          marginBottom: "20px",
         }}
       >
         <a
