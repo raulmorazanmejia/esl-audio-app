@@ -389,7 +389,12 @@ export default function StudentView() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audioUrl, prompt: promptText }),
+        body: JSON.stringify({
+          audioUrl,
+          audio_url: audioUrl,
+          prompt: promptText,
+          prompt_text: promptText,
+        }),
       });
 
       if (!response.ok) {
