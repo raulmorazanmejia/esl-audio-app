@@ -1,22 +1,63 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+function guessAudioMetaFromUrl(audioUrl: string) {
+  const lower = audioUrl.toLowerCase();
+
+  if (lower.includes(".mp4")) {
+    return { mimeType: "audio/mp4", fileName: "student-audio.mp4" };
+  }
+
+  if (lower.includes(".m4a")) {
+    return { mimeType: "audio/mp4", fileName: "student-audio.m4a" };
+  }
+
+  if (lower.includes(".ogg")) {
+    return { mimeType: "audio/ogg", fileName: "student-audio.ogg" };
+  }
+
+  if (lower.includes(".mp3")) {
+    return { mimeType: "audio/mpeg", fileName: "student-audio.mp3" };
+  }
+
+  return { mimeType: "audio/webm", fileName: "student-audio.webm" };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const { audioUrl, promptText } = req.body ?? {};
+    const {
+      audioUrl,
+      audio_url,
+      promptText,
+      prompt_text,
+      prompt,
+    } = req.body ?? {};
 
-    if (!audioUrl || !promptText) {
-      return res.status(400).json({ error: "Missing audioUrl or promptText" });
+    const finalAudioUrl = audioUrl || audio_url;
+    const finalPromptText = promptText || prompt_text || prompt;
+
+    if (!finalAudioUrl || !finalPromptText) {
+      return res.status(400).json({
+        error: "Missing audioUrl or promptText",
+        received: {
+          audioUrl: !!audioUrl,
+          audio_url: !!audio_url,
+          promptText: !!promptText,
+          prompt_text: !!prompt_text,
+          prompt: !!prompt,
+        },
+      });
     }
 
-    const audioRes = await fetch(audioUrl);
+    const audioRes = await fetch(finalAudioUrl);
     if (!audioRes.ok) {
       return res.status(400).json({ error: "Could not download audio file" });
     }
 
     const audioBuffer = await audioRes.arrayBuffer();
+    const { mimeType, fileName } = guessAudioMetaFromUrl(finalAudioUrl);
 
     const formData = new FormData();
-    formData.append("file", new Blob([audioBuffer], { type: "audio/webm" }), "student-audio.webm");
+    formData.append("file", new Blob([audioBuffer], { type: mimeType }), fileName);
     formData.append("model", "gpt-4o-mini-transcribe");
 
     const transcriptionRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
@@ -56,6 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0,
+        response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
@@ -64,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           },
           {
             role: "user",
-            content: `Prompt: ${promptText}\nStudent answer: ${transcript}`,
+            content: `Prompt: ${finalPromptText}\nStudent answer: ${transcript}`,
           },
         ],
       }),
