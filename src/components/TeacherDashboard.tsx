@@ -638,7 +638,7 @@ export default function TeacherDashboard() {
       const mimeType = draft.teacherBlob.type || "audio/webm";
       const ext = getFileExtension(mimeType);
       const filePath = `${submission.id}/teacher-feedback-${Date.now()}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("teacher-audio").upload(filePath, draft.teacherBlob, {
+      const { error: uploadError } = await supabase.storage.from("teacher-audio-oai").upload(filePath, draft.teacherBlob, {
         cacheControl: "3600",
         contentType: mimeType,
         upsert: true,
@@ -646,7 +646,7 @@ export default function TeacherDashboard() {
       if (uploadError) throw uploadError;
       const {
         data: { publicUrl },
-      } = supabase.storage.from("teacher-audio").getPublicUrl(filePath);
+      } = supabase.storage.from("teacher-audio-oai").getPublicUrl(filePath);
       const { data, error } = await supabase
         .from("student_submissions")
         .update({
