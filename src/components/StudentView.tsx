@@ -394,6 +394,7 @@ export default function StudentView() {
           audio_url: audioUrl,
           prompt: promptText,
           prompt_text: promptText,
+          promptText,
         }),
       });
 
