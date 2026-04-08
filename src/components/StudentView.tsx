@@ -449,7 +449,7 @@ export default function StudentView() {
       const filePath = `submissions/${Date.now()}-${safeName}.${ext}`;
 
       const { error: uploadError } = await supabase.storage
-        .from("Student-audio")
+        .from("student-audio-oai")
         .upload(filePath, recordedBlob, {
           cacheControl: "3600",
           contentType: mimeType,
@@ -460,7 +460,7 @@ export default function StudentView() {
 
       const {
         data: { publicUrl },
-      } = supabase.storage.from("Student-audio").getPublicUrl(filePath);
+      } = supabase.storage.from("student-audio-oai").getPublicUrl(filePath);
 
       setStatusMessage("Analyzing...");
       const ai = await analyzeAudio(publicUrl, promptText);
