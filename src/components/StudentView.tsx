@@ -182,6 +182,12 @@ const styles = {
     fontSize: "18px",
     marginTop: "18px",
   },
+  helperText: {
+    textAlign: "center" as const,
+    fontSize: "15px",
+    color: "#64748b",
+    marginTop: "8px",
+  },
   card: {
     marginTop: "28px",
     borderRadius: "24px",
@@ -577,22 +583,24 @@ export default function StudentView() {
     <div style={styles.page}>
       <div style={styles.shell}>
         <input
-          value={studentCode}
-          onChange={(e) => setStudentCode(e.target.value.toUpperCase())}
-          placeholder="Your code"
-          style={styles.field}
-        />
-
-        <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }}>
-          {isFinding ? "Finding..." : "Find My Feedback"}
-        </button>
-
-        <input
           value={studentName}
           onChange={(e) => setStudentName(e.target.value)}
           placeholder="Your name"
+          style={styles.field}
+        />
+
+        <input
+          value={studentCode}
+          onChange={(e) => setStudentCode(e.target.value.toUpperCase())}
+          placeholder="Create your code (use the same one every time) (ex: R10)"
           style={{ ...styles.field, marginTop: "18px" }}
         />
+
+        <div style={styles.helperText}>This is your ID. You will use it to find your feedback later.</div>
+
+        <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }}>
+          {isFinding ? "Getting..." : "Get My Feedback"}
+        </button>
 
         <div style={styles.sectionTitle}>Speaking Task</div>
 
@@ -643,6 +651,7 @@ export default function StudentView() {
         >
           {isSubmitting ? "Submitting..." : "Submit"}
         </button>
+        {!recordedBlob ? <div style={styles.helperText}>Record your answer first</div> : null}
 
         {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
