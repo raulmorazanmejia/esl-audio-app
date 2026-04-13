@@ -75,9 +75,9 @@ const styles = {
     borderRadius: "22px",
     border: "1px solid #dbe3f0",
     background: "#f8fafc",
-    padding: "0 22px",
+    padding: "0 16px",
     boxSizing: "border-box" as const,
-    fontSize: "20px",
+    fontSize: "clamp(16px, 4.2vw, 20px)",
     color: "#334155",
     outline: "none",
     textAlign: "center" as const,
@@ -117,14 +117,14 @@ const styles = {
     fontWeight: 900,
     letterSpacing: "0.04em",
     color: "#0f172a",
-    margin: "30px 0 20px",
+    margin: "22px 0 14px",
   },
   promptCard: {
     width: "100%",
     borderRadius: "24px",
     border: "1px solid #dbe3f0",
     background: "#f1f5f9",
-    padding: "28px 24px",
+    padding: "24px 20px",
     boxSizing: "border-box" as const,
     textAlign: "center" as const,
     fontSize: "26px",
@@ -133,30 +133,30 @@ const styles = {
     color: "#334155",
   },
   micButton: {
-    width: "220px",
-    height: "220px",
+    width: "165px",
+    height: "165px",
     borderRadius: "999px",
     border: "none",
     background: "linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)",
     color: "#ffffff",
-    fontSize: "82px",
+    fontSize: "62px",
     cursor: "pointer",
     boxShadow: "0 18px 36px rgba(99, 102, 241, 0.24)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    margin: "28px auto 24px",
+    margin: "22px auto 18px",
     flexDirection: "column" as const,
-    gap: "8px",
+    gap: "6px",
     lineHeight: 1.1,
-    padding: "16px",
+    padding: "12px",
     textAlign: "center" as const,
   },
   micEmoji: {
-    fontSize: "70px",
+    fontSize: "48px",
   },
   micButtonLabel: {
-    fontSize: "30px",
+    fontSize: "20px",
     fontWeight: 800,
   },
   recordingAlert: {
@@ -673,7 +673,7 @@ export default function StudentView() {
     }
   }
 
-  const micLabel = isRecording ? "Stop recording" : "Start recording";
+  const micLabel = isRecording ? "Recording..." : "Start recording";
   const primaryFeedbackScore = latestSubmission?.teacher_score ?? latestSubmission?.ai_score;
   const primaryFeedbackComment = latestSubmission?.teacher_comment || latestSubmission?.ai_comment;
 
@@ -696,7 +696,7 @@ export default function StudentView() {
             setRosterStudent(null);
             setSubmissionForActivePrompt(null);
           }}
-          placeholder="Enter your assigned code (ex: R10)"
+          placeholder="Enter your code (ex: R10)"
           style={styles.field}
         />
 
@@ -729,6 +729,10 @@ export default function StudentView() {
             ...styles.micButton,
             opacity: isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? 0.55 : 1,
             cursor: isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? "not-allowed" : "pointer",
+            boxShadow: isRecording
+              ? `0 0 0 10px rgba(239, 68, 68, ${pulseVisible ? 0.14 : 0.06}), 0 18px 36px rgba(99, 102, 241, 0.24)`
+              : styles.micButton.boxShadow,
+            transition: "box-shadow 300ms ease, transform 120ms ease",
           }}
         >
           {!isRecording ? <span style={styles.micEmoji}>🎤</span> : null}
@@ -794,7 +798,7 @@ export default function StudentView() {
           {isSubmitting ? "Submitting..." : "Submit"}
         </button>
         {!rosterStudent ? <div style={styles.helperText}>Enter your assigned code to start.</div> : null}
-        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent ? <div style={styles.helperText}>Record your answer first</div> : null}
+        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent ? <div style={styles.helperText}>Record your answer first.</div> : null}
 
         {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
@@ -806,26 +810,32 @@ export default function StudentView() {
 
         <div style={styles.card}>
           <div style={styles.cardTitle}>Your latest feedback</div>
-          <div style={styles.infoText}>
-            <span style={styles.strong}>Transcript:</span> {latestSubmission?.transcript || "No previous submission found yet."}
-          </div>
-          <div style={styles.infoText}>
-            <span style={styles.strong}>Score:</span> {primaryFeedbackScore ?? "—"}
-          </div>
-          <div style={styles.infoText}>
-            <span style={styles.strong}>Comment:</span> {primaryFeedbackComment || "—"}
-          </div>
-          <div style={{ ...styles.cardTitle, marginTop: "16px" }}>Teacher audio feedback</div>
-          {teacherAudioUrl ? (
-            <ReliableAudioPlayer src={teacherAudioUrl} style={{ width: "100%" }} />
+          {latestSubmission ? (
+            <>
+              <div style={styles.infoText}>
+                <span style={styles.strong}>Transcript:</span> {latestSubmission.transcript || "—"}
+              </div>
+              <div style={styles.infoText}>
+                <span style={styles.strong}>Score:</span> {primaryFeedbackScore ?? "—"}
+              </div>
+              <div style={styles.infoText}>
+                <span style={styles.strong}>Comment:</span> {primaryFeedbackComment || "—"}
+              </div>
+              <div style={{ ...styles.cardTitle, marginTop: "16px" }}>Teacher audio feedback</div>
+              {teacherAudioUrl ? (
+                <ReliableAudioPlayer src={teacherAudioUrl} style={{ width: "100%" }} />
+              ) : (
+                <div style={styles.infoText}>No teacher audio yet</div>
+              )}
+              {latestSubmission.created_at ? (
+                <div style={{ ...styles.infoText, color: "#64748b", marginTop: "12px" }}>
+                  {formatDate(latestSubmission.created_at)}
+                </div>
+              ) : null}
+            </>
           ) : (
-            <div style={styles.infoText}>No teacher audio yet</div>
+            <div style={styles.infoText}>No submission yet.</div>
           )}
-          {latestSubmission?.created_at ? (
-            <div style={{ ...styles.infoText, color: "#64748b", marginTop: "12px" }}>
-              {formatDate(latestSubmission.created_at)}
-            </div>
-          ) : null}
         </div>
       </div>
     </div>
