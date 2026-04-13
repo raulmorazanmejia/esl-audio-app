@@ -556,6 +556,10 @@ export default function TeacherDashboard() {
       updateDraft(current, { isRecordingTeacher: false, recordingError: "Stopped because another recording started." });
       stopRecorderAndTracks();
     }
+    if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      updateDraft(submissionId, { isRecordingTeacher: false, recordingError: "This browser does not support in-app audio recording." });
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -570,7 +574,27 @@ export default function TeacherDashboard() {
       recorder.onstop = () => {
         const targetId = activeSubmissionIdRef.current || submissionId;
         const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
+        if (!chunksRef.current.length) {
+          updateDraft(targetId, { teacherBlob: null, teacherPreviewUrl: "", isRecordingTeacher: false, recordingError: "Recording failed. Please try again." });
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
+          }
+          mediaRecorderRef.current = null;
+          activeSubmissionIdRef.current = null;
+          return;
+        }
         const blob = new Blob(chunksRef.current, { type: finalMimeType });
+        if (!blob.size) {
+          updateDraft(targetId, { teacherBlob: null, teacherPreviewUrl: "", isRecordingTeacher: false, recordingError: "This device produced an empty recording. Please try again." });
+          if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
+          }
+          mediaRecorderRef.current = null;
+          activeSubmissionIdRef.current = null;
+          return;
+        }
         setDrafts((prev) => {
           const existing = prev[targetId];
           if (!existing) return prev;

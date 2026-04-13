@@ -301,6 +301,10 @@ export default function StudentView() {
     setErrorMessage("");
     setStatusMessage("");
     if (isRecording) return;
+    if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setErrorMessage("This browser does not support in-app audio recording. Please use a newer browser.");
+      return;
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
