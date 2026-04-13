@@ -412,6 +412,7 @@ export default function TeacherDashboard() {
   const streamRef = useRef<MediaStream | null>(null);
   const activeSubmissionIdRef = useRef<string | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const newStudentNameInputRef = useRef<HTMLInputElement | null>(null);
 
   const [prompts, setPrompts] = useState<PromptRow[]>([]);
   const [newPrompt, setNewPrompt] = useState("");
@@ -608,9 +609,9 @@ export default function TeacherDashboard() {
       return;
     }
 
-    setNewClassName("");
     setNewStudentName("");
     setNewStudentCode("");
+    newStudentNameInputRef.current?.focus();
     setIsSavingStudent(false);
     await fetchStudents();
   }
@@ -857,6 +858,7 @@ export default function TeacherDashboard() {
                 onChange={(e) => setNewStudentName(e.target.value)}
                 placeholder="Student name"
                 style={styles.rosterInput}
+                ref={newStudentNameInputRef}
               />
               <input
                 value={newStudentCode}
