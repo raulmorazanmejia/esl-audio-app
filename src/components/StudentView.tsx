@@ -282,6 +282,7 @@ export default function StudentView() {
   const [studentName, setStudentName] = useState("");
   const [activePrompt, setActivePrompt] = useState<PromptRow | null>(null);
   const [latestSubmission, setLatestSubmission] = useState<SubmissionRow | null>(null);
+  const [submissionForActivePrompt, setSubmissionForActivePrompt] = useState<SubmissionRow | null>(null);
 
   const [isFinding, setIsFinding] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -296,6 +297,7 @@ export default function StudentView() {
   const [pulseVisible, setPulseVisible] = useState(true);
 
   const teacherAudioUrl = useMemo(() => currentTeacherAudio(latestSubmission), [latestSubmission]);
+  const hasSubmittedActivePrompt = Boolean(submissionForActivePrompt);
 
   const stopTracks = useCallback(() => {
     if (streamRef.current) {
@@ -386,6 +388,51 @@ export default function StudentView() {
     if (!studentName.trim() && row.student_name) setStudentName(row.student_name);
     setStatusMessage("Previous submission found ✅");
   }
+
+  const findSubmissionForActivePrompt = useCallback(
+    async (codeValue: string, promptTextValue: string) => {
+      const code = codeValue.trim();
+      const promptText = promptTextValue.trim();
+
+      if (!code || !promptText) {
+        setSubmissionForActivePrompt(null);
+        return null;
+      }
+
+      const { data, error } = await supabase
+        .from("student_submissions")
+        .select(SUBMISSION_SELECT)
+        .eq("student_code", code)
+        .eq("prompt_text", promptText)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        return null;
+      }
+
+      const submission = (data as SubmissionRow | null) || null;
+      setSubmissionForActivePrompt(submission);
+      if (submission) {
+        setLatestSubmission(submission);
+      }
+      return submission;
+    },
+    []
+  );
+
+  useEffect(() => {
+    const code = studentCode.trim();
+    const promptText = activePrompt?.prompt_text?.trim() || "";
+
+    if (!code || !promptText) {
+      setSubmissionForActivePrompt(null);
+      return;
+    }
+
+    void findSubmissionForActivePrompt(code, promptText);
+  }, [studentCode, activePrompt?.prompt_text, findSubmissionForActivePrompt]);
 
   async function startRecording() {
     setErrorMessage("");
@@ -533,6 +580,17 @@ export default function StudentView() {
       return;
     }
 
+    const existingSubmission = await findSubmissionForActivePrompt(code, promptText);
+    if (existingSubmission) {
+      setLatestSubmission(existingSubmission);
+      setRecordedBlob(null);
+      if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+      setRecordedAudioUrl("");
+      setStatusMessage("");
+      setErrorMessage("You already submitted this task. You can view your feedback below.");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage("");
     setStatusMessage("Uploading...");
@@ -581,6 +639,7 @@ export default function StudentView() {
       if (error) throw error;
 
       setLatestSubmission((data as SubmissionRow) || null);
+      setSubmissionForActivePrompt((data as SubmissionRow) || null);
       setStatusMessage("Done ✅");
       setRecordedBlob(null);
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
@@ -596,6 +655,15 @@ export default function StudentView() {
   const micLabel = isRecording ? "Stop recording" : "Start recording";
   const primaryFeedbackScore = latestSubmission?.teacher_score ?? latestSubmission?.ai_score;
   const primaryFeedbackComment = latestSubmission?.teacher_comment || latestSubmission?.ai_comment;
+
+  function discardUnsubmittedRecording() {
+    setRecordedBlob(null);
+    if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+    setRecordedAudioUrl("");
+    setRecordingMimeType("");
+    setStatusMessage("Recording discarded. You can record again.");
+    setErrorMessage("");
+  }
 
   return (
     <div style={styles.page}>
@@ -634,11 +702,11 @@ export default function StudentView() {
         <button
           type="button"
           onClick={isRecording ? stopRecording : () => void startRecording()}
-          disabled={isSubmitting}
+          disabled={isSubmitting || hasSubmittedActivePrompt}
           style={{
             ...styles.micButton,
-            opacity: isSubmitting ? 0.55 : 1,
-            cursor: isSubmitting ? "not-allowed" : "pointer",
+            opacity: isSubmitting || hasSubmittedActivePrompt ? 0.55 : 1,
+            cursor: isSubmitting || hasSubmittedActivePrompt ? "not-allowed" : "pointer",
           }}
         >
           {!isRecording ? <span style={styles.micEmoji}>🎤</span> : null}
@@ -656,25 +724,54 @@ export default function StudentView() {
         ) : null}
 
         {recordedAudioUrl ? (
-          <div style={styles.card}>
+          <div style={{ ...styles.card, border: "2px solid #a5b4fc", background: "#eef2ff" }}>
+            <div style={{ ...styles.cardTitle, color: "#3730a3", marginBottom: "10px" }}>Preview your recording</div>
             <ReliableAudioPlayer src={recordedAudioUrl} style={{ width: "100%" }} />
+            <div style={{ ...styles.helperText, color: "#4338ca", marginTop: "12px" }}>Sounds good? Submit when ready.</div>
+            <button
+              type="button"
+              onClick={discardUnsubmittedRecording}
+              disabled={isRecording || isSubmitting || hasSubmittedActivePrompt}
+              style={{
+                ...styles.submitButton,
+                minHeight: "62px",
+                fontSize: "20px",
+                marginTop: "14px",
+                background: "#e2e8f0",
+                color: "#0f172a",
+                boxShadow: "none",
+                border: "1px solid #cbd5e1",
+                opacity: isRecording || isSubmitting || hasSubmittedActivePrompt ? 0.6 : 1,
+                cursor: isRecording || isSubmitting || hasSubmittedActivePrompt ? "not-allowed" : "pointer",
+              }}
+            >
+              Record again
+            </button>
+          </div>
+        ) : null}
+
+        {hasSubmittedActivePrompt ? (
+          <div style={{ ...styles.recordingAlert, borderColor: "#4f46e5", background: "#eef2ff", color: "#312e81" }}>
+            <div style={{ ...styles.recordingAlertHeader, fontSize: "22px" }}>
+              You already submitted this task. You can view your feedback below.
+            </div>
           </div>
         ) : null}
 
         <button
           type="button"
           onClick={() => void submitRecording()}
-          disabled={!recordedBlob || isRecording || isSubmitting}
+          disabled={!recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt}
           style={{
             ...styles.submitButton,
-            opacity: !recordedBlob || isRecording || isSubmitting ? 0.6 : 1,
-            cursor: !recordedBlob || isRecording || isSubmitting ? "not-allowed" : "pointer",
+            opacity: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt ? 0.6 : 1,
+            cursor: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt ? "not-allowed" : "pointer",
             marginTop: "22px",
           }}
         >
           {isSubmitting ? "Submitting..." : "Submit"}
         </button>
-        {!recordedBlob ? <div style={styles.helperText}>Record your answer first</div> : null}
+        {!recordedBlob && !hasSubmittedActivePrompt ? <div style={styles.helperText}>Record your answer first</div> : null}
 
         {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
