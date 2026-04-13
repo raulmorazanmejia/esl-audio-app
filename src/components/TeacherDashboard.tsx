@@ -5,6 +5,7 @@ import ReliableAudioPlayer from "./ReliableAudioPlayer";
 type PromptRow = {
   id: string;
   prompt_text: string | null;
+  suggested_time: string | null;
   example_text: string | null;
   is_active: boolean | null;
   created_at?: string | null;
@@ -86,8 +87,14 @@ const styles = {
   },
   promptInputRow: {
     display: "flex",
+    flexDirection: "column" as const,
     gap: "12px",
     marginBottom: "20px",
+  },
+  promptInputs: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+    gap: "12px",
   },
   promptInput: {
     flex: 1,
@@ -99,6 +106,11 @@ const styles = {
     fontSize: "18px",
     color: "#334155",
     outline: "none",
+  },
+  promptHelper: {
+    fontSize: "14px",
+    color: "#94a3b8",
+    marginTop: "-6px",
   },
   primaryButton: {
     minHeight: "56px",
@@ -366,6 +378,7 @@ export default function TeacherDashboard() {
 
   const [prompts, setPrompts] = useState<PromptRow[]>([]);
   const [newPrompt, setNewPrompt] = useState("");
+  const [newSuggestedTime, setNewSuggestedTime] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
 
@@ -438,7 +451,7 @@ export default function TeacherDashboard() {
     setPromptError("");
     const { data, error } = await supabase
       .from("prompts")
-      .select("id, prompt_text, example_text, is_active, created_at")
+      .select("id, prompt_text, suggested_time, example_text, is_active, created_at")
       .order("created_at", { ascending: false });
     if (error) {
       setPromptError(error.message);
@@ -480,6 +493,7 @@ export default function TeacherDashboard() {
     setPromptError("");
     const { error } = await supabase.from("prompts").insert({
       prompt_text: text,
+      suggested_time: newSuggestedTime.trim() || null,
       is_active: false,
     });
     if (error) {
@@ -488,6 +502,7 @@ export default function TeacherDashboard() {
       return;
     }
     setNewPrompt("");
+    setNewSuggestedTime("");
     setIsSavingPrompt(false);
     await fetchPrompts();
   }
@@ -699,12 +714,21 @@ export default function TeacherDashboard() {
           <section style={styles.panel}>
             <div style={styles.panelLabel}>Classroom prompts</div>
             <div style={styles.promptInputRow}>
-              <input
-                value={newPrompt}
-                onChange={(e) => setNewPrompt(e.target.value)}
-                placeholder="Type a new prompt"
-                style={styles.promptInput}
-              />
+              <div style={styles.promptInputs}>
+                <input
+                  value={newPrompt}
+                  onChange={(e) => setNewPrompt(e.target.value)}
+                  placeholder="Type a new prompt"
+                  style={styles.promptInput}
+                />
+                <input
+                  value={newSuggestedTime}
+                  onChange={(e) => setNewSuggestedTime(e.target.value)}
+                  placeholder="Suggested speaking time (optional)"
+                  style={styles.promptInput}
+                />
+              </div>
+              <div style={styles.promptHelper}>Suggested speaking time (optional)</div>
               <button type="button" onClick={() => void handleSavePrompt()} disabled={isSavingPrompt} style={clampButton(isSavingPrompt, styles.primaryButton)}>
                 {isSavingPrompt ? "Saving..." : "Save"}
               </button>
@@ -739,6 +763,7 @@ export default function TeacherDashboard() {
                       {isActive ? "✓" : "Use"}
                     </button>
                   </div>
+                  {prompt.suggested_time ? <div style={styles.exampleBox}>Suggested time: {prompt.suggested_time}</div> : null}
                   {prompt.example_text ? <div style={styles.exampleBox}>{prompt.example_text}</div> : null}
                 </div>
               );
