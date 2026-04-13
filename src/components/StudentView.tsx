@@ -121,6 +121,49 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     margin: "28px auto 24px",
+    flexDirection: "column" as const,
+    gap: "8px",
+    lineHeight: 1.1,
+    padding: "16px",
+    textAlign: "center" as const,
+  },
+  micEmoji: {
+    fontSize: "70px",
+  },
+  micButtonLabel: {
+    fontSize: "30px",
+    fontWeight: 800,
+  },
+  recordingAlert: {
+    width: "100%",
+    margin: "-8px 0 14px",
+    borderRadius: "18px",
+    border: "2px solid #ef4444",
+    background: "#fee2e2",
+    color: "#991b1b",
+    padding: "14px 16px",
+    boxSizing: "border-box" as const,
+  },
+  recordingAlertHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    fontWeight: 900,
+    fontSize: "26px",
+  },
+  pulseDot: {
+    width: "10px",
+    height: "10px",
+    borderRadius: "999px",
+    background: "#dc2626",
+    display: "inline-block",
+  },
+  recordingHelper: {
+    marginTop: "6px",
+    textAlign: "center" as const,
+    fontSize: "17px",
+    fontWeight: 700,
   },
   submitButton: {
     width: "100%",
@@ -225,6 +268,8 @@ export default function StudentView() {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState("");
   const [recordingMimeType, setRecordingMimeType] = useState("");
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [pulseVisible, setPulseVisible] = useState(true);
 
   const teacherAudioUrl = useMemo(() => currentTeacherAudio(latestSubmission), [latestSubmission]);
 
@@ -244,6 +289,27 @@ export default function StudentView() {
       }
     };
   }, [stopTracks, recordedAudioUrl]);
+
+  useEffect(() => {
+    if (!isRecording) {
+      setRecordingSeconds(0);
+      setPulseVisible(true);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setRecordingSeconds((seconds) => seconds + 1);
+    }, 1000);
+
+    const pulse = window.setInterval(() => {
+      setPulseVisible((visible) => !visible);
+    }, 550);
+
+    return () => {
+      window.clearInterval(timer);
+      window.clearInterval(pulse);
+    };
+  }, [isRecording]);
 
   async function fetchActivePrompt() {
     const { data, error } = await supabase
@@ -503,7 +569,7 @@ export default function StudentView() {
     }
   }
 
-  const micLabel = isRecording ? "■" : "🎤";
+  const micLabel = isRecording ? "Stop recording" : "Start recording";
   const primaryFeedbackScore = latestSubmission?.teacher_score ?? latestSubmission?.ai_score;
   const primaryFeedbackComment = latestSubmission?.teacher_comment || latestSubmission?.ai_comment;
 
@@ -544,8 +610,19 @@ export default function StudentView() {
             cursor: isSubmitting ? "not-allowed" : "pointer",
           }}
         >
-          {micLabel}
+          {!isRecording ? <span style={styles.micEmoji}>🎤</span> : null}
+          <span style={styles.micButtonLabel}>{micLabel}</span>
         </button>
+
+        {isRecording ? (
+          <div style={styles.recordingAlert}>
+            <div style={styles.recordingAlertHeader}>
+              <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.3 }} />
+              <span>Recording now • {recordingSeconds}s</span>
+            </div>
+            <div style={styles.recordingHelper}>Tap stop when you finish</div>
+          </div>
+        ) : null}
 
         {recordedAudioUrl ? (
           <div style={styles.card}>
