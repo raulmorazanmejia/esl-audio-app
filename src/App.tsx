@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import StudentView from "./components/StudentView";
 import TeacherDashboard from "./components/TeacherDashboard";
-
-const TEACHER_PASSWORD = "intel123";
+import { supabase } from "./lib/supabase";
 
 function getModeFromUrl(): "student" | "teacher" {
   const params = new URLSearchParams(window.location.search);
@@ -11,25 +11,72 @@ function getModeFromUrl(): "student" | "teacher" {
 
 export default function App() {
   const [view, setView] = useState<"student" | "teacher">(getModeFromUrl());
-  const [teacherUnlocked, setTeacherUnlocked] = useState(false);
+  const [teacherSession, setTeacherSession] = useState<Session | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
-  const [passwordError, setPasswordError] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const switchMode = (newMode: "student" | "teacher") => {
     setView(newMode);
     window.history.pushState({}, "", `/?mode=${newMode}`);
-    setPasswordError("");
-    setPasswordInput("");
+    setAuthError("");
   };
 
-  const unlockTeacher = () => {
-    if (passwordInput === TEACHER_PASSWORD) {
-      setTeacherUnlocked(true);
-      setPasswordError("");
-      setPasswordInput("");
-    } else {
-      setPasswordError("Wrong password ❌");
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!isMounted) return;
+      setTeacherSession(data.session ?? null);
+      setIsAuthLoading(false);
+    };
+
+    void loadSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setTeacherSession(session ?? null);
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const signInTeacher = async () => {
+    const email = emailInput.trim();
+    if (!email || !passwordInput) {
+      setAuthError("Enter both email and password.");
+      return;
     }
+
+    setIsSigningIn(true);
+    setAuthError("");
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password: passwordInput,
+    });
+
+    if (error) {
+      setAuthError(error.message);
+      setIsSigningIn(false);
+      return;
+    }
+
+    setPasswordInput("");
+    setIsSigningIn(false);
+  };
+
+  const signOutTeacher = async () => {
+    await supabase.auth.signOut();
+    setPasswordInput("");
+    setAuthError("");
   };
 
   return (
@@ -94,7 +141,7 @@ export default function App() {
 
       {view === "student" && <StudentView />}
 
-      {view === "teacher" && !teacherUnlocked && (
+      {view === "teacher" && !teacherSession && (
         <div
           style={{
             minHeight: "100vh",
@@ -137,16 +184,16 @@ export default function App() {
                 fontSize: "16px",
               }}
             >
-              Enter the teacher password
+              Sign in with your teacher email and password
             </div>
 
             <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              placeholder="Password"
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="Teacher email"
               onKeyDown={(e) => {
-                if (e.key === "Enter") unlockTeacher();
+                if (e.key === "Enter") void signInTeacher();
               }}
               style={{
                 width: "100%",
@@ -160,10 +207,35 @@ export default function App() {
                 outline: "none",
                 boxSizing: "border-box",
               }}
+              autoComplete="email"
+            />
+
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              placeholder="Password"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void signInTeacher();
+              }}
+              style={{
+                width: "100%",
+                height: "54px",
+                borderRadius: "16px",
+                border: "1px solid #dbe3f0",
+                background: "#f8fafc",
+                fontSize: "18px",
+                textAlign: "center",
+                color: "#334155",
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+              autoComplete="current-password"
             />
 
             <button
-              onClick={unlockTeacher}
+              onClick={() => void signInTeacher()}
+              disabled={isSigningIn || isAuthLoading}
               style={{
                 width: "100%",
                 height: "54px",
@@ -175,26 +247,54 @@ export default function App() {
                 fontWeight: 700,
                 cursor: "pointer",
                 boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
+                opacity: isSigningIn || isAuthLoading ? 0.6 : 1,
               }}
             >
-              Enter
+              {isSigningIn ? "Signing in..." : "Sign in"}
             </button>
 
             <div
               style={{
                 textAlign: "center",
                 minHeight: "24px",
-                color: passwordError ? "#dc2626" : "#64748b",
+                color: authError ? "#dc2626" : "#64748b",
                 fontSize: "15px",
               }}
             >
-              {passwordError || " "}
+              {isAuthLoading ? "Checking teacher session..." : authError || " "}
             </div>
           </div>
         </div>
       )}
 
-      {view === "teacher" && teacherUnlocked && <TeacherDashboard />}
+      {view === "teacher" && teacherSession && (
+        <>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: "12px",
+            }}
+          >
+            <button
+              onClick={() => void signOutTeacher()}
+              style={{
+                height: "42px",
+                padding: "0 18px",
+                borderRadius: "12px",
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                color: "#334155",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Logout teacher
+            </button>
+          </div>
+          <TeacherDashboard />
+        </>
+      )}
     </div>
   );
 }
