@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+import ReliableAudioPlayer from "./ReliableAudioPlayer";
 
 type PromptRow = {
   id: string;
@@ -812,7 +813,7 @@ export default function TeacherDashboard() {
                     <div style={styles.promptBanner}>“{submission.prompt_text || "No prompt saved"}”</div>
 
                     <div style={styles.sectionTitle}>Student recording</div>
-                    {submission.audio_url ? <audio controls src={submission.audio_url} style={{ width: "100%", marginBottom: "18px" }} /> : <div style={{ ...styles.helper, marginBottom: "18px" }}>No student audio found.</div>}
+                    {submission.audio_url ? <ReliableAudioPlayer src={submission.audio_url} style={{ width: "100%", marginBottom: "18px" }} /> : <div style={{ ...styles.helper, marginBottom: "18px" }}>No student audio found.</div>}
 
                     <div style={styles.infoGrid}>
                       <div style={styles.sectionBox}>
@@ -893,14 +894,14 @@ export default function TeacherDashboard() {
                       {draft.teacherPreviewUrl ? (
                         <div style={styles.audioWrap}>
                           <div style={{ ...styles.helper, marginBottom: "8px", color: "#475569", fontWeight: 700 }}>Preview new teacher audio</div>
-                          <audio controls src={draft.teacherPreviewUrl} style={{ width: "100%" }} />
+                          <ReliableAudioPlayer src={draft.teacherPreviewUrl} style={{ width: "100%" }} />
                         </div>
                       ) : null}
 
                       {savedTeacherAudioUrl ? (
                         <div style={{ ...styles.audioWrap, marginTop: draft.teacherPreviewUrl ? "12px" : "0" }}>
                           <div style={{ ...styles.helper, marginBottom: "8px", color: "#475569", fontWeight: 700 }}>Saved teacher audio</div>
-                          <audio controls src={savedTeacherAudioUrl} style={{ width: "100%" }} />
+                          <ReliableAudioPlayer src={savedTeacherAudioUrl} style={{ width: "100%" }} />
                         </div>
                       ) : !draft.teacherPreviewUrl ? (
                         <div style={styles.helper}>{buildAudioLabel(savedTeacherAudioUrl)}</div>
