@@ -5,6 +5,7 @@ import ReliableAudioPlayer from "./ReliableAudioPlayer";
 type PromptRow = {
   id: string;
   prompt_text: string | null;
+  suggested_time: string | null;
   example_text: string | null;
   is_active: boolean | null;
   created_at?: string | null;
@@ -40,7 +41,7 @@ type AnalyzeResponse = {
   error?: string;
 };
 
-const ACTIVE_PROMPT_SELECT = "id, prompt_text, example_text, is_active, created_at";
+const ACTIVE_PROMPT_SELECT = "id, prompt_text, suggested_time, example_text, is_active, created_at";
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 
@@ -607,6 +608,7 @@ export default function StudentView() {
         <div style={styles.promptCard}>
           “{activePrompt?.prompt_text || "Loading prompt..."}”
         </div>
+        {activePrompt?.suggested_time ? <div style={styles.helperText}>Suggested time: {activePrompt.suggested_time}</div> : null}
 
         <button
           type="button"
