@@ -34,6 +34,14 @@ type SubmissionRow = {
   student_code: string | null;
 };
 
+type StudentRow = {
+  id: string;
+  class_name: string;
+  student_name: string;
+  student_code: string;
+  created_at: string | null;
+};
+
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 
@@ -155,6 +163,35 @@ const styles = {
     fontSize: "14px",
     lineHeight: 1.45,
     marginTop: "12px",
+  },
+  rosterSection: {
+    marginTop: "24px",
+    paddingTop: "24px",
+    borderTop: "1px solid #e2e8f0",
+  },
+  rosterGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 0.8fr auto auto",
+    gap: "8px",
+    alignItems: "center",
+  },
+  rosterInput: {
+    minHeight: "44px",
+    borderRadius: "12px",
+    border: "1px solid #dbe3f0",
+    background: "#f8fafc",
+    padding: "0 12px",
+    fontSize: "14px",
+    color: "#334155",
+    outline: "none",
+  },
+  rosterRows: {
+    marginTop: "10px",
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "8px",
+    maxHeight: "260px",
+    overflowY: "auto" as const,
   },
   submissionsScroller: {
     maxHeight: "78vh",
@@ -381,6 +418,12 @@ export default function TeacherDashboard() {
   const [newSuggestedTime, setNewSuggestedTime] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [newClassName, setNewClassName] = useState("");
+  const [newStudentName, setNewStudentName] = useState("");
+  const [newStudentCode, setNewStudentCode] = useState("");
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
+  const [rosterError, setRosterError] = useState("");
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
@@ -481,10 +524,25 @@ export default function TeacherDashboard() {
     setIsLoadingSubmissions(false);
   }, [hydrateDrafts]);
 
+  const fetchStudents = useCallback(async () => {
+    setRosterError("");
+    const { data, error } = await supabase
+      .from("students")
+      .select("id, class_name, student_name, student_code, created_at")
+      .order("class_name", { ascending: true })
+      .order("student_name", { ascending: true });
+    if (error) {
+      setRosterError(error.message);
+      return;
+    }
+    setStudents((data ?? []) as StudentRow[]);
+  }, []);
+
   useEffect(() => {
     void fetchPrompts();
+    void fetchStudents();
     void fetchSubmissions();
-  }, [fetchPrompts, fetchSubmissions]);
+  }, [fetchPrompts, fetchStudents, fetchSubmissions]);
 
   async function handleSavePrompt() {
     const text = newPrompt.trim();
@@ -524,6 +582,79 @@ export default function TeacherDashboard() {
     }
     setSelectedPromptId(promptId);
     await fetchPrompts();
+  }
+
+  async function handleAddStudent() {
+    const className = newClassName.trim();
+    const studentName = newStudentName.trim();
+    const studentCode = newStudentCode.trim().toUpperCase();
+
+    if (!className || !studentName || !studentCode) {
+      setRosterError("Enter class/group, student name, and student code.");
+      return;
+    }
+
+    setIsSavingStudent(true);
+    setRosterError("");
+    const { error } = await supabase.from("students").insert({
+      class_name: className,
+      student_name: studentName,
+      student_code: studentCode,
+    });
+
+    if (error) {
+      setRosterError(error.message);
+      setIsSavingStudent(false);
+      return;
+    }
+
+    setNewClassName("");
+    setNewStudentName("");
+    setNewStudentCode("");
+    setIsSavingStudent(false);
+    await fetchStudents();
+  }
+
+  function updateStudentDraft(id: string, patch: Partial<StudentRow>) {
+    setStudents((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  }
+
+  async function handleSaveStudent(student: StudentRow) {
+    const className = student.class_name.trim();
+    const studentName = student.student_name.trim();
+    const studentCode = student.student_code.trim().toUpperCase();
+
+    if (!className || !studentName || !studentCode) {
+      setRosterError("Class/group, student name, and student code are required.");
+      return;
+    }
+
+    setRosterError("");
+    const { error } = await supabase
+      .from("students")
+      .update({
+        class_name: className,
+        student_name: studentName,
+        student_code: studentCode,
+      })
+      .eq("id", student.id);
+
+    if (error) {
+      setRosterError(error.message);
+      return;
+    }
+
+    updateStudentDraft(student.id, { class_name: className, student_name: studentName, student_code: studentCode });
+  }
+
+  async function handleDeleteStudent(studentId: string) {
+    setRosterError("");
+    const { error } = await supabase.from("students").delete().eq("id", studentId);
+    if (error) {
+      setRosterError(error.message);
+      return;
+    }
+    setStudents((prev) => prev.filter((row) => row.id !== studentId));
   }
 
   function updateDraft(id: string, patch: Partial<DraftState>) {
@@ -768,6 +899,84 @@ export default function TeacherDashboard() {
                 </div>
               );
             })}
+
+            <div style={styles.rosterSection}>
+              <div style={styles.panelLabel}>Roster</div>
+              <div style={{ ...styles.helper, marginBottom: "10px" }}>Add student codes for each class/group.</div>
+              <div style={styles.rosterGrid}>
+                <input
+                  value={newClassName}
+                  onChange={(e) => setNewClassName(e.target.value)}
+                  placeholder="Class / Group"
+                  style={styles.rosterInput}
+                />
+                <input
+                  value={newStudentName}
+                  onChange={(e) => setNewStudentName(e.target.value)}
+                  placeholder="Student name"
+                  style={styles.rosterInput}
+                />
+                <input
+                  value={newStudentCode}
+                  onChange={(e) => setNewStudentCode(e.target.value.toUpperCase())}
+                  placeholder="Code"
+                  style={styles.rosterInput}
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleAddStudent()}
+                  disabled={isSavingStudent}
+                  style={clampButton(isSavingStudent, { ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" })}
+                >
+                  {isSavingStudent ? "Saving..." : "Add"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void fetchStudents()}
+                  style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
+
+              <div style={styles.rosterRows}>
+                {students.map((student) => (
+                  <div key={student.id} style={styles.rosterGrid}>
+                    <input
+                      value={student.class_name}
+                      onChange={(e) => updateStudentDraft(student.id, { class_name: e.target.value })}
+                      style={styles.rosterInput}
+                    />
+                    <input
+                      value={student.student_name}
+                      onChange={(e) => updateStudentDraft(student.id, { student_name: e.target.value })}
+                      style={styles.rosterInput}
+                    />
+                    <input
+                      value={student.student_code}
+                      onChange={(e) => updateStudentDraft(student.id, { student_code: e.target.value.toUpperCase() })}
+                      style={styles.rosterInput}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveStudent(student)}
+                      style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteStudent(student.id)}
+                      style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px", borderColor: "#fecaca", color: "#b91c1c" }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </section>
 
           <section style={styles.panel}>

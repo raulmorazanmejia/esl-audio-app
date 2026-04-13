@@ -34,6 +34,13 @@ type SubmissionRow = {
   student_code: string | null;
 };
 
+type StudentRosterRow = {
+  id: string;
+  class_name: string | null;
+  student_name: string;
+  student_code: string;
+};
+
 type AnalyzeResponse = {
   transcript?: string | null;
   score?: number | null;
@@ -279,7 +286,7 @@ export default function StudentView() {
   const chunksRef = useRef<BlobPart[]>([]);
 
   const [studentCode, setStudentCode] = useState("");
-  const [studentName, setStudentName] = useState("");
+  const [rosterStudent, setRosterStudent] = useState<StudentRosterRow | null>(null);
   const [activePrompt, setActivePrompt] = useState<PromptRow | null>(null);
   const [latestSubmission, setLatestSubmission] = useState<SubmissionRow | null>(null);
   const [submissionForActivePrompt, setSubmissionForActivePrompt] = useState<SubmissionRow | null>(null);
@@ -362,7 +369,32 @@ export default function StudentView() {
     setErrorMessage("");
     setStatusMessage("");
 
-    const { data, error } = await supabase
+    const { data: rosterData, error: rosterError } = await supabase
+      .from("students")
+      .select("id, class_name, student_name, student_code")
+      .eq("student_code", code)
+      .maybeSingle();
+
+    setIsFinding(false);
+
+    if (rosterError) {
+      setErrorMessage(rosterError.message);
+      return;
+    }
+
+    if (!rosterData) {
+      setRosterStudent(null);
+      setLatestSubmission(null);
+      setSubmissionForActivePrompt(null);
+      setErrorMessage("Code not found. Please check your code or ask your teacher.");
+      return;
+    }
+
+    const rosterRow = rosterData as StudentRosterRow;
+    setRosterStudent(rosterRow);
+    setStatusMessage(`Welcome, ${rosterRow.student_name}`);
+
+    const { data: latestData, error: latestError } = await supabase
       .from("student_submissions")
       .select(SUBMISSION_SELECT)
       .eq("student_code", code)
@@ -370,23 +402,12 @@ export default function StudentView() {
       .limit(1)
       .maybeSingle();
 
-    setIsFinding(false);
-
-    if (error) {
-      setErrorMessage(error.message);
+    if (!latestError && latestData) {
+      setLatestSubmission(latestData as SubmissionRow);
       return;
     }
 
-    if (!data) {
-      setLatestSubmission(null);
-      setStatusMessage("No previous submission found yet.");
-      return;
-    }
-
-    const row = data as SubmissionRow;
-    setLatestSubmission(row);
-    if (!studentName.trim() && row.student_name) setStudentName(row.student_name);
-    setStatusMessage("Previous submission found ✅");
+    setLatestSubmission(null);
   }
 
   const findSubmissionForActivePrompt = useCallback(
@@ -552,7 +573,7 @@ export default function StudentView() {
 
   async function submitRecording() {
     const code = studentCode.trim();
-    const name = studentName.trim();
+    const name = rosterStudent?.student_name?.trim() || "";
     const promptText = activePrompt?.prompt_text?.trim() || "";
 
     if (!code) {
@@ -560,8 +581,8 @@ export default function StudentView() {
       return;
     }
 
-    if (!name) {
-      setErrorMessage("Enter your name first.");
+    if (!rosterStudent || !name) {
+      setErrorMessage("Code not found. Please check your code or ask your teacher.");
       return;
     }
 
@@ -669,24 +690,25 @@ export default function StudentView() {
     <div style={styles.page}>
       <div style={styles.shell}>
         <input
-          value={studentName}
-          onChange={(e) => setStudentName(e.target.value)}
-          placeholder="Your name"
+          value={studentCode}
+          onChange={(e) => {
+            setStudentCode(e.target.value.toUpperCase());
+            setRosterStudent(null);
+            setSubmissionForActivePrompt(null);
+          }}
+          placeholder="Enter your assigned code (ex: R10)"
           style={styles.field}
         />
 
-        <input
-          value={studentCode}
-          onChange={(e) => setStudentCode(e.target.value.toUpperCase())}
-          placeholder="Create your code (use the same one every time) (ex: R10)"
-          style={{ ...styles.field, marginTop: "18px" }}
-        />
-
-        <div style={styles.helperText}>This is your ID. You will use it to find your feedback later.</div>
+        <div style={styles.helperText}>Use the code your teacher gave you.</div>
 
         <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }}>
-          {isFinding ? "Getting..." : "Get My Feedback"}
+          {isFinding ? "Checking..." : "Continue"}
         </button>
+
+        {rosterStudent ? (
+          <div style={{ ...styles.message, color: "#0f766e", fontWeight: 800 }}>Welcome, {rosterStudent.student_name}</div>
+        ) : null}
 
         <div style={styles.sectionTitle}>Speaking Task</div>
 
@@ -702,11 +724,11 @@ export default function StudentView() {
         <button
           type="button"
           onClick={isRecording ? stopRecording : () => void startRecording()}
-          disabled={isSubmitting || hasSubmittedActivePrompt}
+          disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent}
           style={{
             ...styles.micButton,
-            opacity: isSubmitting || hasSubmittedActivePrompt ? 0.55 : 1,
-            cursor: isSubmitting || hasSubmittedActivePrompt ? "not-allowed" : "pointer",
+            opacity: isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? 0.55 : 1,
+            cursor: isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? "not-allowed" : "pointer",
           }}
         >
           {!isRecording ? <span style={styles.micEmoji}>🎤</span> : null}
@@ -761,17 +783,18 @@ export default function StudentView() {
         <button
           type="button"
           onClick={() => void submitRecording()}
-          disabled={!recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt}
+          disabled={!recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent}
           style={{
             ...styles.submitButton,
-            opacity: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt ? 0.6 : 1,
-            cursor: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt ? "not-allowed" : "pointer",
+            opacity: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? 0.6 : 1,
+            cursor: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? "not-allowed" : "pointer",
             marginTop: "22px",
           }}
         >
           {isSubmitting ? "Submitting..." : "Submit"}
         </button>
-        {!recordedBlob && !hasSubmittedActivePrompt ? <div style={styles.helperText}>Record your answer first</div> : null}
+        {!rosterStudent ? <div style={styles.helperText}>Enter your assigned code to start.</div> : null}
+        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent ? <div style={styles.helperText}>Record your answer first</div> : null}
 
         {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
