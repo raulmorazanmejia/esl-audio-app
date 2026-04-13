@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+import ReliableAudioPlayer from "./ReliableAudioPlayer";
 
 type PromptRow = {
   id: string;
@@ -544,7 +545,7 @@ export default function StudentView() {
 
         {recordedAudioUrl ? (
           <div style={styles.card}>
-            <audio controls src={recordedAudioUrl} style={{ width: "100%" }} />
+            <ReliableAudioPlayer src={recordedAudioUrl} style={{ width: "100%" }} />
           </div>
         ) : null}
 
@@ -583,7 +584,7 @@ export default function StudentView() {
           </div>
           <div style={{ ...styles.cardTitle, marginTop: "16px" }}>Teacher audio feedback</div>
           {teacherAudioUrl ? (
-            <audio controls src={teacherAudioUrl} style={{ width: "100%" }} />
+            <ReliableAudioPlayer src={teacherAudioUrl} style={{ width: "100%" }} />
           ) : (
             <div style={styles.infoText}>No teacher audio yet</div>
           )}
