@@ -79,13 +79,30 @@ const styles = {
     width: "100%",
     minHeight: "76px",
     borderRadius: "22px",
-    border: "1px solid #dbe3f0",
-    background: "#ffffff",
-    color: "#1e293b",
+    border: "1px solid #4f46e5",
+    background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+    color: "#ffffff",
     fontSize: "22px",
     fontWeight: 800,
     cursor: "pointer",
-    boxShadow: "0 8px 20px rgba(15, 23, 42, 0.05)",
+    boxShadow: "0 12px 24px rgba(79, 70, 229, 0.28)",
+    letterSpacing: "0.01em",
+    transition: "transform 120ms ease, box-shadow 120ms ease",
+  },
+  suggestedTimeBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: "12px",
+    padding: "8px 14px",
+    borderRadius: "999px",
+    border: "1px solid #c7d2fe",
+    background: "#eef2ff",
+    color: "#4338ca",
+    fontSize: "14px",
+    fontWeight: 700,
+    lineHeight: 1.2,
+    boxShadow: "0 2px 8px rgba(79, 70, 229, 0.08)",
   },
   sectionTitle: {
     textAlign: "center" as const,
@@ -608,7 +625,11 @@ export default function StudentView() {
         <div style={styles.promptCard}>
           “{activePrompt?.prompt_text || "Loading prompt..."}”
         </div>
-        {activePrompt?.suggested_time ? <div style={styles.helperText}>Suggested time: {activePrompt.suggested_time}</div> : null}
+        {activePrompt?.suggested_time ? (
+          <div style={{ textAlign: "center" }}>
+            <div style={styles.suggestedTimeBadge}>Suggested time: {activePrompt.suggested_time}</div>
+          </div>
+        ) : null}
 
         <button
           type="button"
