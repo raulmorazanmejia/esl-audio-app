@@ -93,6 +93,11 @@ const styles = {
     color: "#94a3b8",
     marginBottom: "18px",
   },
+  sectionDivider: {
+    marginTop: "22px",
+    paddingTop: "22px",
+    borderTop: "1px solid #e2e8f0",
+  },
   promptInputRow: {
     display: "flex",
     flexDirection: "column" as const,
@@ -164,14 +169,9 @@ const styles = {
     lineHeight: 1.45,
     marginTop: "12px",
   },
-  rosterSection: {
-    marginTop: "24px",
-    paddingTop: "24px",
-    borderTop: "1px solid #e2e8f0",
-  },
   rosterGrid: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr 0.8fr auto auto",
+    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
     gap: "8px",
     alignItems: "center",
   },
@@ -843,26 +843,104 @@ export default function TeacherDashboard() {
       <div style={styles.container}>
         <div style={styles.grid}>
           <section style={styles.panel}>
-            <div style={styles.panelLabel}>Classroom prompts</div>
-            <div style={styles.promptInputRow}>
-              <div style={styles.promptInputs}>
-                <input
-                  value={newPrompt}
-                  onChange={(e) => setNewPrompt(e.target.value)}
-                  placeholder="Type a new prompt"
-                  style={styles.promptInput}
-                />
-                <input
-                  value={newSuggestedTime}
-                  onChange={(e) => setNewSuggestedTime(e.target.value)}
-                  placeholder="Suggested speaking time (optional)"
-                  style={styles.promptInput}
-                />
-              </div>
-              <div style={styles.promptHelper}>Suggested speaking time (optional)</div>
-              <button type="button" onClick={() => void handleSavePrompt()} disabled={isSavingPrompt} style={clampButton(isSavingPrompt, styles.primaryButton)}>
-                {isSavingPrompt ? "Saving..." : "Save"}
+            <div style={styles.panelLabel}>Roster</div>
+            <div style={{ ...styles.helper, marginBottom: "10px" }}>Add student codes for each class/group.</div>
+            <div style={styles.rosterGrid}>
+              <input
+                value={newClassName}
+                onChange={(e) => setNewClassName(e.target.value)}
+                placeholder="Class / Group"
+                style={styles.rosterInput}
+              />
+              <input
+                value={newStudentName}
+                onChange={(e) => setNewStudentName(e.target.value)}
+                placeholder="Student name"
+                style={styles.rosterInput}
+              />
+              <input
+                value={newStudentCode}
+                onChange={(e) => setNewStudentCode(e.target.value.toUpperCase())}
+                placeholder="Code"
+                style={styles.rosterInput}
+              />
+              <button
+                type="button"
+                onClick={() => void handleAddStudent()}
+                disabled={isSavingStudent}
+                style={clampButton(isSavingStudent, { ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" })}
+              >
+                {isSavingStudent ? "Saving..." : "Add"}
               </button>
+              <button
+                type="button"
+                onClick={() => void fetchStudents()}
+                style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
+              >
+                Refresh
+              </button>
+            </div>
+
+            {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
+
+            <div style={styles.rosterRows}>
+              {students.map((student) => (
+                <div key={student.id} style={styles.rosterGrid}>
+                  <input
+                    value={student.class_name}
+                    onChange={(e) => updateStudentDraft(student.id, { class_name: e.target.value })}
+                    style={styles.rosterInput}
+                  />
+                  <input
+                    value={student.student_name}
+                    onChange={(e) => updateStudentDraft(student.id, { student_name: e.target.value })}
+                    style={styles.rosterInput}
+                  />
+                  <input
+                    value={student.student_code}
+                    onChange={(e) => updateStudentDraft(student.id, { student_code: e.target.value.toUpperCase() })}
+                    style={styles.rosterInput}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveStudent(student)}
+                    style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteStudent(student.id)}
+                    style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px", borderColor: "#fecaca", color: "#b91c1c" }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div style={styles.sectionDivider}>
+              <div style={styles.panelLabel}>Classroom prompts</div>
+              <div style={styles.promptInputRow}>
+                <div style={styles.promptInputs}>
+                  <input
+                    value={newPrompt}
+                    onChange={(e) => setNewPrompt(e.target.value)}
+                    placeholder="Type a new prompt"
+                    style={styles.promptInput}
+                  />
+                  <input
+                    value={newSuggestedTime}
+                    onChange={(e) => setNewSuggestedTime(e.target.value)}
+                    placeholder="Suggested speaking time (optional)"
+                    style={styles.promptInput}
+                  />
+                </div>
+                <div style={styles.promptHelper}>Suggested speaking time (optional)</div>
+                <button type="button" onClick={() => void handleSavePrompt()} disabled={isSavingPrompt} style={clampButton(isSavingPrompt, styles.primaryButton)}>
+                  {isSavingPrompt ? "Saving..." : "Save"}
+                </button>
+              </div>
             </div>
 
             {promptError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{promptError}</div> : null}
@@ -899,84 +977,6 @@ export default function TeacherDashboard() {
                 </div>
               );
             })}
-
-            <div style={styles.rosterSection}>
-              <div style={styles.panelLabel}>Roster</div>
-              <div style={{ ...styles.helper, marginBottom: "10px" }}>Add student codes for each class/group.</div>
-              <div style={styles.rosterGrid}>
-                <input
-                  value={newClassName}
-                  onChange={(e) => setNewClassName(e.target.value)}
-                  placeholder="Class / Group"
-                  style={styles.rosterInput}
-                />
-                <input
-                  value={newStudentName}
-                  onChange={(e) => setNewStudentName(e.target.value)}
-                  placeholder="Student name"
-                  style={styles.rosterInput}
-                />
-                <input
-                  value={newStudentCode}
-                  onChange={(e) => setNewStudentCode(e.target.value.toUpperCase())}
-                  placeholder="Code"
-                  style={styles.rosterInput}
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleAddStudent()}
-                  disabled={isSavingStudent}
-                  style={clampButton(isSavingStudent, { ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" })}
-                >
-                  {isSavingStudent ? "Saving..." : "Add"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void fetchStudents()}
-                  style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
-
-              <div style={styles.rosterRows}>
-                {students.map((student) => (
-                  <div key={student.id} style={styles.rosterGrid}>
-                    <input
-                      value={student.class_name}
-                      onChange={(e) => updateStudentDraft(student.id, { class_name: e.target.value })}
-                      style={styles.rosterInput}
-                    />
-                    <input
-                      value={student.student_name}
-                      onChange={(e) => updateStudentDraft(student.id, { student_name: e.target.value })}
-                      style={styles.rosterInput}
-                    />
-                    <input
-                      value={student.student_code}
-                      onChange={(e) => updateStudentDraft(student.id, { student_code: e.target.value.toUpperCase() })}
-                      style={styles.rosterInput}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveStudent(student)}
-                      style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteStudent(student.id)}
-                      style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px", borderColor: "#fecaca", color: "#b91c1c" }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
           </section>
 
           <section style={styles.panel}>
