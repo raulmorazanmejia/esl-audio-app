@@ -76,7 +76,7 @@ const styles = {
   },
   grid: {
     display: "grid",
-    gridTemplateColumns: "420px minmax(0, 1fr)",
+    gridTemplateColumns: "minmax(280px, 0.85fr) minmax(320px, 1fr) minmax(460px, 1.5fr)",
     gap: "24px",
     alignItems: "start",
   },
@@ -94,11 +94,6 @@ const styles = {
     letterSpacing: "0.14em",
     color: "#94a3b8",
     marginBottom: "18px",
-  },
-  sectionDivider: {
-    marginTop: "22px",
-    paddingTop: "22px",
-    borderTop: "1px solid #e2e8f0",
   },
   promptInputRow: {
     display: "flex",
@@ -899,8 +894,15 @@ export default function TeacherDashboard() {
 
   return (
     <div style={styles.page}>
+      <style>{`
+        @media (max-width: 1180px) {
+          .teacher-dashboard-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
       <div style={styles.container}>
-        <div style={styles.grid}>
+        <div style={styles.grid} className="teacher-dashboard-grid">
           <section style={styles.panel}>
             <div style={styles.panelLabel}>Roster</div>
             <div style={{ ...styles.helper, marginBottom: "10px" }}>Add student codes for each class/group.</div>
@@ -987,57 +989,57 @@ export default function TeacherDashboard() {
                 </div>
               ))}
             </div>
+          </section>
 
-            <div style={styles.sectionDivider}>
-              <div style={styles.panelLabel}>Classroom prompts</div>
-              <div style={styles.promptInputRow}>
-                <div style={styles.promptInputs}>
-                  <input
-                    value={newPrompt}
-                    onChange={(e) => setNewPrompt(e.target.value)}
-                    placeholder="Type a new prompt"
-                    style={styles.promptInput}
-                  />
-                  <input
-                    value={newSuggestedTime}
-                    onChange={(e) => setNewSuggestedTime(e.target.value)}
-                    placeholder="Suggested speaking time (optional)"
-                    style={styles.promptInput}
+          <section style={styles.panel}>
+            <div style={styles.panelLabel}>Classroom prompts</div>
+            <div style={styles.promptInputRow}>
+              <div style={styles.promptInputs}>
+                <input
+                  value={newPrompt}
+                  onChange={(e) => setNewPrompt(e.target.value)}
+                  placeholder="Type a new prompt"
+                  style={styles.promptInput}
+                />
+                <input
+                  value={newSuggestedTime}
+                  onChange={(e) => setNewSuggestedTime(e.target.value)}
+                  placeholder="Suggested speaking time (optional)"
+                  style={styles.promptInput}
+                />
+              </div>
+              <div style={styles.promptHelper}>Suggested speaking time (optional)</div>
+              <label style={{ ...styles.promptHelper, marginTop: "2px" }}>
+                Optional prompt image
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] ?? null;
+                    setNewPromptImageFile(file);
+                    if (newPromptImagePreviewUrl) {
+                      URL.revokeObjectURL(newPromptImagePreviewUrl);
+                      setNewPromptImagePreviewUrl("");
+                    }
+                    if (file) {
+                      setNewPromptImagePreviewUrl(URL.createObjectURL(file));
+                    }
+                  }}
+                  style={{ display: "block", marginTop: "8px", fontSize: "14px", color: "#334155" }}
+                />
+              </label>
+              {newPromptImagePreviewUrl ? (
+                <div style={{ marginTop: "2px" }}>
+                  <img
+                    src={newPromptImagePreviewUrl}
+                    alt="New prompt preview"
+                    style={{ maxWidth: "160px", maxHeight: "110px", borderRadius: "12px", border: "1px solid #cbd5e1", objectFit: "cover" }}
                   />
                 </div>
-                <div style={styles.promptHelper}>Suggested speaking time (optional)</div>
-                <label style={{ ...styles.promptHelper, marginTop: "2px" }}>
-                  Optional prompt image
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] ?? null;
-                      setNewPromptImageFile(file);
-                      if (newPromptImagePreviewUrl) {
-                        URL.revokeObjectURL(newPromptImagePreviewUrl);
-                        setNewPromptImagePreviewUrl("");
-                      }
-                      if (file) {
-                        setNewPromptImagePreviewUrl(URL.createObjectURL(file));
-                      }
-                    }}
-                    style={{ display: "block", marginTop: "8px", fontSize: "14px", color: "#334155" }}
-                  />
-                </label>
-                {newPromptImagePreviewUrl ? (
-                  <div style={{ marginTop: "2px" }}>
-                    <img
-                      src={newPromptImagePreviewUrl}
-                      alt="New prompt preview"
-                      style={{ maxWidth: "160px", maxHeight: "110px", borderRadius: "12px", border: "1px solid #cbd5e1", objectFit: "cover" }}
-                    />
-                  </div>
-                ) : null}
-                <button type="button" onClick={() => void handleSavePrompt()} disabled={isSavingPrompt} style={clampButton(isSavingPrompt, styles.primaryButton)}>
-                  {isSavingPrompt ? "Saving..." : "Save"}
-                </button>
-              </div>
+              ) : null}
+              <button type="button" onClick={() => void handleSavePrompt()} disabled={isSavingPrompt} style={clampButton(isSavingPrompt, styles.primaryButton)}>
+                {isSavingPrompt ? "Saving..." : "Save"}
+              </button>
             </div>
 
             {promptError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{promptError}</div> : null}
