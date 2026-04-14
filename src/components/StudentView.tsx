@@ -298,7 +298,6 @@ export default function StudentView() {
   const [studentCode, setStudentCode] = useState("");
   const [rosterStudent, setRosterStudent] = useState<StudentRosterRow | null>(null);
   const [activePrompt, setActivePrompt] = useState<PromptRow | null>(null);
-  const [latestSubmission, setLatestSubmission] = useState<SubmissionRow | null>(null);
   const [submissionForActivePrompt, setSubmissionForActivePrompt] = useState<SubmissionRow | null>(null);
 
   const [isFinding, setIsFinding] = useState(false);
@@ -313,7 +312,7 @@ export default function StudentView() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pulseVisible, setPulseVisible] = useState(true);
 
-  const teacherAudioUrl = useMemo(() => currentTeacherAudio(latestSubmission), [latestSubmission]);
+  const teacherAudioUrl = useMemo(() => currentTeacherAudio(submissionForActivePrompt), [submissionForActivePrompt]);
   const hasSubmittedActivePrompt = Boolean(submissionForActivePrompt);
 
   const stopTracks = useCallback(() => {
@@ -394,7 +393,6 @@ export default function StudentView() {
 
     if (!rosterData) {
       setRosterStudent(null);
-      setLatestSubmission(null);
       setSubmissionForActivePrompt(null);
       setErrorMessage("Code not found. Please check your code or ask your teacher.");
       return;
@@ -403,21 +401,6 @@ export default function StudentView() {
     const rosterRow = rosterData as StudentRosterRow;
     setRosterStudent(rosterRow);
     setStatusMessage(`Welcome, ${rosterRow.student_name}`);
-
-    const { data: latestData, error: latestError } = await supabase
-      .from("student_submissions")
-      .select(SUBMISSION_SELECT)
-      .eq("student_code", code)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (!latestError && latestData) {
-      setLatestSubmission(latestData as SubmissionRow);
-      return;
-    }
-
-    setLatestSubmission(null);
   }
 
   const findSubmissionForActivePrompt = useCallback(
@@ -445,9 +428,6 @@ export default function StudentView() {
 
       const submission = (data as SubmissionRow | null) || null;
       setSubmissionForActivePrompt(submission);
-      if (submission) {
-        setLatestSubmission(submission);
-      }
       return submission;
     },
     []
@@ -613,7 +593,6 @@ export default function StudentView() {
 
     const existingSubmission = await findSubmissionForActivePrompt(code, promptText);
     if (existingSubmission) {
-      setLatestSubmission(existingSubmission);
       setRecordedBlob(null);
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
       setRecordedAudioUrl("");
@@ -669,7 +648,6 @@ export default function StudentView() {
 
       if (error) throw error;
 
-      setLatestSubmission((data as SubmissionRow) || null);
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
       setStatusMessage("Done ✅");
       setRecordedBlob(null);
@@ -684,8 +662,8 @@ export default function StudentView() {
   }
 
   const micLabel = isRecording ? "Recording..." : "Start recording";
-  const primaryFeedbackScore = latestSubmission?.teacher_score ?? latestSubmission?.ai_score;
-  const primaryFeedbackComment = latestSubmission?.teacher_comment || latestSubmission?.ai_comment;
+  const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
+  const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
 
   function discardUnsubmittedRecording() {
     setRecordedBlob(null);
@@ -821,10 +799,10 @@ export default function StudentView() {
 
         <div style={styles.card}>
           <div style={styles.cardTitle}>Your latest feedback</div>
-          {latestSubmission ? (
+          {submissionForActivePrompt ? (
             <>
               <div style={styles.infoText}>
-                <span style={styles.strong}>Transcript:</span> {latestSubmission.transcript || "—"}
+                <span style={styles.strong}>Transcript:</span> {submissionForActivePrompt.transcript || "—"}
               </div>
               <div style={styles.infoText}>
                 <span style={styles.strong}>Score:</span> {primaryFeedbackScore ?? "—"}
@@ -838,9 +816,9 @@ export default function StudentView() {
               ) : (
                 <div style={styles.infoText}>No teacher audio yet</div>
               )}
-              {latestSubmission.created_at ? (
+              {submissionForActivePrompt.created_at ? (
                 <div style={{ ...styles.infoText, color: "#64748b", marginTop: "12px" }}>
-                  {formatDate(latestSubmission.created_at)}
+                  {formatDate(submissionForActivePrompt.created_at)}
                 </div>
               ) : null}
             </>
