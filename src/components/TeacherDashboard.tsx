@@ -422,6 +422,7 @@ export default function TeacherDashboard() {
   const [promptError, setPromptError] = useState("");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClassName, setSelectedClassName] = useState("");
+  const [newClassName, setNewClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentCode, setNewStudentCode] = useState("");
   const [isSavingStudent, setIsSavingStudent] = useState(false);
@@ -669,6 +670,13 @@ export default function TeacherDashboard() {
     await fetchStudents();
   }
 
+  function handleUseNewClass() {
+    const className = newClassName.trim();
+    if (!className) return;
+    setSelectedClassName(className);
+    setNewClassName("");
+  }
+
   function updateStudentDraft(id: string, patch: Partial<StudentRow>) {
     setStudents((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
@@ -908,18 +916,32 @@ export default function TeacherDashboard() {
             <div style={{ ...styles.helper, marginBottom: "10px" }}>Add student codes for each class/group.</div>
             <div style={{ marginBottom: "10px" }}>
               <div style={{ ...styles.helper, marginBottom: "6px" }}>Selected Class</div>
-              <input
+              <select
                 value={selectedClassName}
                 onChange={(e) => setSelectedClassName(e.target.value)}
-                placeholder="Select or type class / group"
-                list="class-name-options"
                 style={styles.rosterInput}
-              />
-              <datalist id="class-name-options">
+              >
+                <option value="">All classes/groups</option>
                 {classNameOptions.map((className) => (
                   <option key={className} value={className} />
                 ))}
-              </datalist>
+              </select>
+              <div style={{ ...styles.helper, marginTop: "8px" }}>Need a new class/group? Add it below, then click Use.</div>
+            </div>
+            <div style={{ ...styles.rosterGrid, marginBottom: "10px" }}>
+              <input
+                value={newClassName}
+                onChange={(e) => setNewClassName(e.target.value)}
+                placeholder="New class / group"
+                style={styles.rosterInput}
+              />
+              <button
+                type="button"
+                onClick={handleUseNewClass}
+                style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
+              >
+                Use
+              </button>
             </div>
             <div style={styles.rosterGrid}>
               <input
