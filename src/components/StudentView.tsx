@@ -6,6 +6,8 @@ type PromptRow = {
   id: string;
   prompt_text: string | null;
   suggested_time: string | null;
+  prompt_image_path: string | null;
+  prompt_image_url: string | null;
   example_text: string | null;
   is_active: boolean | null;
   created_at?: string | null;
@@ -48,7 +50,7 @@ type AnalyzeResponse = {
   error?: string;
 };
 
-const ACTIVE_PROMPT_SELECT = "id, prompt_text, suggested_time, example_text, is_active, created_at";
+const ACTIVE_PROMPT_SELECT = "id, prompt_text, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at";
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 
@@ -131,6 +133,14 @@ const styles = {
     lineHeight: 1.45,
     fontStyle: "italic" as const,
     color: "#334155",
+  },
+  promptImage: {
+    width: "100%",
+    maxHeight: "340px",
+    borderRadius: "20px",
+    border: "1px solid #dbe3f0",
+    objectFit: "cover" as const,
+    marginBottom: "14px",
   },
   micButton: {
     width: "165px",
@@ -712,6 +722,7 @@ export default function StudentView() {
 
         <div style={styles.sectionTitle}>Speaking Task</div>
 
+        {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Speaking task image prompt" style={styles.promptImage} /> : null}
         <div style={styles.promptCard}>
           “{activePrompt?.prompt_text || "Loading prompt..."}”
         </div>

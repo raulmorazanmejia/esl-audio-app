@@ -6,6 +6,8 @@ type PromptRow = {
   id: string;
   prompt_text: string | null;
   suggested_time: string | null;
+  prompt_image_path: string | null;
+  prompt_image_url: string | null;
   example_text: string | null;
   is_active: boolean | null;
   created_at?: string | null;
@@ -407,6 +409,8 @@ function buildAudioLabel(url?: string | null) {
   return url ? "Saved teacher audio" : "No saved teacher audio yet";
 }
 
+const PROMPT_IMAGES_BUCKET = "prompt-images";
+
 export default function TeacherDashboard() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -417,6 +421,8 @@ export default function TeacherDashboard() {
   const [prompts, setPrompts] = useState<PromptRow[]>([]);
   const [newPrompt, setNewPrompt] = useState("");
   const [newSuggestedTime, setNewSuggestedTime] = useState("");
+  const [newPromptImageFile, setNewPromptImageFile] = useState<File | null>(null);
+  const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -489,6 +495,12 @@ export default function TeacherDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (newPromptImagePreviewUrl) URL.revokeObjectURL(newPromptImagePreviewUrl);
+    };
+  }, [newPromptImagePreviewUrl]);
+
   const hydrateDrafts = useCallback((rows: SubmissionRow[]) => {
     setDrafts((prev) => {
       const next: DraftsById = {};
@@ -508,7 +520,7 @@ export default function TeacherDashboard() {
     setPromptError("");
     const { data, error } = await supabase
       .from("prompts")
-      .select("id, prompt_text, suggested_time, example_text, is_active, created_at")
+      .select("id, prompt_text, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at")
       .order("created_at", { ascending: false });
     if (error) {
       setPromptError(error.message);
@@ -563,18 +575,51 @@ export default function TeacherDashboard() {
     if (!text) return;
     setIsSavingPrompt(true);
     setPromptError("");
+    let promptImagePath: string | null = null;
+    let promptImageUrl: string | null = null;
+
+    if (newPromptImageFile) {
+      const ext = newPromptImageFile.name.split(".").pop()?.toLowerCase() || "jpg";
+      const imagePath = `prompts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from(PROMPT_IMAGES_BUCKET).upload(imagePath, newPromptImageFile, {
+        cacheControl: "3600",
+        contentType: newPromptImageFile.type || "image/jpeg",
+        upsert: false,
+      });
+      if (uploadError) {
+        setPromptError(uploadError.message);
+        setIsSavingPrompt(false);
+        return;
+      }
+      promptImagePath = imagePath;
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(PROMPT_IMAGES_BUCKET).getPublicUrl(imagePath);
+      promptImageUrl = publicUrl;
+    }
+
     const { error } = await supabase.from("prompts").insert({
       prompt_text: text,
       suggested_time: newSuggestedTime.trim() || null,
+      prompt_image_path: promptImagePath,
+      prompt_image_url: promptImageUrl,
       is_active: false,
     });
     if (error) {
       setPromptError(error.message);
+      if (promptImagePath) {
+        await supabase.storage.from(PROMPT_IMAGES_BUCKET).remove([promptImagePath]);
+      }
       setIsSavingPrompt(false);
       return;
     }
     setNewPrompt("");
     setNewSuggestedTime("");
+    setNewPromptImageFile(null);
+    if (newPromptImagePreviewUrl) {
+      URL.revokeObjectURL(newPromptImagePreviewUrl);
+      setNewPromptImagePreviewUrl("");
+    }
     setIsSavingPrompt(false);
     await fetchPrompts();
   }
@@ -961,6 +1006,34 @@ export default function TeacherDashboard() {
                   />
                 </div>
                 <div style={styles.promptHelper}>Suggested speaking time (optional)</div>
+                <label style={{ ...styles.promptHelper, marginTop: "2px" }}>
+                  Optional prompt image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      setNewPromptImageFile(file);
+                      if (newPromptImagePreviewUrl) {
+                        URL.revokeObjectURL(newPromptImagePreviewUrl);
+                        setNewPromptImagePreviewUrl("");
+                      }
+                      if (file) {
+                        setNewPromptImagePreviewUrl(URL.createObjectURL(file));
+                      }
+                    }}
+                    style={{ display: "block", marginTop: "8px", fontSize: "14px", color: "#334155" }}
+                  />
+                </label>
+                {newPromptImagePreviewUrl ? (
+                  <div style={{ marginTop: "2px" }}>
+                    <img
+                      src={newPromptImagePreviewUrl}
+                      alt="New prompt preview"
+                      style={{ maxWidth: "160px", maxHeight: "110px", borderRadius: "12px", border: "1px solid #cbd5e1", objectFit: "cover" }}
+                    />
+                  </div>
+                ) : null}
                 <button type="button" onClick={() => void handleSavePrompt()} disabled={isSavingPrompt} style={clampButton(isSavingPrompt, styles.primaryButton)}>
                   {isSavingPrompt ? "Saving..." : "Save"}
                 </button>
@@ -996,6 +1069,13 @@ export default function TeacherDashboard() {
                       {isActive ? "✓" : "Use"}
                     </button>
                   </div>
+                  {prompt.prompt_image_url ? (
+                    <img
+                      src={prompt.prompt_image_url}
+                      alt="Prompt visual"
+                      style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "14px", border: "1px solid #cbd5e1", marginBottom: "10px" }}
+                    />
+                  ) : null}
                   {prompt.suggested_time ? <div style={styles.exampleBox}>Suggested time: {prompt.suggested_time}</div> : null}
                   {prompt.example_text ? <div style={styles.exampleBox}>{prompt.example_text}</div> : null}
                 </div>
