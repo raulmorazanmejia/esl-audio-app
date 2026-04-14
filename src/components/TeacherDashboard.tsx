@@ -420,7 +420,7 @@ export default function TeacherDashboard() {
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
   const [students, setStudents] = useState<StudentRow[]>([]);
-  const [newClassName, setNewClassName] = useState("");
+  const [selectedClassName, setSelectedClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentCode, setNewStudentCode] = useState("");
   const [isSavingStudent, setIsSavingStudent] = useState(false);
@@ -451,6 +451,19 @@ export default function TeacherDashboard() {
       return true;
     });
   }, [submissions, reviewFilter]);
+
+  const classNameOptions = useMemo(() => {
+    const classNames = students
+      .map((student) => student.class_name.trim())
+      .filter((className) => Boolean(className));
+    return Array.from(new Set(classNames)).sort((a, b) => a.localeCompare(b));
+  }, [students]);
+
+  const filteredStudents = useMemo(() => {
+    const className = selectedClassName.trim();
+    if (!className) return students;
+    return students.filter((student) => student.class_name.trim() === className);
+  }, [students, selectedClassName]);
 
   const stopRecorderAndTracks = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -586,12 +599,12 @@ export default function TeacherDashboard() {
   }
 
   async function handleAddStudent() {
-    const className = newClassName.trim();
+    const className = selectedClassName.trim();
     const studentName = newStudentName.trim();
     const studentCode = newStudentCode.trim().toUpperCase();
 
     if (!className || !studentName || !studentCode) {
-      setRosterError("Enter class/group, student name, and student code.");
+      setRosterError("Choose a class/group, then enter student name and student code.");
       return;
     }
 
@@ -846,13 +859,22 @@ export default function TeacherDashboard() {
           <section style={styles.panel}>
             <div style={styles.panelLabel}>Roster</div>
             <div style={{ ...styles.helper, marginBottom: "10px" }}>Add student codes for each class/group.</div>
-            <div style={styles.rosterGrid}>
+            <div style={{ marginBottom: "10px" }}>
+              <div style={{ ...styles.helper, marginBottom: "6px" }}>Selected Class</div>
               <input
-                value={newClassName}
-                onChange={(e) => setNewClassName(e.target.value)}
-                placeholder="Class / Group"
+                value={selectedClassName}
+                onChange={(e) => setSelectedClassName(e.target.value)}
+                placeholder="Select or type class / group"
+                list="class-name-options"
                 style={styles.rosterInput}
               />
+              <datalist id="class-name-options">
+                {classNameOptions.map((className) => (
+                  <option key={className} value={className} />
+                ))}
+              </datalist>
+            </div>
+            <div style={styles.rosterGrid}>
               <input
                 value={newStudentName}
                 onChange={(e) => setNewStudentName(e.target.value)}
@@ -886,7 +908,7 @@ export default function TeacherDashboard() {
             {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
 
             <div style={styles.rosterRows}>
-              {students.map((student) => (
+              {filteredStudents.map((student) => (
                 <div key={student.id} style={styles.rosterGrid}>
                   <input
                     value={student.class_name}
