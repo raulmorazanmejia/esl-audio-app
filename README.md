@@ -13,4 +13,7 @@ npm run dev
 
 ## Deploy to Vercel
 Upload this folder to Vercel and add the same environment variables in the Vercel project settings.
-update
+
+## Prompt images (optional)
+- Run `supabase/migrations/20260414_add_prompt_images.sql` to add optional `prompt_image_path` and `prompt_image_url` columns on `public.prompts`.
+- The same migration creates a public storage bucket named `prompt-images` with public-read and authenticated write/update/delete policies.
