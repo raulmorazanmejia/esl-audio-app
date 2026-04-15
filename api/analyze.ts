@@ -30,10 +30,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       promptText,
       prompt_text,
       prompt,
+      promptImageUrl,
+      prompt_image_url,
+      promptImage,
     } = req.body ?? {};
 
     const finalAudioUrl = audioUrl || audio_url;
     const finalPromptText = promptText || prompt_text || prompt;
+    const finalPromptImageUrl = promptImageUrl || prompt_image_url || promptImage || null;
 
     if (!finalAudioUrl || !finalPromptText) {
       return res.status(400).json({
@@ -88,6 +92,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    const userContent = finalPromptImageUrl
+      ? [
+          {
+            type: "text",
+            text: `Prompt: ${finalPromptText}\nStudent answer: ${transcript}\n\nEvaluate task completion against BOTH the prompt text and this image. Reward relevant visible details. Do not invent invisible details. Light inferences are okay only when strongly supported by visible evidence.`,
+          },
+          {
+            type: "image_url",
+            image_url: {
+              url: finalPromptImageUrl,
+            },
+          },
+        ]
+      : `Prompt: ${finalPromptText}\nStudent answer: ${transcript}`;
+
     const gradingRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -102,11 +121,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           {
             role: "system",
             content:
-              "You grade short ESL speaking responses. Judge whether the student answered the prompt, with focus on task completion, relevant detail, clarity, and basic grammar only when it affects understanding. Return valid JSON only in this exact format: {\"score\": number, \"comment\": string}. Score must be an integer from 1 to 5 using this rubric: 5 = clearly answers the prompt well and is understandable; 4 = answers the prompt with minor weakness; 3 = partially answers or is too limited; 2 = mostly off-topic or very weak; 1 = does not answer the prompt or is unrelated. Comment must be exactly two short sentences in this order: (1) one specific strength, (2) one specific missing detail or improvement. Keep tone practical, classroom-appropriate, and concise. Avoid repetition and generic filler. Do not hallucinate details not present in the transcript or prompt. If the prompt references an image, only mention details that would reasonably be visible from the provided prompt context.",
+              "You grade short ESL speaking responses. Judge whether the student answered the prompt, with focus on task completion, relevant detail, clarity, and basic grammar only when it affects understanding. Return valid JSON only in this exact format: {\"score\": number, \"comment\": string}. Score must be an integer from 1 to 5 using this rubric: 5 = clearly answers the prompt well and is understandable; 4 = answers the prompt with minor weakness; 3 = partially answers or is too limited; 2 = mostly off-topic or very weak; 1 = does not answer the prompt or is unrelated. Comment must be exactly two short sentences in this order: (1) one specific strength, (2) one specific missing detail or improvement. Keep tone practical, classroom-appropriate, and concise. Avoid repetition and generic filler. Do not hallucinate details not present in the transcript or prompt. For image prompts, only credit details that are visibly present in the provided image and allow only light, reasonable inferences strongly supported by visible evidence.",
           },
           {
             role: "user",
-            content: `Prompt: ${finalPromptText}\nStudent answer: ${transcript}`,
+            content: userContent,
           },
         ],
       }),

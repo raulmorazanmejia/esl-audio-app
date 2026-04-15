@@ -1,7 +1,8 @@
 export async function analyzeSubmission(
   audioUrl: string,
   promptText: string,
-  submissionId?: string
+  submissionId?: string,
+  promptImageUrl?: string | null
 ) {
   const res = await fetch("/api/analyze", {
     method: "POST",
@@ -12,6 +13,8 @@ export async function analyzeSubmission(
       audioUrl,
       promptText,
       submissionId: submissionId ?? null,
+      promptImageUrl: promptImageUrl ?? null,
+      prompt_image_url: promptImageUrl ?? null,
     }),
   });
 
