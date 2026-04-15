@@ -537,7 +537,7 @@ export default function StudentView() {
     setIsRecording(false);
   }
 
-  async function analyzeAudio(audioUrl: string, promptText: string): Promise<AnalyzeResponse> {
+  async function analyzeAudio(audioUrl: string, promptText: string, promptImageUrl?: string | null): Promise<AnalyzeResponse> {
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
@@ -548,6 +548,8 @@ export default function StudentView() {
           prompt: promptText,
           prompt_text: promptText,
           promptText,
+          promptImageUrl: promptImageUrl || null,
+          prompt_image_url: promptImageUrl || null,
         }),
       });
 
@@ -626,7 +628,7 @@ export default function StudentView() {
       } = supabase.storage.from("student-audio-oai").getPublicUrl(filePath);
 
       setStatusMessage("Analyzing...");
-      const ai = await analyzeAudio(publicUrl, promptText);
+      const ai = await analyzeAudio(publicUrl, promptText, activePrompt?.prompt_image_url ?? null);
 
       const payload = {
         student_name: name,
