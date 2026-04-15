@@ -146,25 +146,54 @@ const styles = {
     cursor: "pointer",
   },
   promptCard: {
-    borderRadius: "26px",
+    borderRadius: "20px",
     border: "1px solid #e2e8f0",
-    padding: "20px",
-    marginBottom: "16px",
+    padding: "14px",
+    marginBottom: "10px",
   },
   promptTitle: {
-    fontSize: "18px",
+    fontSize: "16px",
     fontWeight: 800,
-    lineHeight: 1.35,
-    marginBottom: "14px",
+    lineHeight: 1.25,
+    marginBottom: "0",
+  },
+  promptMeta: {
+    fontSize: "12px",
+    lineHeight: 1.3,
+    color: "#94a3b8",
+    marginTop: "4px",
+  },
+  promptHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "10px",
+    alignItems: "flex-start" as const,
+    marginBottom: "8px",
+  },
+  promptUseButton: {
+    minHeight: "36px",
+    minWidth: "72px",
+    borderRadius: "12px",
+    fontSize: "14px",
+    padding: "0 14px",
+    flexShrink: 0,
+  },
+  promptImage: {
+    width: "100%",
+    height: "112px",
+    objectFit: "cover" as const,
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
+    marginBottom: "8px",
   },
   exampleBox: {
-    borderRadius: "18px",
+    borderRadius: "14px",
     background: "#f8fafc",
-    padding: "14px 16px",
+    padding: "10px 12px",
     color: "#64748b",
-    fontSize: "14px",
-    lineHeight: 1.45,
-    marginTop: "12px",
+    fontSize: "13px",
+    lineHeight: 1.4,
+    marginTop: "8px",
   },
   rosterGrid: {
     display: "grid",
@@ -1118,14 +1147,17 @@ export default function TeacherDashboard() {
                     borderColor: isActive ? "#818cf8" : "#e2e8f0",
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: "14px", alignItems: "flex-start" }}>
-                    <div style={{ ...styles.promptTitle, color: isActive ? "#4f46e5" : "#1e293b" }}>{prompt.prompt_text}</div>
+                  <div style={styles.promptHeader}>
+                    <div>
+                      <div style={{ ...styles.promptTitle, color: isActive ? "#4f46e5" : "#1e293b" }}>{prompt.prompt_text}</div>
+                      {prompt.suggested_time ? <div style={styles.promptMeta}>Suggested time: {prompt.suggested_time}</div> : null}
+                    </div>
                     <button
                       type="button"
                       onClick={() => void handleUsePrompt(prompt.id)}
                       style={{
                         ...styles.secondaryButton,
-                        minWidth: "86px",
+                        ...styles.promptUseButton,
                         background: isActive ? "#eef2ff" : "#ffffff",
                         color: isActive ? "#4f46e5" : "#334155",
                         borderColor: isActive ? "#818cf8" : "#cbd5e1",
@@ -1138,10 +1170,9 @@ export default function TeacherDashboard() {
                     <img
                       src={prompt.prompt_image_url}
                       alt="Prompt visual"
-                      style={{ width: "100%", maxHeight: "180px", objectFit: "cover", borderRadius: "14px", border: "1px solid #cbd5e1", marginBottom: "10px" }}
+                      style={styles.promptImage}
                     />
                   ) : null}
-                  {prompt.suggested_time ? <div style={styles.exampleBox}>Suggested time: {prompt.suggested_time}</div> : null}
                   {prompt.example_text ? <div style={styles.exampleBox}>{prompt.example_text}</div> : null}
                 </div>
               );
