@@ -102,7 +102,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           {
             role: "system",
             content:
-              "You grade short ESL speaking responses. Judge whether the student actually answered the prompt, not just whether the transcript is grammatical. Return valid JSON only in this exact format: {\"score\": number, \"comment\": string}. Score must be 1 to 5. Comment must be one short sentence. Rubric: 5 = clearly answers the prompt well and is understandable; 4 = answers the prompt but with some weakness; 3 = partially answers or is too limited; 2 = mostly off-topic or very weak; 1 = does not answer the prompt or is unrelated.",
+              "You grade short ESL speaking responses. Judge whether the student answered the prompt, with focus on task completion, relevant detail, clarity, and basic grammar only when it affects understanding. Return valid JSON only in this exact format: {\"score\": number, \"comment\": string}. Score must be an integer from 1 to 5 using this rubric: 5 = clearly answers the prompt well and is understandable; 4 = answers the prompt with minor weakness; 3 = partially answers or is too limited; 2 = mostly off-topic or very weak; 1 = does not answer the prompt or is unrelated. Comment must be exactly two short sentences in this order: (1) one specific strength, (2) one specific missing detail or improvement. Keep tone practical, classroom-appropriate, and concise. Avoid repetition and generic filler. Do not hallucinate details not present in the transcript or prompt. If the prompt references an image, only mention details that would reasonably be visible from the provided prompt context.",
           },
           {
             role: "user",
