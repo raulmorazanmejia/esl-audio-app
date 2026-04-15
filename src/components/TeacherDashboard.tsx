@@ -38,7 +38,7 @@ type SubmissionRow = {
 
 type StudentRow = {
   id: string;
-  class_name: string;
+  class_name: string | null;
   student_name: string;
   student_code: string;
   created_at: string | null;
@@ -456,15 +456,15 @@ export default function TeacherDashboard() {
 
   const classNameOptions = useMemo(() => {
     const classNames = students
-      .map((student) => student.class_name.trim())
-      .filter((className) => Boolean(className));
+      .map((student) => student.class_name?.trim() ?? "")
+      .filter((className) => className.length > 0);
     return Array.from(new Set(classNames)).sort((a, b) => a.localeCompare(b));
   }, [students]);
 
   const filteredStudents = useMemo(() => {
     const className = selectedClassName.trim();
     if (!className) return students;
-    return students.filter((student) => student.class_name.trim() === className);
+    return students.filter((student) => (student.class_name?.trim() ?? "") === className);
   }, [students, selectedClassName]);
 
   const stopRecorderAndTracks = useCallback(() => {
@@ -682,7 +682,7 @@ export default function TeacherDashboard() {
   }
 
   async function handleSaveStudent(student: StudentRow) {
-    const className = student.class_name.trim();
+    const className = (student.class_name ?? "").trim();
     const studentName = student.student_name.trim();
     const studentCode = student.student_code.trim().toUpperCase();
 
@@ -923,7 +923,9 @@ export default function TeacherDashboard() {
               >
                 <option value="">All classes/groups</option>
                 {classNameOptions.map((className) => (
-                  <option key={className} value={className} />
+                  <option key={className} value={className}>
+                    {className}
+                  </option>
                 ))}
               </select>
               <div style={{ ...styles.helper, marginTop: "8px" }}>Need a new class/group? Add it below, then click Use.</div>
@@ -980,7 +982,7 @@ export default function TeacherDashboard() {
               {filteredStudents.map((student) => (
                 <div key={student.id} style={styles.rosterGrid}>
                   <input
-                    value={student.class_name}
+                    value={student.class_name ?? ""}
                     onChange={(e) => updateStudentDraft(student.id, { class_name: e.target.value })}
                     style={styles.rosterInput}
                   />
