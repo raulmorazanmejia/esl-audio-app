@@ -420,6 +420,7 @@ export default function TeacherDashboard() {
   const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
+  const [promptSuccess, setPromptSuccess] = useState("");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClassName, setSelectedClassName] = useState("");
   const [newClassName, setNewClassName] = useState("");
@@ -427,6 +428,7 @@ export default function TeacherDashboard() {
   const [newStudentCode, setNewStudentCode] = useState("");
   const [isSavingStudent, setIsSavingStudent] = useState(false);
   const [rosterError, setRosterError] = useState("");
+  const [rosterSuccess, setRosterSuccess] = useState("");
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
@@ -498,6 +500,18 @@ export default function TeacherDashboard() {
     };
   }, [newPromptImagePreviewUrl]);
 
+  useEffect(() => {
+    if (!rosterSuccess) return;
+    const timer = window.setTimeout(() => setRosterSuccess(""), 2800);
+    return () => window.clearTimeout(timer);
+  }, [rosterSuccess]);
+
+  useEffect(() => {
+    if (!promptSuccess) return;
+    const timer = window.setTimeout(() => setPromptSuccess(""), 2800);
+    return () => window.clearTimeout(timer);
+  }, [promptSuccess]);
+
   const hydrateDrafts = useCallback((rows: SubmissionRow[]) => {
     setDrafts((prev) => {
       const next: DraftsById = {};
@@ -568,10 +582,12 @@ export default function TeacherDashboard() {
   }, [fetchPrompts, fetchStudents, fetchSubmissions]);
 
   async function handleSavePrompt() {
+    if (isSavingPrompt) return;
     const text = newPrompt.trim();
     if (!text) return;
     setIsSavingPrompt(true);
     setPromptError("");
+    setPromptSuccess("");
     let promptImagePath: string | null = null;
     let promptImageUrl: string | null = null;
 
@@ -617,6 +633,7 @@ export default function TeacherDashboard() {
       URL.revokeObjectURL(newPromptImagePreviewUrl);
       setNewPromptImagePreviewUrl("");
     }
+    setPromptSuccess(`Prompt saved: “${text}”`);
     setIsSavingPrompt(false);
     await fetchPrompts();
   }
@@ -641,6 +658,7 @@ export default function TeacherDashboard() {
   }
 
   async function handleAddStudent() {
+    if (isSavingStudent) return;
     const className = selectedClassName.trim();
     const studentName = newStudentName.trim();
     const studentCode = newStudentCode.trim().toUpperCase();
@@ -652,6 +670,7 @@ export default function TeacherDashboard() {
 
     setIsSavingStudent(true);
     setRosterError("");
+    setRosterSuccess("");
     const { error } = await supabase.from("students").insert({
       class_name: className,
       student_name: studentName,
@@ -666,6 +685,8 @@ export default function TeacherDashboard() {
 
     setNewStudentName("");
     setNewStudentCode("");
+    setSelectedClassName(className);
+    setRosterSuccess(`Added: ${studentName} (${studentCode})`);
     newStudentNameInputRef.current?.focus();
     setIsSavingStudent(false);
     await fetchStudents();
@@ -984,6 +1005,11 @@ export default function TeacherDashboard() {
               </button>
             </div>
 
+            {rosterSuccess ? (
+              <div style={{ ...styles.success, marginTop: "10px", padding: "10px 12px", borderRadius: "12px", background: "#ecfeff", border: "1px solid #99f6e4" }}>
+                {rosterSuccess}
+              </div>
+            ) : null}
             {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
 
             <div style={styles.rosterRows}>
@@ -1074,6 +1100,11 @@ export default function TeacherDashboard() {
               </button>
             </div>
 
+            {promptSuccess ? (
+              <div style={{ ...styles.success, marginBottom: "12px", padding: "10px 12px", borderRadius: "12px", background: "#ecfeff", border: "1px solid #99f6e4" }}>
+                {promptSuccess}
+              </div>
+            ) : null}
             {promptError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{promptError}</div> : null}
 
             {sortedPrompts.map((prompt) => {
