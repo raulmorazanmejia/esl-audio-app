@@ -432,6 +432,7 @@ export default function TeacherDashboard() {
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [submissionsError, setSubmissionsError] = useState("");
   const [drafts, setDrafts] = useState<DraftsById>({});
+  const [expandedSubmissionIds, setExpandedSubmissionIds] = useState<Record<string, boolean>>({});
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
 
@@ -737,6 +738,13 @@ export default function TeacherDashboard() {
         }),
         ...patch,
       },
+    }));
+  }
+
+  function toggleSubmissionDetails(submissionId: string) {
+    setExpandedSubmissionIds((prev) => ({
+      ...prev,
+      [submissionId]: !prev[submissionId],
     }));
   }
 
@@ -1165,6 +1173,9 @@ export default function TeacherDashboard() {
                 const draft = drafts[submission.id] ?? buildDraft(submission);
                 const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
                 const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
+                const isExpanded = Boolean(expandedSubmissionIds[submission.id]);
+                const scoreSummary = submission.teacher_score ?? submission.ai_score;
+                const scoreSource = submission.teacher_score != null ? "Teacher score" : submission.ai_score != null ? "AI score" : "";
 
                 return (
                   <article
@@ -1200,101 +1211,131 @@ export default function TeacherDashboard() {
 
                     <div style={styles.promptBanner}>“{submission.prompt_text || "No prompt saved"}”</div>
 
+                    {scoreSummary != null ? (
+                      <div style={{ ...styles.sectionBox, marginTop: "-6px", marginBottom: "16px", padding: "16px 18px" }}>
+                        <div style={{ ...styles.sectionTitle, marginBottom: "8px" }}>{scoreSource}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                          <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{scoreSummary}/5</div>
+                          <StarRow value={clampScore(scoreSummary)} />
+                        </div>
+                      </div>
+                    ) : null}
+
                     <div style={styles.sectionTitle}>Student recording</div>
                     {submission.audio_url ? <ReliableAudioPlayer src={submission.audio_url} style={{ width: "100%", marginBottom: "18px" }} /> : <div style={{ ...styles.helper, marginBottom: "18px" }}>No student audio found.</div>}
 
-                    <div style={styles.infoGrid}>
-                      <div style={styles.sectionBox}>
-                        <div style={styles.sectionTitle}>AI feedback</div>
-                        <div style={styles.bodyText}><span style={styles.labelStrong}>Transcript:</span> {submission.transcript || "Pending"}</div>
-                        <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Score:</span> {submission.ai_score ?? "Pending"}</div>
-                        <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Comment:</span> {submission.ai_comment || "Pending"}</div>
-                      </div>
-                      <div style={styles.sectionBox}>
-                        <div style={styles.sectionTitle}>Submission info</div>
-                        <div style={styles.bodyText}><span style={styles.labelStrong}>Date:</span> {formatDate(submission.created_at) || "Unknown"}</div>
-                        <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Student email:</span> {submission.student_email || "—"}</div>
-                        <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Feedback created:</span> {submission.feedback_created_at ? formatDate(submission.feedback_created_at) : "—"}</div>
-                      </div>
+                    <div style={{ marginBottom: "14px" }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleSubmissionDetails(submission.id)}
+                        style={{
+                          ...styles.secondaryButton,
+                          minHeight: "42px",
+                          borderRadius: "999px",
+                          padding: "0 16px",
+                          fontSize: "14px",
+                        }}
+                      >
+                        {isExpanded ? "Hide details" : "View details"}
+                      </button>
                     </div>
 
-                    <div style={styles.sectionBox}>
-                      <div style={styles.sectionTitle}>Override score and comment</div>
-                      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" }}>
-                        <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Teacher score: {draft.score}/5</div>
-                        <StarRow value={draft.score} />
-                      </div>
-                      <input
-                        type="range"
-                        min={1}
-                        max={5}
-                        step={1}
-                        value={draft.score}
-                        onChange={(e) => updateDraft(submission.id, { score: clampScore(Number(e.target.value)), savedMessage: "", error: "" })}
-                        style={styles.slider}
-                      />
-                      <textarea
-                        value={draft.comment}
-                        onChange={(e) => updateDraft(submission.id, { comment: e.target.value, savedMessage: "", error: "" })}
-                        rows={4}
-                        placeholder="Write or edit the teacher feedback here"
-                        style={styles.textarea}
-                      />
-                      <div style={styles.footerRow}>
-                        <div>
-                          {draft.error ? (
-                            <span style={styles.error}>{draft.error}</span>
-                          ) : draft.savedMessage ? (
-                            <span style={styles.success}>{draft.savedMessage}</span>
-                          ) : (
-                            <span style={styles.helper}>Save only if you want to override the AI.</span>
-                          )}
+                    {isExpanded ? (
+                      <>
+                        <div style={styles.infoGrid}>
+                          <div style={styles.sectionBox}>
+                            <div style={styles.sectionTitle}>AI feedback</div>
+                            <div style={styles.bodyText}><span style={styles.labelStrong}>Transcript:</span> {submission.transcript || "Pending"}</div>
+                            <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Score:</span> {submission.ai_score ?? "Pending"}</div>
+                            <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Comment:</span> {submission.ai_comment || "Pending"}</div>
+                          </div>
+                          <div style={styles.sectionBox}>
+                            <div style={styles.sectionTitle}>Submission info</div>
+                            <div style={styles.bodyText}><span style={styles.labelStrong}>Date:</span> {formatDate(submission.created_at) || "Unknown"}</div>
+                            <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Student email:</span> {submission.student_email || "—"}</div>
+                            <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Feedback created:</span> {submission.feedback_created_at ? formatDate(submission.feedback_created_at) : "—"}</div>
+                          </div>
                         </div>
-                        <button type="button" onClick={() => void handleSaveOverride(submission)} disabled={draft.savingOverride} style={clampButton(draft.savingOverride, styles.primaryButton)}>
-                          {draft.savingOverride ? "Saving..." : "Save override"}
-                        </button>
-                      </div>
-                    </div>
 
-                    <div style={styles.sectionBox}>
-                      <div style={styles.sectionTitle}>Teacher audio feedback</div>
-                      <div style={styles.buttonRow}>
-                        {!draft.isRecordingTeacher ? (
-                          <button type="button" onClick={() => void startTeacherRecording(submission.id)} style={{ ...styles.secondaryButton, background: "#4f46e5", color: "#ffffff", borderColor: "#4f46e5" }}>
-                            Start recording
-                          </button>
-                        ) : (
-                          <button type="button" onClick={() => stopTeacherRecording(submission.id)} style={{ ...styles.secondaryButton, background: "#dc2626", color: "#ffffff", borderColor: "#dc2626" }}>
-                            Stop recording
-                          </button>
-                        )}
-                        <button type="button" onClick={() => void handleSaveTeacherAudio(submission)} disabled={!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher} style={clampButton(!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher, styles.primaryButton)}>
-                          {draft.savingAudio ? "Saving audio..." : "Save teacher audio"}
-                        </button>
-                        <button type="button" onClick={() => clearTeacherRecording(submission.id)} disabled={!draft.teacherBlob || draft.isRecordingTeacher} style={clampButton(!draft.teacherBlob || draft.isRecordingTeacher, styles.secondaryButton)}>
-                          Clear
-                        </button>
-                      </div>
-
-                      {draft.isRecordingTeacher ? <div style={{ ...styles.error, marginBottom: "12px", color: "#be123c" }}>Recording in progress...</div> : null}
-                      {draft.recordingError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{draft.recordingError}</div> : null}
-
-                      {draft.teacherPreviewUrl ? (
-                        <div style={styles.audioWrap}>
-                          <div style={{ ...styles.helper, marginBottom: "8px", color: "#475569", fontWeight: 700 }}>Preview new teacher audio</div>
-                          <ReliableAudioPlayer src={draft.teacherPreviewUrl} style={{ width: "100%" }} />
+                        <div style={styles.sectionBox}>
+                          <div style={styles.sectionTitle}>Override score and comment</div>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" }}>
+                            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Teacher score: {draft.score}/5</div>
+                            <StarRow value={draft.score} />
+                          </div>
+                          <input
+                            type="range"
+                            min={1}
+                            max={5}
+                            step={1}
+                            value={draft.score}
+                            onChange={(e) => updateDraft(submission.id, { score: clampScore(Number(e.target.value)), savedMessage: "", error: "" })}
+                            style={styles.slider}
+                          />
+                          <textarea
+                            value={draft.comment}
+                            onChange={(e) => updateDraft(submission.id, { comment: e.target.value, savedMessage: "", error: "" })}
+                            rows={4}
+                            placeholder="Write or edit the teacher feedback here"
+                            style={styles.textarea}
+                          />
+                          <div style={styles.footerRow}>
+                            <div>
+                              {draft.error ? (
+                                <span style={styles.error}>{draft.error}</span>
+                              ) : draft.savedMessage ? (
+                                <span style={styles.success}>{draft.savedMessage}</span>
+                              ) : (
+                                <span style={styles.helper}>Save only if you want to override the AI.</span>
+                              )}
+                            </div>
+                            <button type="button" onClick={() => void handleSaveOverride(submission)} disabled={draft.savingOverride} style={clampButton(draft.savingOverride, styles.primaryButton)}>
+                              {draft.savingOverride ? "Saving..." : "Save override"}
+                            </button>
+                          </div>
                         </div>
-                      ) : null}
 
-                      {savedTeacherAudioUrl ? (
-                        <div style={{ ...styles.audioWrap, marginTop: draft.teacherPreviewUrl ? "12px" : "0" }}>
-                          <div style={{ ...styles.helper, marginBottom: "8px", color: "#475569", fontWeight: 700 }}>Saved teacher audio</div>
-                          <ReliableAudioPlayer src={savedTeacherAudioUrl} style={{ width: "100%" }} />
+                        <div style={styles.sectionBox}>
+                          <div style={styles.sectionTitle}>Teacher audio feedback</div>
+                          <div style={styles.buttonRow}>
+                            {!draft.isRecordingTeacher ? (
+                              <button type="button" onClick={() => void startTeacherRecording(submission.id)} style={{ ...styles.secondaryButton, background: "#4f46e5", color: "#ffffff", borderColor: "#4f46e5" }}>
+                                Start recording
+                              </button>
+                            ) : (
+                              <button type="button" onClick={() => stopTeacherRecording(submission.id)} style={{ ...styles.secondaryButton, background: "#dc2626", color: "#ffffff", borderColor: "#dc2626" }}>
+                                Stop recording
+                              </button>
+                            )}
+                            <button type="button" onClick={() => void handleSaveTeacherAudio(submission)} disabled={!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher} style={clampButton(!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher, styles.primaryButton)}>
+                              {draft.savingAudio ? "Saving audio..." : "Save teacher audio"}
+                            </button>
+                            <button type="button" onClick={() => clearTeacherRecording(submission.id)} disabled={!draft.teacherBlob || draft.isRecordingTeacher} style={clampButton(!draft.teacherBlob || draft.isRecordingTeacher, styles.secondaryButton)}>
+                              Clear
+                            </button>
+                          </div>
+
+                          {draft.isRecordingTeacher ? <div style={{ ...styles.error, marginBottom: "12px", color: "#be123c" }}>Recording in progress...</div> : null}
+                          {draft.recordingError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{draft.recordingError}</div> : null}
+
+                          {draft.teacherPreviewUrl ? (
+                            <div style={styles.audioWrap}>
+                              <div style={{ ...styles.helper, marginBottom: "8px", color: "#475569", fontWeight: 700 }}>Preview new teacher audio</div>
+                              <ReliableAudioPlayer src={draft.teacherPreviewUrl} style={{ width: "100%" }} />
+                            </div>
+                          ) : null}
+
+                          {savedTeacherAudioUrl ? (
+                            <div style={{ ...styles.audioWrap, marginTop: draft.teacherPreviewUrl ? "12px" : "0" }}>
+                              <div style={{ ...styles.helper, marginBottom: "8px", color: "#475569", fontWeight: 700 }}>Saved teacher audio</div>
+                              <ReliableAudioPlayer src={savedTeacherAudioUrl} style={{ width: "100%" }} />
+                            </div>
+                          ) : !draft.teacherPreviewUrl ? (
+                            <div style={styles.helper}>{buildAudioLabel(savedTeacherAudioUrl)}</div>
+                          ) : null}
                         </div>
-                      ) : !draft.teacherPreviewUrl ? (
-                        <div style={styles.helper}>{buildAudioLabel(savedTeacherAudioUrl)}</div>
-                      ) : null}
-                    </div>
+                      </>
+                    ) : null}
                   </article>
                 );
               })}
