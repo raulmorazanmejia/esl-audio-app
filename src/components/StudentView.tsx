@@ -369,6 +369,7 @@ export default function StudentView() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRecordingVideo, setIsRecordingVideo] = useState(false);
   const [isSubmittingVideo, setIsSubmittingVideo] = useState(false);
+  const [isDeletingProjectVideo, setIsDeletingProjectVideo] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [videoStatusMessage, setVideoStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -385,6 +386,8 @@ export default function StudentView() {
 
   const teacherAudioUrl = useMemo(() => currentTeacherAudio(submissionForActivePrompt), [submissionForActivePrompt]);
   const hasSubmittedActivePrompt = Boolean(submissionForActivePrompt);
+  const latestProjectVideoSubmission = useMemo(() => projectVideoSubmissions[0] || null, [projectVideoSubmissions]);
+  const hasProjectVideoSubmission = Boolean(latestProjectVideoSubmission);
 
   const stopTracks = useCallback(() => {
     if (streamRef.current) {
@@ -466,17 +469,17 @@ export default function StudentView() {
   }, [stopTracks, stopVideoTracks, recordedAudioUrl, recordedVideoUrl]);
 
   useEffect(() => {
-    if (!rosterStudent || !projectVideoUpdatesEnabled || recordedVideoUrl) {
+    if (!rosterStudent || !projectVideoUpdatesEnabled || recordedVideoUrl || hasProjectVideoSubmission) {
       return;
     }
     void initializeVideoPreview();
-  }, [rosterStudent, projectVideoUpdatesEnabled, recordedVideoUrl, initializeVideoPreview]);
+  }, [rosterStudent, projectVideoUpdatesEnabled, recordedVideoUrl, hasProjectVideoSubmission, initializeVideoPreview]);
 
   useEffect(() => {
-    if (rosterStudent && projectVideoUpdatesEnabled) return;
+    if (rosterStudent && projectVideoUpdatesEnabled && !hasProjectVideoSubmission) return;
     stopVideoTracks();
     setIsRecordingVideo(false);
-  }, [rosterStudent, projectVideoUpdatesEnabled, stopVideoTracks]);
+  }, [rosterStudent, projectVideoUpdatesEnabled, hasProjectVideoSubmission, stopVideoTracks]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -554,7 +557,7 @@ export default function StudentView() {
 
     const className = rosterRow.class_name?.trim() ?? "";
     if (className) {
-      await Promise.all([fetchClassVideoSetting(className), fetchProjectVideoSubmissions(code)]);
+      await Promise.all([fetchClassVideoSetting(className), fetchProjectVideoSubmissions(code, className)]);
     } else {
       setProjectVideoUpdatesEnabled(false);
       setProjectVideoSubmissions([]);
@@ -577,9 +580,10 @@ export default function StudentView() {
     setProjectVideoUpdatesEnabled(Boolean(row?.project_video_updates_enabled));
   }
 
-  async function fetchProjectVideoSubmissions(codeValue: string) {
+  async function fetchProjectVideoSubmissions(codeValue: string, classNameValue: string) {
     const code = codeValue.trim();
-    if (!code) {
+    const className = classNameValue.trim();
+    if (!code || !className) {
       setProjectVideoSubmissions([]);
       return;
     }
@@ -588,6 +592,7 @@ export default function StudentView() {
       .from("project_video_submissions")
       .select(PROJECT_VIDEO_SUBMISSION_SELECT)
       .eq("student_code", code)
+      .eq("class_name", className)
       .order("created_at", { ascending: false })
       .limit(5);
 
@@ -998,7 +1003,7 @@ export default function StudentView() {
       });
       if (error) throw error;
 
-      await fetchProjectVideoSubmissions(code);
+      await fetchProjectVideoSubmissions(code, className);
       clearUnsubmittedVideo();
       setVideoStatusMessage("Project update video submitted ✅");
     } catch (error: any) {
@@ -1006,6 +1011,47 @@ export default function StudentView() {
       setVideoStatusMessage("");
     } finally {
       setIsSubmittingVideo(false);
+    }
+  }
+
+  async function deleteLatestProjectVideoSubmission() {
+    const code = studentCode.trim();
+    const className = rosterStudent?.class_name?.trim() || "";
+    const latestSubmission = latestProjectVideoSubmission;
+    if (!code || !className || !latestSubmission) {
+      setVideoErrorMessage("No submitted project video found to delete.");
+      return;
+    }
+
+    const confirmed = window.confirm("Delete your submitted project update video? You can upload a new one later.");
+    if (!confirmed) return;
+
+    setIsDeletingProjectVideo(true);
+    setVideoErrorMessage("");
+    setVideoStatusMessage("Deleting video...");
+
+    try {
+      const path = latestSubmission.video_path?.trim();
+      if (path) {
+        const { error: storageError } = await supabase.storage.from("project-update-videos").remove([path]);
+        if (storageError) throw storageError;
+      }
+
+      const { error: deleteError } = await supabase
+        .from("project_video_submissions")
+        .delete()
+        .eq("id", latestSubmission.id);
+      if (deleteError) throw deleteError;
+
+      await fetchProjectVideoSubmissions(code, className);
+      clearUnsubmittedVideo();
+      setVideoStatusMessage("Project update video deleted. You can record a new one.");
+      setVideoErrorMessage("");
+    } catch (error: any) {
+      setVideoErrorMessage(error?.message || "Could not delete project update video.");
+      setVideoStatusMessage("");
+    } finally {
+      setIsDeletingProjectVideo(false);
     }
   }
 
@@ -1155,100 +1201,141 @@ export default function StudentView() {
             <div style={{ ...styles.helperText, color: "#4338ca", marginTop: "-4px", marginBottom: "12px" }}>
               Use this to send a weekly progress update for your project.
             </div>
-            <div style={{ ...styles.cardTitle, color: "#4338ca", marginBottom: "8px" }}>
-              {recordedVideoUrl ? "Recorded preview" : "Camera preview"}
-            </div>
-            <div
-              style={{
-                ...styles.portraitVideoPreview,
-              }}
-            >
-              {recordedVideoUrl ? (
-                <video
-                  src={recordedVideoUrl}
-                  controls
-                  playsInline
+            {hasProjectVideoSubmission ? (
+              <>
+                <div style={{ ...styles.cardTitle, color: "#4338ca", marginBottom: "8px" }}>Submitted video</div>
+                <div style={styles.portraitVideoPreview}>
+                  <video
+                    src={latestProjectVideoSubmission?.video_url || ""}
+                    controls
+                    playsInline
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      objectPosition: "center",
+                      backgroundColor: "#000",
+                    }}
+                  />
+                </div>
+                <div style={{ ...styles.helperText, color: "#4338ca", marginTop: "8px" }}>
+                  Submitted {formatDate(latestProjectVideoSubmission?.created_at)}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void deleteLatestProjectVideoSubmission()}
+                  disabled={isDeletingProjectVideo || isSubmittingVideo || isRecordingVideo}
                   style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    objectPosition: "center",
-                    backgroundColor: "#000",
+                    ...styles.submitButton,
+                    minHeight: "50px",
+                    background: "#b91c1c",
+                    boxShadow: "none",
+                    marginTop: "12px",
+                    opacity: isDeletingProjectVideo || isSubmittingVideo || isRecordingVideo ? 0.6 : 1,
+                    cursor: isDeletingProjectVideo || isSubmittingVideo || isRecordingVideo ? "not-allowed" : "pointer",
                   }}
-                />
-              ) : (
-                <video
-                  ref={livePreviewVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
+                >
+                  {isDeletingProjectVideo ? "Deleting..." : "Delete video"}
+                </button>
+              </>
+            ) : (
+              <>
+                <div style={{ ...styles.cardTitle, color: "#4338ca", marginBottom: "8px" }}>
+                  {recordedVideoUrl ? "Recorded preview" : "Camera preview"}
+                </div>
+                <div
                   style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    objectPosition: "center",
-                    backgroundColor: "#000",
+                    ...styles.portraitVideoPreview,
                   }}
-                />
-              )}
-            </div>
+                >
+                  {recordedVideoUrl ? (
+                    <video
+                      src={recordedVideoUrl}
+                      controls
+                      playsInline
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        objectPosition: "center",
+                        backgroundColor: "#000",
+                      }}
+                    />
+                  ) : (
+                    <video
+                      ref={livePreviewVideoRef}
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        objectPosition: "center",
+                        backgroundColor: "#000",
+                      }}
+                    />
+                  )}
+                </div>
 
-            <div style={{ display: "grid", gap: "10px", marginTop: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
-              <button
-                type="button"
-                onClick={() => void startVideoRecording()}
-                disabled={isRecordingVideo || isSubmittingVideo}
-                style={{
-                  ...styles.primaryButton,
-                  minHeight: "50px",
-                  opacity: isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
-                  cursor: isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
-                }}
-              >
-                Start recording
-              </button>
-              <button
-                type="button"
-                onClick={stopVideoRecording}
-                disabled={!isRecordingVideo || isSubmittingVideo}
-                style={{
-                  ...styles.submitButton,
-                  minHeight: "50px",
-                  background: "#dc2626",
-                  boxShadow: "none",
-                  opacity: !isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
-                  cursor: !isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
-                }}
-              >
-                Stop recording
-              </button>
-              <button
-                type="button"
-                onClick={clearUnsubmittedVideo}
-                disabled={isRecordingVideo || isSubmittingVideo}
-                style={{
-                  ...styles.secondaryButton,
-                  minHeight: "50px",
-                  opacity: isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
-                  cursor: isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
-                }}
-              >
-                Re-record / Clear
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitProjectVideo()}
-                disabled={!recordedVideoUrl || isRecordingVideo || isSubmittingVideo}
-                style={{
-                  ...styles.primaryButton,
-                  minHeight: "50px",
-                  opacity: !recordedVideoUrl || isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
-                  cursor: !recordedVideoUrl || isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
-                }}
-              >
-                {isSubmittingVideo ? "Submitting..." : "Submit video"}
-              </button>
-            </div>
+                <div style={{ display: "grid", gap: "10px", marginTop: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+                  <button
+                    type="button"
+                    onClick={() => void startVideoRecording()}
+                    disabled={isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo}
+                    style={{
+                      ...styles.primaryButton,
+                      minHeight: "50px",
+                      opacity: isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo ? 0.6 : 1,
+                      cursor: isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Start recording
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopVideoRecording}
+                    disabled={!isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo}
+                    style={{
+                      ...styles.submitButton,
+                      minHeight: "50px",
+                      background: "#dc2626",
+                      boxShadow: "none",
+                      opacity: !isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo ? 0.6 : 1,
+                      cursor: !isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Stop recording
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearUnsubmittedVideo}
+                    disabled={isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo}
+                    style={{
+                      ...styles.secondaryButton,
+                      minHeight: "50px",
+                      opacity: isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo ? 0.6 : 1,
+                      cursor: isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Re-record / Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void submitProjectVideo()}
+                    disabled={!recordedVideoUrl || isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo}
+                    style={{
+                      ...styles.primaryButton,
+                      minHeight: "50px",
+                      opacity: !recordedVideoUrl || isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo ? 0.6 : 1,
+                      cursor: !recordedVideoUrl || isRecordingVideo || isSubmittingVideo || isDeletingProjectVideo ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isSubmittingVideo ? "Submitting..." : "Submit video"}
+                  </button>
+                </div>
+              </>
+            )}
 
             {videoStatusMessage ? <div style={{ ...styles.message, color: "#4338ca", marginTop: "10px" }}>{videoStatusMessage}</div> : null}
             {videoErrorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{videoErrorMessage}</div> : null}
