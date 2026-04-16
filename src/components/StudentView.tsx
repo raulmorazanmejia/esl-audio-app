@@ -43,6 +43,21 @@ type StudentRosterRow = {
   student_code: string;
 };
 
+type ClassVideoSettingRow = {
+  class_name: string;
+  project_video_updates_enabled: boolean | null;
+};
+
+type ProjectVideoSubmissionRow = {
+  id: string;
+  student_name: string | null;
+  student_code: string | null;
+  class_name: string | null;
+  video_path: string | null;
+  video_url: string | null;
+  created_at: string | null;
+};
+
 type AnalyzeResponse = {
   transcript?: string | null;
   score?: number | null;
@@ -53,6 +68,7 @@ type AnalyzeResponse = {
 const ACTIVE_PROMPT_SELECT = "id, prompt_text, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at";
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
+const PROJECT_VIDEO_SUBMISSION_SELECT = "id, student_name, student_code, class_name, video_path, video_url, created_at";
 
 const styles = {
   page: {
@@ -212,6 +228,17 @@ const styles = {
     cursor: "pointer",
     boxShadow: "0 16px 32px rgba(15, 23, 42, 0.18)",
   },
+  primaryButton: {
+    minHeight: "50px",
+    borderRadius: "16px",
+    border: "none",
+    background: "#312e81",
+    color: "#ffffff",
+    fontSize: "16px",
+    fontWeight: 800,
+    cursor: "pointer",
+    padding: "0 18px",
+  },
   message: {
     textAlign: "center" as const,
     fontSize: "18px",
@@ -248,6 +275,13 @@ const styles = {
     fontWeight: 800,
     color: "#0f172a",
   },
+  videoPreview: {
+    width: "100%",
+    borderRadius: "16px",
+    border: "1px solid #cbd5e1",
+    background: "#000000",
+    marginTop: "12px",
+  },
 } as const;
 
 function chooseSupportedMimeType() {
@@ -276,6 +310,16 @@ function fileExtensionFromMime(type: string) {
   return "webm";
 }
 
+function chooseSupportedVideoMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+
+  const candidates = ["video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+  for (const type of candidates) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "";
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "";
   try {
@@ -294,23 +338,35 @@ export default function StudentView() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const videoRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
+  const videoChunksRef = useRef<BlobPart[]>([]);
 
   const [studentCode, setStudentCode] = useState("");
   const [rosterStudent, setRosterStudent] = useState<StudentRosterRow | null>(null);
   const [activePrompt, setActivePrompt] = useState<PromptRow | null>(null);
   const [submissionForActivePrompt, setSubmissionForActivePrompt] = useState<SubmissionRow | null>(null);
+  const [projectVideoUpdatesEnabled, setProjectVideoUpdatesEnabled] = useState(false);
+  const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
 
   const [isFinding, setIsFinding] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const [isSubmittingVideo, setIsSubmittingVideo] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
+  const [videoStatusMessage, setVideoStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [videoErrorMessage, setVideoErrorMessage] = useState("");
 
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState("");
   const [recordingMimeType, setRecordingMimeType] = useState("");
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pulseVisible, setPulseVisible] = useState(true);
+  const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState("");
+  const [videoMimeType, setVideoMimeType] = useState("");
 
   const teacherAudioUrl = useMemo(() => currentTeacherAudio(submissionForActivePrompt), [submissionForActivePrompt]);
   const hasSubmittedActivePrompt = Boolean(submissionForActivePrompt);
@@ -322,15 +378,26 @@ export default function StudentView() {
     }
   }, []);
 
+  const stopVideoTracks = useCallback(() => {
+    if (videoStreamRef.current) {
+      videoStreamRef.current.getTracks().forEach((track) => track.stop());
+      videoStreamRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     void fetchActivePrompt();
     return () => {
       stopTracks();
+      stopVideoTracks();
       if (recordedAudioUrl) {
         URL.revokeObjectURL(recordedAudioUrl);
       }
+      if (recordedVideoUrl) {
+        URL.revokeObjectURL(recordedVideoUrl);
+      }
     };
-  }, [stopTracks, recordedAudioUrl]);
+  }, [stopTracks, stopVideoTracks, recordedAudioUrl, recordedVideoUrl]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -377,6 +444,8 @@ export default function StudentView() {
     setIsFinding(true);
     setErrorMessage("");
     setStatusMessage("");
+    setVideoErrorMessage("");
+    setVideoStatusMessage("");
 
     const { data: rosterData, error: rosterError } = await supabase
       .from("students")
@@ -394,6 +463,8 @@ export default function StudentView() {
     if (!rosterData) {
       setRosterStudent(null);
       setSubmissionForActivePrompt(null);
+      setProjectVideoUpdatesEnabled(false);
+      setProjectVideoSubmissions([]);
       setErrorMessage("Code not found. Please check your code or ask your teacher.");
       return;
     }
@@ -401,6 +472,52 @@ export default function StudentView() {
     const rosterRow = rosterData as StudentRosterRow;
     setRosterStudent(rosterRow);
     setStatusMessage(`Welcome, ${rosterRow.student_name}`);
+
+    const className = rosterRow.class_name?.trim() ?? "";
+    if (className) {
+      await Promise.all([fetchClassVideoSetting(className), fetchProjectVideoSubmissions(code)]);
+    } else {
+      setProjectVideoUpdatesEnabled(false);
+      setProjectVideoSubmissions([]);
+    }
+  }
+
+  async function fetchClassVideoSetting(className: string) {
+    const { data, error } = await supabase
+      .from("class_video_settings")
+      .select("class_name, project_video_updates_enabled")
+      .eq("class_name", className)
+      .maybeSingle();
+
+    if (error) {
+      setProjectVideoUpdatesEnabled(false);
+      return;
+    }
+
+    const row = data as ClassVideoSettingRow | null;
+    setProjectVideoUpdatesEnabled(Boolean(row?.project_video_updates_enabled));
+  }
+
+  async function fetchProjectVideoSubmissions(codeValue: string) {
+    const code = codeValue.trim();
+    if (!code) {
+      setProjectVideoSubmissions([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("project_video_submissions")
+      .select(PROJECT_VIDEO_SUBMISSION_SELECT)
+      .eq("student_code", code)
+      .order("created_at", { ascending: false })
+      .limit(5);
+
+    if (error) {
+      setProjectVideoSubmissions([]);
+      return;
+    }
+
+    setProjectVideoSubmissions((data ?? []) as ProjectVideoSubmissionRow[]);
   }
 
   const findSubmissionForActivePrompt = useCallback(
@@ -663,6 +780,160 @@ export default function StudentView() {
     }
   }
 
+  async function startVideoRecording() {
+    setVideoErrorMessage("");
+    setVideoStatusMessage("");
+    if (isRecordingVideo) return;
+    if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setVideoErrorMessage("This browser does not support in-app video recording. Please use a newer browser.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+
+      const mimeType = chooseSupportedVideoMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      videoStreamRef.current = stream;
+      videoRecorderRef.current = recorder;
+      videoChunksRef.current = [];
+      setVideoMimeType(recorder.mimeType || mimeType || "");
+
+      recorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          videoChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = () => {
+        setVideoErrorMessage("Video recording failed on this device. Please try again.");
+        setIsRecordingVideo(false);
+        stopVideoTracks();
+      };
+
+      recorder.onstop = () => {
+        const finalType = recorder.mimeType || mimeType || "video/webm";
+        if (!videoChunksRef.current.length) {
+          setRecordedVideoBlob(null);
+          if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
+          setRecordedVideoUrl("");
+          setVideoErrorMessage("Recording failed. Please try again.");
+          setVideoStatusMessage("");
+          stopVideoTracks();
+          return;
+        }
+
+        const blob = new Blob(videoChunksRef.current, { type: finalType });
+        if (!blob.size) {
+          setRecordedVideoBlob(null);
+          if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
+          setRecordedVideoUrl("");
+          setVideoErrorMessage("This device produced an empty video. Please try again.");
+          setVideoStatusMessage("");
+          stopVideoTracks();
+          return;
+        }
+
+        if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
+        const localUrl = URL.createObjectURL(blob);
+        setRecordedVideoBlob(blob);
+        setRecordedVideoUrl(localUrl);
+        setVideoStatusMessage("Video ready ✅");
+        setVideoErrorMessage("");
+        stopVideoTracks();
+      };
+
+      recorder.start();
+      setRecordedVideoBlob(null);
+      if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
+      setRecordedVideoUrl("");
+      setIsRecordingVideo(true);
+      setVideoStatusMessage("Recording video...");
+    } catch (error: any) {
+      setVideoErrorMessage(error?.message || "Camera/microphone access failed.");
+      setIsRecordingVideo(false);
+      stopVideoTracks();
+    }
+  }
+
+  function stopVideoRecording() {
+    const recorder = videoRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+    recorder.stop();
+    setIsRecordingVideo(false);
+  }
+
+  function clearUnsubmittedVideo() {
+    setRecordedVideoBlob(null);
+    if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
+    setRecordedVideoUrl("");
+    setVideoMimeType("");
+    setVideoStatusMessage("Video discarded. You can record again.");
+    setVideoErrorMessage("");
+  }
+
+  async function submitProjectVideo() {
+    const code = studentCode.trim();
+    const name = rosterStudent?.student_name?.trim() || "";
+    const className = rosterStudent?.class_name?.trim() || "";
+    if (!code || !name || !className) {
+      setVideoErrorMessage("Enter a valid code first.");
+      return;
+    }
+    if (!projectVideoUpdatesEnabled) {
+      setVideoErrorMessage("Project video updates are not enabled for your class.");
+      return;
+    }
+    if (!recordedVideoBlob || !recordedVideoBlob.size) {
+      setVideoErrorMessage("Record your project update video first.");
+      return;
+    }
+
+    setIsSubmittingVideo(true);
+    setVideoErrorMessage("");
+    setVideoStatusMessage("Uploading video...");
+
+    try {
+      const mimeType = videoMimeType || recordedVideoBlob.type || "video/webm";
+      const ext = fileExtensionFromMime(mimeType);
+      const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const filePath = `project-updates/${className}/${Date.now()}-${safeName}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage.from("project-update-videos").upload(filePath, recordedVideoBlob, {
+        cacheControl: "3600",
+        contentType: mimeType,
+        upsert: true,
+      });
+      if (uploadError) throw uploadError;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("project-update-videos").getPublicUrl(filePath);
+
+      const { error } = await supabase.from("project_video_submissions").insert({
+        student_id: rosterStudent?.id ?? null,
+        student_name: name,
+        student_code: code,
+        class_name: className,
+        video_path: filePath,
+        video_url: publicUrl,
+      });
+      if (error) throw error;
+
+      await fetchProjectVideoSubmissions(code);
+      clearUnsubmittedVideo();
+      setVideoStatusMessage("Project update video submitted ✅");
+    } catch (error: any) {
+      setVideoErrorMessage(error?.message || "Project video upload failed.");
+      setVideoStatusMessage("");
+    } finally {
+      setIsSubmittingVideo(false);
+    }
+  }
+
   const micLabel = isRecording ? "Recording..." : "Start recording";
   const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
@@ -685,6 +956,10 @@ export default function StudentView() {
             setStudentCode(e.target.value.toUpperCase());
             setRosterStudent(null);
             setSubmissionForActivePrompt(null);
+            setProjectVideoUpdatesEnabled(false);
+            setProjectVideoSubmissions([]);
+            setVideoStatusMessage("");
+            setVideoErrorMessage("");
           }}
           placeholder="Enter your code (ex: R10)"
           style={styles.field}
@@ -797,6 +1072,84 @@ export default function StudentView() {
 
         {errorMessage ? (
           <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{errorMessage}</div>
+        ) : null}
+
+        {rosterStudent && projectVideoUpdatesEnabled ? (
+          <div style={{ ...styles.card, border: "1px solid #c7d2fe", background: "#eef2ff" }}>
+            <div style={{ ...styles.cardTitle, color: "#4338ca" }}>Project Update Video</div>
+            <div style={{ ...styles.helperText, color: "#4338ca", marginTop: "-4px", marginBottom: "12px" }}>
+              Use this to send a weekly progress update for your project.
+            </div>
+
+            <button
+              type="button"
+              onClick={isRecordingVideo ? stopVideoRecording : () => void startVideoRecording()}
+              disabled={isSubmittingVideo}
+              style={{
+                ...styles.submitButton,
+                minHeight: "64px",
+                fontSize: "21px",
+                marginTop: "6px",
+                background: isRecordingVideo ? "#dc2626" : "#312e81",
+                opacity: isSubmittingVideo ? 0.6 : 1,
+                cursor: isSubmittingVideo ? "not-allowed" : "pointer",
+                boxShadow: "none",
+              }}
+            >
+              {isRecordingVideo ? "Stop video recording" : "Record project video"}
+            </button>
+
+            {recordedVideoUrl ? (
+              <>
+                <video src={recordedVideoUrl} controls playsInline style={styles.videoPreview} />
+                <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
+                  <button
+                    type="button"
+                    onClick={clearUnsubmittedVideo}
+                    disabled={isRecordingVideo || isSubmittingVideo}
+                    style={{
+                      ...styles.secondaryButton,
+                      flex: 1,
+                      minHeight: "50px",
+                      opacity: isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
+                      cursor: isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Record again
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void submitProjectVideo()}
+                    disabled={isRecordingVideo || isSubmittingVideo}
+                    style={{
+                      ...styles.primaryButton,
+                      flex: 1,
+                      minHeight: "50px",
+                      opacity: isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
+                      cursor: isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {isSubmittingVideo ? "Submitting..." : "Submit video"}
+                  </button>
+                </div>
+              </>
+            ) : null}
+
+            {videoStatusMessage ? <div style={{ ...styles.message, color: "#4338ca", marginTop: "10px" }}>{videoStatusMessage}</div> : null}
+            {videoErrorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{videoErrorMessage}</div> : null}
+
+            <div style={{ ...styles.cardTitle, marginTop: "14px", color: "#6366f1" }}>Your recent project videos</div>
+            {projectVideoSubmissions.length ? (
+              projectVideoSubmissions.map((submission) => (
+                <div key={submission.id} style={{ marginBottom: "12px" }}>
+                  <video src={submission.video_url || ""} controls playsInline style={styles.videoPreview} />
+                  <div style={{ ...styles.helperText, color: "#4338ca", marginTop: "6px" }}>{formatDate(submission.created_at)}</div>
+                </div>
+              ))
+            ) : (
+              <div style={{ ...styles.helperText, color: "#4338ca" }}>No project videos submitted yet.</div>
+            )}
+          </div>
         ) : null}
 
         <div style={styles.card}>

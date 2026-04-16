@@ -44,8 +44,24 @@ type StudentRow = {
   created_at: string | null;
 };
 
+type ClassVideoSettingRow = {
+  class_name: string;
+  project_video_updates_enabled: boolean | null;
+};
+
+type ProjectVideoSubmissionRow = {
+  id: string;
+  student_name: string | null;
+  student_code: string | null;
+  class_name: string | null;
+  video_path: string | null;
+  video_url: string | null;
+  created_at: string | null;
+};
+
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
+const PROJECT_VIDEO_SUBMISSION_SELECT = "id, student_name, student_code, class_name, video_path, video_url, created_at";
 
 type DraftState = {
   score: number;
@@ -458,6 +474,8 @@ export default function TeacherDashboard() {
   const [isSavingStudent, setIsSavingStudent] = useState(false);
   const [rosterError, setRosterError] = useState("");
   const [rosterSuccess, setRosterSuccess] = useState("");
+  const [classVideoSettings, setClassVideoSettings] = useState<Record<string, boolean>>({});
+  const [isSavingClassVideoSetting, setIsSavingClassVideoSetting] = useState(false);
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
@@ -466,6 +484,9 @@ export default function TeacherDashboard() {
   const [expandedSubmissionIds, setExpandedSubmissionIds] = useState<Record<string, boolean>>({});
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
+  const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
+  const [isLoadingProjectVideoSubmissions, setIsLoadingProjectVideoSubmissions] = useState(false);
+  const [projectVideoSubmissionsError, setProjectVideoSubmissionsError] = useState("");
 
   const sortedPrompts = useMemo(() => {
     return [...prompts].sort((a, b) => {
@@ -498,6 +519,18 @@ export default function TeacherDashboard() {
     if (!className) return students;
     return students.filter((student) => (student.class_name?.trim() ?? "") === className);
   }, [students, selectedClassName]);
+
+  const selectedClassVideoEnabled = useMemo(() => {
+    const className = selectedClassName.trim();
+    if (!className) return false;
+    return Boolean(classVideoSettings[className]);
+  }, [classVideoSettings, selectedClassName]);
+
+  const filteredProjectVideoSubmissions = useMemo(() => {
+    const className = selectedClassName.trim();
+    if (!className) return projectVideoSubmissions;
+    return projectVideoSubmissions.filter((submission) => (submission.class_name?.trim() ?? "") === className);
+  }, [projectVideoSubmissions, selectedClassName]);
 
   const stopRecorderAndTracks = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -604,11 +637,45 @@ export default function TeacherDashboard() {
     setStudents((data ?? []) as StudentRow[]);
   }, []);
 
+  const fetchClassVideoSettings = useCallback(async () => {
+    const { data, error } = await supabase.from("class_video_settings").select("class_name, project_video_updates_enabled");
+    if (error) {
+      return;
+    }
+    const rows = (data ?? []) as ClassVideoSettingRow[];
+    const next: Record<string, boolean> = {};
+    rows.forEach((row) => {
+      const className = row.class_name?.trim();
+      if (className) {
+        next[className] = Boolean(row.project_video_updates_enabled);
+      }
+    });
+    setClassVideoSettings(next);
+  }, []);
+
+  const fetchProjectVideoSubmissions = useCallback(async () => {
+    setIsLoadingProjectVideoSubmissions(true);
+    setProjectVideoSubmissionsError("");
+    const { data, error } = await supabase
+      .from("project_video_submissions")
+      .select(PROJECT_VIDEO_SUBMISSION_SELECT)
+      .order("created_at", { ascending: false });
+    if (error) {
+      setProjectVideoSubmissionsError(error.message);
+      setIsLoadingProjectVideoSubmissions(false);
+      return;
+    }
+    setProjectVideoSubmissions((data ?? []) as ProjectVideoSubmissionRow[]);
+    setIsLoadingProjectVideoSubmissions(false);
+  }, []);
+
   useEffect(() => {
     void fetchPrompts();
     void fetchStudents();
+    void fetchClassVideoSettings();
     void fetchSubmissions();
-  }, [fetchPrompts, fetchStudents, fetchSubmissions]);
+    void fetchProjectVideoSubmissions();
+  }, [fetchPrompts, fetchStudents, fetchClassVideoSettings, fetchSubmissions, fetchProjectVideoSubmissions]);
 
   async function handleSavePrompt() {
     if (isSavingPrompt) return;
@@ -726,6 +793,33 @@ export default function TeacherDashboard() {
     if (!className) return;
     setSelectedClassName(className);
     setNewClassName("");
+  }
+
+  async function handleToggleProjectVideoForSelectedClass() {
+    const className = selectedClassName.trim();
+    if (!className || isSavingClassVideoSetting) return;
+    const nextEnabled = !selectedClassVideoEnabled;
+    setIsSavingClassVideoSetting(true);
+    setRosterError("");
+    setRosterSuccess("");
+
+    const { error } = await supabase.from("class_video_settings").upsert(
+      {
+        class_name: className,
+        project_video_updates_enabled: nextEnabled,
+      },
+      { onConflict: "class_name" }
+    );
+
+    if (error) {
+      setRosterError(error.message);
+      setIsSavingClassVideoSetting(false);
+      return;
+    }
+
+    setClassVideoSettings((prev) => ({ ...prev, [className]: nextEnabled }));
+    setRosterSuccess(`Project update video ${nextEnabled ? "enabled" : "disabled"} for ${className}.`);
+    setIsSavingClassVideoSetting(false);
   }
 
   function updateStudentDraft(id: string, patch: Partial<StudentRow>) {
@@ -987,6 +1081,29 @@ export default function TeacherDashboard() {
                 ))}
               </select>
               <div style={{ ...styles.helper, marginTop: "8px" }}>Need a new class/group? Add it below, then click Use.</div>
+              {selectedClassName ? (
+                <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div style={styles.helper}>
+                    Project Update Video for <strong>{selectedClassName}</strong>:{" "}
+                    <strong style={{ color: selectedClassVideoEnabled ? "#047857" : "#b45309" }}>
+                      {selectedClassVideoEnabled ? "Enabled" : "Disabled"}
+                    </strong>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleToggleProjectVideoForSelectedClass()}
+                    disabled={isSavingClassVideoSetting}
+                    style={clampButton(isSavingClassVideoSetting, {
+                      ...styles.secondaryButton,
+                      minHeight: "42px",
+                      borderColor: selectedClassVideoEnabled ? "#fecaca" : "#86efac",
+                      color: selectedClassVideoEnabled ? "#b91c1c" : "#166534",
+                    })}
+                  >
+                    {isSavingClassVideoSetting ? "Saving..." : selectedClassVideoEnabled ? "Disable project video updates" : "Enable project video updates"}
+                  </button>
+                </div>
+              ) : null}
             </div>
             <div style={{ ...styles.rosterGrid, marginBottom: "10px" }}>
               <input
@@ -1401,6 +1518,47 @@ export default function TeacherDashboard() {
                   </article>
                 );
               })}
+            </div>
+
+            <div style={{ marginTop: "28px", borderTop: "1px solid #e2e8f0", paddingTop: "20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
+                <div style={styles.panelLabel}>Project update video submissions</div>
+                <button
+                  type="button"
+                  onClick={() => void fetchProjectVideoSubmissions()}
+                  disabled={isLoadingProjectVideoSubmissions}
+                  style={clampButton(isLoadingProjectVideoSubmissions, styles.secondaryButton)}
+                >
+                  {isLoadingProjectVideoSubmissions ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
+              <div style={{ ...styles.helper, marginBottom: "12px" }}>
+                Manual review only. These video submissions are separate from prompt-based speaking submissions.
+              </div>
+              {projectVideoSubmissionsError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{projectVideoSubmissionsError}</div> : null}
+              <div style={styles.submissionsScroller}>
+                {filteredProjectVideoSubmissions.map((submission) => (
+                  <article key={submission.id} style={{ ...styles.submissionCard, background: "#f8fafc" }}>
+                    <div style={{ ...styles.sectionTitle, marginBottom: "8px" }}>Project update video</div>
+                    <div style={styles.bodyText}><span style={styles.labelStrong}>Student:</span> {submission.student_name || "—"}</div>
+                    <div style={{ ...styles.bodyText, marginTop: "8px" }}><span style={styles.labelStrong}>Student code:</span> {submission.student_code || "—"}</div>
+                    <div style={{ ...styles.bodyText, marginTop: "8px" }}><span style={styles.labelStrong}>Class:</span> {submission.class_name || "—"}</div>
+                    <div style={{ ...styles.bodyText, marginTop: "8px", marginBottom: "12px" }}>
+                      <span style={styles.labelStrong}>Submitted:</span> {formatDate(submission.created_at)}
+                    </div>
+                    {submission.video_url ? (
+                      <video controls playsInline style={{ width: "100%", borderRadius: "16px", border: "1px solid #cbd5e1", background: "#000000" }}>
+                        <source src={submission.video_url} />
+                      </video>
+                    ) : (
+                      <div style={styles.helper}>Video not available.</div>
+                    )}
+                  </article>
+                ))}
+                {!filteredProjectVideoSubmissions.length ? (
+                  <div style={styles.helper}>No project update videos submitted yet.</div>
+                ) : null}
+              </div>
             </div>
           </section>
         </div>
