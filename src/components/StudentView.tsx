@@ -1168,7 +1168,7 @@ export default function StudentView() {
                   src={recordedVideoUrl}
                   controls
                   playsInline
-                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", backgroundColor: "#000" }}
                 />
               ) : (
                 <video
@@ -1176,7 +1176,7 @@ export default function StudentView() {
                   autoPlay
                   muted
                   playsInline
-                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", backgroundColor: "#000" }}
                 />
               )}
             </div>
