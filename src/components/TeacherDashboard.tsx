@@ -5,6 +5,7 @@ import ReliableAudioPlayer from "./ReliableAudioPlayer";
 type PromptRow = {
   id: string;
   prompt_text: string | null;
+  class_name: string | null;
   suggested_time: string | null;
   prompt_image_path: string | null;
   prompt_image_url: string | null;
@@ -461,6 +462,7 @@ export default function TeacherDashboard() {
   const [prompts, setPrompts] = useState<PromptRow[]>([]);
   const [newPrompt, setNewPrompt] = useState("");
   const [newSuggestedTime, setNewSuggestedTime] = useState("");
+  const [newPromptClassName, setNewPromptClassName] = useState("");
   const [newPromptImageFile, setNewPromptImageFile] = useState<File | null>(null);
   const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -593,7 +595,7 @@ export default function TeacherDashboard() {
     setPromptError("");
     const { data, error } = await supabase
       .from("prompts")
-      .select("id, prompt_text, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at")
+      .select("id, prompt_text, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at")
       .order("created_at", { ascending: false });
     if (error) {
       setPromptError(error.message);
@@ -709,6 +711,7 @@ export default function TeacherDashboard() {
 
     const { error } = await supabase.from("prompts").insert({
       prompt_text: text,
+      class_name: newPromptClassName.trim() || null,
       suggested_time: newSuggestedTime.trim() || null,
       prompt_image_path: promptImagePath,
       prompt_image_url: promptImageUrl,
@@ -724,6 +727,7 @@ export default function TeacherDashboard() {
     }
     setNewPrompt("");
     setNewSuggestedTime("");
+    setNewPromptClassName("");
     setNewPromptImageFile(null);
     if (newPromptImagePreviewUrl) {
       URL.revokeObjectURL(newPromptImagePreviewUrl);
@@ -1211,6 +1215,18 @@ export default function TeacherDashboard() {
                   placeholder="Suggested speaking time (optional)"
                   style={styles.promptInput}
                 />
+                <select
+                  value={newPromptClassName}
+                  onChange={(e) => setNewPromptClassName(e.target.value)}
+                  style={styles.promptInput}
+                >
+                  <option value="">All classes</option>
+                  {classNameOptions.map((className) => (
+                    <option key={className} value={className}>
+                      {className}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div style={styles.promptHelper}>Suggested speaking time (optional)</div>
               <label style={{ ...styles.promptHelper, marginTop: "2px" }}>
@@ -1267,6 +1283,7 @@ export default function TeacherDashboard() {
                   <div style={styles.promptHeader}>
                     <div>
                       <div style={{ ...styles.promptTitle, color: isActive ? "#4f46e5" : "#1e293b" }}>{prompt.prompt_text}</div>
+                      <div style={styles.promptMeta}>Class: {prompt.class_name?.trim() || "All classes"}</div>
                       {prompt.suggested_time ? <div style={styles.promptMeta}>Suggested time: {prompt.suggested_time}</div> : null}
                     </div>
                     <button
