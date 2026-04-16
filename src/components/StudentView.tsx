@@ -282,6 +282,20 @@ const styles = {
     background: "#000000",
     marginTop: "12px",
   },
+  portraitVideoPreview: {
+    width: "100%",
+    maxWidth: "340px",
+    aspectRatio: "9 / 16",
+    margin: "0 auto",
+    borderRadius: "22px",
+    border: "1px solid #cbd5e1",
+    background: "#000000",
+    overflow: "hidden" as const,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 12px 28px rgba(15, 23, 42, 0.22)",
+  },
 } as const;
 
 function chooseSupportedMimeType() {
@@ -409,7 +423,12 @@ export default function StudentView() {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: {
+          facingMode: { ideal: "user" },
+          width: { ideal: 720 },
+          height: { ideal: 1280 },
+          aspectRatio: { ideal: 9 / 16 },
+        },
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
       videoStreamRef.current = stream;
@@ -1141,19 +1160,24 @@ export default function StudentView() {
             </div>
             <div
               style={{
-                ...styles.videoPreview,
-                marginTop: 0,
-                aspectRatio: "16 / 9",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                overflow: "hidden",
+                ...styles.portraitVideoPreview,
               }}
             >
               {recordedVideoUrl ? (
-                <video src={recordedVideoUrl} controls playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <video
+                  src={recordedVideoUrl}
+                  controls
+                  playsInline
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                />
               ) : (
-                <video ref={livePreviewVideoRef} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                <video
+                  ref={livePreviewVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+                />
               )}
             </div>
 
