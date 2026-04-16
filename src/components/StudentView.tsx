@@ -341,6 +341,7 @@ export default function StudentView() {
   const videoRecorderRef = useRef<MediaRecorder | null>(null);
   const videoStreamRef = useRef<MediaStream | null>(null);
   const videoChunksRef = useRef<BlobPart[]>([]);
+  const livePreviewVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const [studentCode, setStudentCode] = useState("");
   const [rosterStudent, setRosterStudent] = useState<StudentRosterRow | null>(null);
@@ -383,7 +384,53 @@ export default function StudentView() {
       videoStreamRef.current.getTracks().forEach((track) => track.stop());
       videoStreamRef.current = null;
     }
+    if (livePreviewVideoRef.current) {
+      livePreviewVideoRef.current.srcObject = null;
+    }
   }, []);
+
+  const initializeVideoPreview = useCallback(async () => {
+    if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setVideoErrorMessage("This browser does not support in-app video recording. Please use a newer browser.");
+      return null;
+    }
+
+    try {
+      if (videoStreamRef.current) {
+        if (livePreviewVideoRef.current) {
+          livePreviewVideoRef.current.srcObject = videoStreamRef.current;
+          try {
+            await livePreviewVideoRef.current.play();
+          } catch {
+            // Ignore autoplay errors until user interaction.
+          }
+        }
+        return videoStreamRef.current;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      videoStreamRef.current = stream;
+
+      if (livePreviewVideoRef.current) {
+        livePreviewVideoRef.current.srcObject = stream;
+        try {
+          await livePreviewVideoRef.current.play();
+        } catch {
+          // Ignore autoplay errors until user interaction.
+        }
+      }
+
+      setVideoErrorMessage("");
+      return stream;
+    } catch (error: any) {
+      setVideoErrorMessage(error?.message || "Camera/microphone access failed.");
+      stopVideoTracks();
+      return null;
+    }
+  }, [stopVideoTracks]);
 
   useEffect(() => {
     void fetchActivePrompt();
@@ -398,6 +445,19 @@ export default function StudentView() {
       }
     };
   }, [stopTracks, stopVideoTracks, recordedAudioUrl, recordedVideoUrl]);
+
+  useEffect(() => {
+    if (!rosterStudent || !projectVideoUpdatesEnabled || recordedVideoUrl) {
+      return;
+    }
+    void initializeVideoPreview();
+  }, [rosterStudent, projectVideoUpdatesEnabled, recordedVideoUrl, initializeVideoPreview]);
+
+  useEffect(() => {
+    if (rosterStudent && projectVideoUpdatesEnabled) return;
+    stopVideoTracks();
+    setIsRecordingVideo(false);
+  }, [rosterStudent, projectVideoUpdatesEnabled, stopVideoTracks]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -784,20 +844,13 @@ export default function StudentView() {
     setVideoErrorMessage("");
     setVideoStatusMessage("");
     if (isRecordingVideo) return;
-    if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setVideoErrorMessage("This browser does not support in-app video recording. Please use a newer browser.");
-      return;
-    }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      const stream = (await initializeVideoPreview()) || videoStreamRef.current;
+      if (!stream) return;
 
       const mimeType = chooseSupportedVideoMimeType();
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      videoStreamRef.current = stream;
       videoRecorderRef.current = recorder;
       videoChunksRef.current = [];
       setVideoMimeType(recorder.mimeType || mimeType || "");
@@ -867,11 +920,14 @@ export default function StudentView() {
   }
 
   function clearUnsubmittedVideo() {
+    stopVideoTracks();
+    videoRecorderRef.current = null;
+    videoChunksRef.current = [];
     setRecordedVideoBlob(null);
     if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
     setRecordedVideoUrl("");
     setVideoMimeType("");
-    setVideoStatusMessage("Video discarded. You can record again.");
+    setVideoStatusMessage("Video cleared. You can start a new recording.");
     setVideoErrorMessage("");
   }
 
@@ -1080,60 +1136,83 @@ export default function StudentView() {
             <div style={{ ...styles.helperText, color: "#4338ca", marginTop: "-4px", marginBottom: "12px" }}>
               Use this to send a weekly progress update for your project.
             </div>
-
-            <button
-              type="button"
-              onClick={isRecordingVideo ? stopVideoRecording : () => void startVideoRecording()}
-              disabled={isSubmittingVideo}
+            <div style={{ ...styles.cardTitle, color: "#4338ca", marginBottom: "8px" }}>
+              {recordedVideoUrl ? "Recorded preview" : "Camera preview"}
+            </div>
+            <div
               style={{
-                ...styles.submitButton,
-                minHeight: "64px",
-                fontSize: "21px",
-                marginTop: "6px",
-                background: isRecordingVideo ? "#dc2626" : "#312e81",
-                opacity: isSubmittingVideo ? 0.6 : 1,
-                cursor: isSubmittingVideo ? "not-allowed" : "pointer",
-                boxShadow: "none",
+                ...styles.videoPreview,
+                marginTop: 0,
+                aspectRatio: "16 / 9",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                overflow: "hidden",
               }}
             >
-              {isRecordingVideo ? "Stop video recording" : "Record project video"}
-            </button>
+              {recordedVideoUrl ? (
+                <video src={recordedVideoUrl} controls playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ) : (
+                <video ref={livePreviewVideoRef} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              )}
+            </div>
 
-            {recordedVideoUrl ? (
-              <>
-                <video src={recordedVideoUrl} controls playsInline style={styles.videoPreview} />
-                <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
-                  <button
-                    type="button"
-                    onClick={clearUnsubmittedVideo}
-                    disabled={isRecordingVideo || isSubmittingVideo}
-                    style={{
-                      ...styles.secondaryButton,
-                      flex: 1,
-                      minHeight: "50px",
-                      opacity: isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
-                      cursor: isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    Record again
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void submitProjectVideo()}
-                    disabled={isRecordingVideo || isSubmittingVideo}
-                    style={{
-                      ...styles.primaryButton,
-                      flex: 1,
-                      minHeight: "50px",
-                      opacity: isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
-                      cursor: isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {isSubmittingVideo ? "Submitting..." : "Submit video"}
-                  </button>
-                </div>
-              </>
-            ) : null}
+            <div style={{ display: "grid", gap: "10px", marginTop: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
+              <button
+                type="button"
+                onClick={() => void startVideoRecording()}
+                disabled={isRecordingVideo || isSubmittingVideo}
+                style={{
+                  ...styles.primaryButton,
+                  minHeight: "50px",
+                  opacity: isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
+                  cursor: isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
+                }}
+              >
+                Start recording
+              </button>
+              <button
+                type="button"
+                onClick={stopVideoRecording}
+                disabled={!isRecordingVideo || isSubmittingVideo}
+                style={{
+                  ...styles.submitButton,
+                  minHeight: "50px",
+                  background: "#dc2626",
+                  boxShadow: "none",
+                  opacity: !isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
+                  cursor: !isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
+                }}
+              >
+                Stop recording
+              </button>
+              <button
+                type="button"
+                onClick={clearUnsubmittedVideo}
+                disabled={isRecordingVideo || isSubmittingVideo}
+                style={{
+                  ...styles.secondaryButton,
+                  minHeight: "50px",
+                  opacity: isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
+                  cursor: isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
+                }}
+              >
+                Re-record / Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitProjectVideo()}
+                disabled={!recordedVideoUrl || isRecordingVideo || isSubmittingVideo}
+                style={{
+                  ...styles.primaryButton,
+                  minHeight: "50px",
+                  opacity: !recordedVideoUrl || isRecordingVideo || isSubmittingVideo ? 0.6 : 1,
+                  cursor: !recordedVideoUrl || isRecordingVideo || isSubmittingVideo ? "not-allowed" : "pointer",
+                }}
+              >
+                {isSubmittingVideo ? "Submitting..." : "Submit video"}
+              </button>
+            </div>
 
             {videoStatusMessage ? <div style={{ ...styles.message, color: "#4338ca", marginTop: "10px" }}>{videoStatusMessage}</div> : null}
             {videoErrorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{videoErrorMessage}</div> : null}
