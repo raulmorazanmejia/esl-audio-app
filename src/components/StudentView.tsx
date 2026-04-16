@@ -69,7 +69,6 @@ const ACTIVE_PROMPT_SELECT = "id, prompt_text, suggested_time, prompt_image_path
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 const PROJECT_VIDEO_SUBMISSION_SELECT = "id, student_name, student_code, class_name, video_path, video_url, created_at";
-const PREVIEW_SCALE = 0.85;
 
 const styles = {
   page: {
@@ -1174,8 +1173,6 @@ export default function StudentView() {
                     height: "100%",
                     objectFit: "cover",
                     objectPosition: "center",
-                    transform: `scale(${PREVIEW_SCALE})`,
-                    transformOrigin: "center",
                     backgroundColor: "#000",
                   }}
                 />
@@ -1190,8 +1187,6 @@ export default function StudentView() {
                     height: "100%",
                     objectFit: "cover",
                     objectPosition: "center",
-                    transform: `scale(${PREVIEW_SCALE})`,
-                    transformOrigin: "center",
                     backgroundColor: "#000",
                   }}
                 />
