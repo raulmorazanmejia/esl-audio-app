@@ -285,7 +285,7 @@ const styles = {
   portraitVideoPreview: {
     width: "100%",
     maxWidth: "340px",
-    aspectRatio: "9 / 16",
+    aspectRatio: "3 / 4",
     margin: "0 auto",
     borderRadius: "22px",
     border: "1px solid #cbd5e1",
@@ -1168,7 +1168,7 @@ export default function StudentView() {
                   src={recordedVideoUrl}
                   controls
                   playsInline
-                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", backgroundColor: "#000" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", backgroundColor: "#000" }}
                 />
               ) : (
                 <video
@@ -1176,7 +1176,7 @@ export default function StudentView() {
                   autoPlay
                   muted
                   playsInline
-                  style={{ width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", backgroundColor: "#000" }}
+                  style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", backgroundColor: "#000" }}
                 />
               )}
             </div>
