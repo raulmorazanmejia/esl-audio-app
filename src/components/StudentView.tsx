@@ -5,6 +5,7 @@ import ReliableAudioPlayer from "./ReliableAudioPlayer";
 type PromptRow = {
   id: string;
   prompt_text: string | null;
+  class_name: string | null;
   suggested_time: string | null;
   prompt_image_path: string | null;
   prompt_image_url: string | null;
@@ -65,7 +66,7 @@ type AnalyzeResponse = {
   error?: string;
 };
 
-const ACTIVE_PROMPT_SELECT = "id, prompt_text, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at";
+const PROMPT_SELECT = "id, prompt_text, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at";
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 const PROJECT_VIDEO_SUBMISSION_SELECT = "id, student_name, student_code, class_name, video_path, video_url, created_at";
@@ -158,6 +159,38 @@ const styles = {
     objectFit: "cover" as const,
     marginBottom: "14px",
   },
+  taskList: {
+    marginTop: "20px",
+    display: "grid",
+    gap: "10px",
+  },
+  taskButton: {
+    width: "100%",
+    borderRadius: "16px",
+    border: "1px solid #dbe3f0",
+    background: "#f8fafc",
+    padding: "12px",
+    textAlign: "left" as const,
+    cursor: "pointer",
+    display: "grid",
+    gap: "6px",
+  },
+  taskTitle: {
+    fontSize: "16px",
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  taskMeta: {
+    fontSize: "13px",
+    color: "#64748b",
+  },
+  taskThumb: {
+    width: "64px",
+    height: "64px",
+    borderRadius: "10px",
+    border: "1px solid #cbd5e1",
+    objectFit: "cover" as const,
+  },
   micButton: {
     width: "165px",
     height: "165px",
@@ -234,6 +267,17 @@ const styles = {
     border: "none",
     background: "#312e81",
     color: "#ffffff",
+    fontSize: "16px",
+    fontWeight: 800,
+    cursor: "pointer",
+    padding: "0 18px",
+  },
+  secondaryButton: {
+    minHeight: "50px",
+    borderRadius: "16px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#334155",
     fontSize: "16px",
     fontWeight: 800,
     cursor: "pointer",
@@ -359,8 +403,10 @@ export default function StudentView() {
 
   const [studentCode, setStudentCode] = useState("");
   const [rosterStudent, setRosterStudent] = useState<StudentRosterRow | null>(null);
-  const [activePrompt, setActivePrompt] = useState<PromptRow | null>(null);
+  const [assignedPrompts, setAssignedPrompts] = useState<PromptRow[]>([]);
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [submissionForActivePrompt, setSubmissionForActivePrompt] = useState<SubmissionRow | null>(null);
+  const [completedPromptTexts, setCompletedPromptTexts] = useState<string[]>([]);
   const [projectVideoUpdatesEnabled, setProjectVideoUpdatesEnabled] = useState(false);
   const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
 
@@ -384,6 +430,10 @@ export default function StudentView() {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState("");
   const [videoMimeType, setVideoMimeType] = useState("");
 
+  const activePrompt = useMemo(() => {
+    if (!selectedPromptId) return null;
+    return assignedPrompts.find((prompt) => prompt.id === selectedPromptId) || null;
+  }, [assignedPrompts, selectedPromptId]);
   const teacherAudioUrl = useMemo(() => currentTeacherAudio(submissionForActivePrompt), [submissionForActivePrompt]);
   const hasSubmittedActivePrompt = Boolean(submissionForActivePrompt);
   const latestProjectVideoSubmission = useMemo(() => projectVideoSubmissions[0] || null, [projectVideoSubmissions]);
@@ -455,7 +505,6 @@ export default function StudentView() {
   }, [stopVideoTracks]);
 
   useEffect(() => {
-    void fetchActivePrompt();
     return () => {
       stopTracks();
       stopVideoTracks();
@@ -502,18 +551,50 @@ export default function StudentView() {
     };
   }, [isRecording]);
 
-  async function fetchActivePrompt() {
+  async function fetchAssignedPrompts(classNameValue: string) {
+    const className = classNameValue.trim();
     const { data, error } = await supabase
       .from("prompts")
-      .select(ACTIVE_PROMPT_SELECT)
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .select(PROMPT_SELECT)
+      .order("created_at", { ascending: false });
 
-    if (!error && data) {
-      setActivePrompt(data as PromptRow);
+    if (error) {
+      setAssignedPrompts([]);
+      setSelectedPromptId(null);
+      return [];
     }
+
+    const rows = ((data ?? []) as PromptRow[]).filter((row) => {
+      const promptClassName = row.class_name?.trim() || "";
+      return !promptClassName || promptClassName === className;
+    });
+
+    setAssignedPrompts(rows);
+    const preferredPrompt = rows.find((row) => row.is_active) || rows[0] || null;
+    setSelectedPromptId(preferredPrompt?.id ?? null);
+    return rows;
+  }
+
+  async function fetchCompletedPromptTexts(codeValue: string) {
+    const code = codeValue.trim();
+    if (!code) {
+      setCompletedPromptTexts([]);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("student_submissions")
+      .select("prompt_text")
+      .eq("student_code", code);
+
+    if (error) {
+      setCompletedPromptTexts([]);
+      return;
+    }
+
+    const completed = Array.from(
+      new Set((data ?? []).map((row: { prompt_text: string | null }) => row.prompt_text?.trim() || "").filter((value) => value.length > 0))
+    );
+    setCompletedPromptTexts(completed);
   }
 
   async function lookupStudent() {
@@ -544,6 +625,9 @@ export default function StudentView() {
 
     if (!rosterData) {
       setRosterStudent(null);
+      setAssignedPrompts([]);
+      setSelectedPromptId(null);
+      setCompletedPromptTexts([]);
       setSubmissionForActivePrompt(null);
       setProjectVideoUpdatesEnabled(false);
       setProjectVideoSubmissions([]);
@@ -554,6 +638,8 @@ export default function StudentView() {
     const rosterRow = rosterData as StudentRosterRow;
     setRosterStudent(rosterRow);
     setStatusMessage(`Welcome, ${rosterRow.student_name}`);
+    await fetchCompletedPromptTexts(code);
+    await fetchAssignedPrompts(rosterRow.class_name?.trim() || "");
 
     const className = rosterRow.class_name?.trim() ?? "";
     if (className) {
@@ -852,6 +938,7 @@ export default function StudentView() {
       if (error) throw error;
 
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
+      await fetchCompletedPromptTexts(code);
       setStatusMessage("Done ✅");
       setRecordedBlob(null);
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
@@ -1058,6 +1145,7 @@ export default function StudentView() {
   const micLabel = isRecording ? "Recording..." : "Start recording";
   const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
+  const hasVisiblePrompts = assignedPrompts.length > 0;
 
   function discardUnsubmittedRecording() {
     setRecordedBlob(null);
@@ -1076,6 +1164,9 @@ export default function StudentView() {
           onChange={(e) => {
             setStudentCode(e.target.value.toUpperCase());
             setRosterStudent(null);
+            setAssignedPrompts([]);
+            setSelectedPromptId(null);
+            setCompletedPromptTexts([]);
             setSubmissionForActivePrompt(null);
             setProjectVideoUpdatesEnabled(false);
             setProjectVideoSubmissions([]);
@@ -1096,11 +1187,48 @@ export default function StudentView() {
           <div style={{ ...styles.message, color: "#0f766e", fontWeight: 800 }}>Welcome, {rosterStudent.student_name}</div>
         ) : null}
 
+        <div style={styles.sectionTitle}>Your Tasks</div>
+
+        {rosterStudent ? (
+          hasVisiblePrompts ? (
+            <div style={styles.taskList}>
+              {assignedPrompts.map((prompt) => {
+                const promptText = prompt.prompt_text?.trim() || "";
+                const isCompleted = promptText ? completedPromptTexts.includes(promptText) : false;
+                const isSelected = selectedPromptId === prompt.id;
+                return (
+                  <button
+                    key={prompt.id}
+                    type="button"
+                    onClick={() => setSelectedPromptId(prompt.id)}
+                    style={{
+                      ...styles.taskButton,
+                      background: isSelected ? "#eef2ff" : "#f8fafc",
+                      borderColor: isSelected ? "#818cf8" : "#dbe3f0",
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                      {prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Task thumbnail" style={styles.taskThumb} /> : null}
+                      <div style={{ display: "grid", gap: "4px", flex: 1 }}>
+                        <div style={styles.taskTitle}>{prompt.prompt_text || "Untitled prompt"}</div>
+                        {prompt.suggested_time ? <div style={styles.taskMeta}>Suggested time: {prompt.suggested_time}</div> : null}
+                        <div style={styles.taskMeta}>{isCompleted ? "✅ Completed" : "⏳ Not submitted yet"}</div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={styles.helperText}>No prompts are assigned to your class yet.</div>
+          )
+        ) : null}
+
         <div style={styles.sectionTitle}>Speaking Task</div>
 
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Speaking task image prompt" style={styles.promptImage} /> : null}
         <div style={styles.promptCard}>
-          “{activePrompt?.prompt_text || "Loading prompt..."}”
+          “{activePrompt?.prompt_text || "Select a task above"}”
         </div>
         {activePrompt?.suggested_time ? (
           <div style={{ textAlign: "center" }}>
@@ -1111,11 +1239,11 @@ export default function StudentView() {
         <button
           type="button"
           onClick={isRecording ? stopRecording : () => void startRecording()}
-          disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent}
+          disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
           style={{
             ...styles.micButton,
-            opacity: isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? 0.55 : 1,
-            cursor: isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? "not-allowed" : "pointer",
+            opacity: isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? 0.55 : 1,
+            cursor: isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? "not-allowed" : "pointer",
             boxShadow: isRecording
               ? `0 0 0 10px rgba(239, 68, 68, ${pulseVisible ? 0.14 : 0.06}), 0 18px 36px rgba(99, 102, 241, 0.24)`
               : styles.micButton.boxShadow,
@@ -1144,7 +1272,7 @@ export default function StudentView() {
             <button
               type="button"
               onClick={discardUnsubmittedRecording}
-              disabled={isRecording || isSubmitting || hasSubmittedActivePrompt}
+              disabled={isRecording || isSubmitting || hasSubmittedActivePrompt || !activePrompt}
               style={{
                 ...styles.submitButton,
                 minHeight: "62px",
@@ -1154,8 +1282,8 @@ export default function StudentView() {
                 color: "#0f172a",
                 boxShadow: "none",
                 border: "1px solid #cbd5e1",
-                opacity: isRecording || isSubmitting || hasSubmittedActivePrompt ? 0.6 : 1,
-                cursor: isRecording || isSubmitting || hasSubmittedActivePrompt ? "not-allowed" : "pointer",
+                opacity: isRecording || isSubmitting || hasSubmittedActivePrompt || !activePrompt ? 0.6 : 1,
+                cursor: isRecording || isSubmitting || hasSubmittedActivePrompt || !activePrompt ? "not-allowed" : "pointer",
               }}
             >
               Record again
@@ -1174,18 +1302,19 @@ export default function StudentView() {
         <button
           type="button"
           onClick={() => void submitRecording()}
-          disabled={!recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent}
+          disabled={!recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
           style={{
             ...styles.submitButton,
-            opacity: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? 0.6 : 1,
-            cursor: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent ? "not-allowed" : "pointer",
+            opacity: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? 0.6 : 1,
+            cursor: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? "not-allowed" : "pointer",
             marginTop: "22px",
           }}
         >
           {isSubmitting ? "Submitting..." : "Submit"}
         </button>
         {!rosterStudent ? <div style={styles.helperText}>Enter your assigned code to start.</div> : null}
-        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent ? <div style={styles.helperText}>Record your answer first.</div> : null}
+        {rosterStudent && !activePrompt ? <div style={styles.helperText}>Select a task above to start recording.</div> : null}
+        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent && activePrompt ? <div style={styles.helperText}>Record your answer first.</div> : null}
 
         {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
