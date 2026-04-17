@@ -532,6 +532,7 @@ export default function TeacherDashboard() {
   const [promptAssignmentDrafts, setPromptAssignmentDrafts] = useState<Record<string, string>>({});
   const [savingPromptAssignmentById, setSavingPromptAssignmentById] = useState<Record<string, boolean>>({});
   const [savingPromptVisibilityById, setSavingPromptVisibilityById] = useState<Record<string, boolean>>({});
+  const [deletingPromptById, setDeletingPromptById] = useState<Record<string, boolean>>({});
   const [promptListFilter, setPromptListFilter] = useState("__all_prompts__");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClassName, setSelectedClassName] = useState("");
@@ -543,10 +544,13 @@ export default function TeacherDashboard() {
   const [rosterSuccess, setRosterSuccess] = useState("");
   const [classVideoSettings, setClassVideoSettings] = useState<Record<string, boolean>>({});
   const [isSavingClassVideoSetting, setIsSavingClassVideoSetting] = useState(false);
+  const [isDeletingClass, setIsDeletingClass] = useState(false);
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [submissionsError, setSubmissionsError] = useState("");
+  const [submissionsSuccess, setSubmissionsSuccess] = useState("");
+  const [deletingSubmissionById, setDeletingSubmissionById] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<DraftsById>({});
   const [expandedSubmissionIds, setExpandedSubmissionIds] = useState<Record<string, boolean>>({});
   const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
@@ -653,6 +657,12 @@ export default function TeacherDashboard() {
     const timer = window.setTimeout(() => setPromptSuccess(""), 2800);
     return () => window.clearTimeout(timer);
   }, [promptSuccess]);
+
+  useEffect(() => {
+    if (!submissionsSuccess) return;
+    const timer = window.setTimeout(() => setSubmissionsSuccess(""), 2800);
+    return () => window.clearTimeout(timer);
+  }, [submissionsSuccess]);
 
   const hydrateDrafts = useCallback((rows: SubmissionRow[]) => {
     setDrafts((prev) => {
@@ -867,6 +877,42 @@ export default function TeacherDashboard() {
     await fetchPrompts();
   }
 
+  async function handleDeletePrompt(prompt: PromptRow) {
+    if (deletingPromptById[prompt.id]) return;
+    const label = prompt.prompt_text?.trim() || "this prompt";
+    const confirmed = window.confirm(`Delete prompt "${label}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setPromptError("");
+    setPromptSuccess("");
+    setDeletingPromptById((prev) => ({ ...prev, [prompt.id]: true }));
+
+    try {
+      if (prompt.prompt_image_path) {
+        const { error: removeImageError } = await supabase.storage.from(PROMPT_IMAGES_BUCKET).remove([prompt.prompt_image_path]);
+        if (removeImageError) {
+          throw removeImageError;
+        }
+      }
+
+      const { error } = await supabase.from("prompts").delete().eq("id", prompt.id);
+      if (error) throw error;
+
+      setPrompts((prev) => prev.filter((row) => row.id !== prompt.id));
+      setPromptAssignmentDrafts((prev) => {
+        if (!Object.prototype.hasOwnProperty.call(prev, prompt.id)) return prev;
+        const next = { ...prev };
+        delete next[prompt.id];
+        return next;
+      });
+      setPromptSuccess("Prompt deleted.");
+    } catch (error: any) {
+      setPromptError(error?.message || "Could not delete prompt.");
+    } finally {
+      setDeletingPromptById((prev) => ({ ...prev, [prompt.id]: false }));
+    }
+  }
+
   async function handleAddStudent() {
     if (isSavingStudent) return;
     const className = selectedClassName.trim();
@@ -934,6 +980,47 @@ export default function TeacherDashboard() {
     setClassVideoSettings((prev) => ({ ...prev, [className]: nextEnabled }));
     setRosterSuccess(`Project update video ${nextEnabled ? "enabled" : "disabled"} for ${className}.`);
     setIsSavingClassVideoSetting(false);
+  }
+
+  async function handleDeleteSelectedClass() {
+    const className = selectedClassName.trim();
+    if (!className || isDeletingClass) return;
+
+    const assignedStudents = students.filter((student) => (student.class_name?.trim() ?? "") === className);
+    if (assignedStudents.length > 0) {
+      setRosterError(`Cannot delete "${className}" while ${assignedStudents.length} student(s) are still assigned.`);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete class "${className}"? This removes class settings and unassigns prompts currently linked to this class.`
+    );
+    if (!confirmed) return;
+
+    setIsDeletingClass(true);
+    setRosterError("");
+    setRosterSuccess("");
+
+    try {
+      const { error: promptError } = await supabase.from("prompts").update({ class_name: null }).eq("class_name", className);
+      if (promptError) throw promptError;
+
+      const { error: settingsError } = await supabase.from("class_video_settings").delete().eq("class_name", className);
+      if (settingsError) throw settingsError;
+
+      setClassVideoSettings((prev) => {
+        const next = { ...prev };
+        delete next[className];
+        return next;
+      });
+      setSelectedClassName("");
+      setRosterSuccess(`Class "${className}" deleted.`);
+      await fetchPrompts();
+    } catch (error: any) {
+      setRosterError(error?.message || "Could not delete class.");
+    } finally {
+      setIsDeletingClass(false);
+    }
   }
 
   function updateStudentDraft(id: string, patch: Partial<StudentRow>) {
@@ -1177,6 +1264,52 @@ export default function TeacherDashboard() {
     }
   }
 
+  async function handleDeleteSubmission(submission: SubmissionRow) {
+    if (deletingSubmissionById[submission.id]) return;
+    const label = submission.student_code || submission.student_name || submission.id;
+    const confirmed = window.confirm(`Delete submission for "${label}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setSubmissionsError("");
+    setSubmissionsSuccess("");
+    setDeletingSubmissionById((prev) => ({ ...prev, [submission.id]: true }));
+
+    try {
+      if (submission.audio_path) {
+        const { error: studentAudioError } = await supabase.storage.from("student-audio-oai").remove([submission.audio_path]);
+        if (studentAudioError) throw studentAudioError;
+      }
+      if (submission.feedback_audio_path) {
+        const { error: teacherAudioError } = await supabase.storage.from("teacher-audio-oai").remove([submission.feedback_audio_path]);
+        if (teacherAudioError) throw teacherAudioError;
+      }
+
+      const { error } = await supabase.from("student_submissions").delete().eq("id", submission.id);
+      if (error) throw error;
+
+      setSubmissions((prev) => prev.filter((row) => row.id !== submission.id));
+      setDrafts((prev) => {
+        const existing = prev[submission.id];
+        if (!existing) return prev;
+        if (existing.teacherPreviewUrl) URL.revokeObjectURL(existing.teacherPreviewUrl);
+        const next = { ...prev };
+        delete next[submission.id];
+        return next;
+      });
+      setExpandedSubmissionIds((prev) => {
+        if (!Object.prototype.hasOwnProperty.call(prev, submission.id)) return prev;
+        const next = { ...prev };
+        delete next[submission.id];
+        return next;
+      });
+      setSubmissionsSuccess("Submission deleted.");
+    } catch (error: any) {
+      setSubmissionsError(error?.message || "Could not delete submission.");
+    } finally {
+      setDeletingSubmissionById((prev) => ({ ...prev, [submission.id]: false }));
+    }
+  }
+
   return (
     <div style={styles.page}>
       <style>{`
@@ -1205,7 +1338,7 @@ export default function TeacherDashboard() {
                   </option>
                 ))}
               </select>
-              <div style={{ ...styles.helper, marginTop: "8px" }}>Need a new class/group? Add it below, then click Use.</div>
+              <div style={{ ...styles.helper, marginTop: "8px" }}>Need a new class/group? Add it below, then click Select.</div>
               {selectedClassName ? (
                 <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
                   <div style={styles.helper}>
@@ -1227,6 +1360,19 @@ export default function TeacherDashboard() {
                   >
                     {isSavingClassVideoSetting ? "Saving..." : selectedClassVideoEnabled ? "Disable project video updates" : "Enable project video updates"}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteSelectedClass()}
+                    disabled={isDeletingClass}
+                    style={clampButton(isDeletingClass, {
+                      ...styles.secondaryButton,
+                      minHeight: "42px",
+                      borderColor: "#fecaca",
+                      color: "#b91c1c",
+                    })}
+                  >
+                    {isDeletingClass ? "Deleting..." : "Delete class"}
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -1242,7 +1388,7 @@ export default function TeacherDashboard() {
                 onClick={handleUseNewClass}
                 style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
               >
-                Use
+                Select
               </button>
             </div>
             <div style={styles.rosterGrid}>
@@ -1451,6 +1597,7 @@ export default function TeacherDashboard() {
               const assignmentValue = promptAssignmentDrafts[prompt.id] ?? (prompt.class_name?.trim() || "");
               const isSavingAssignment = Boolean(savingPromptAssignmentById[prompt.id]);
               const isSavingVisibility = Boolean(savingPromptVisibilityById[prompt.id]);
+              const isDeletingPrompt = Boolean(deletingPromptById[prompt.id]);
               return (
                 <div
                   key={prompt.id}
@@ -1502,6 +1649,18 @@ export default function TeacherDashboard() {
                           })}
                         >
                           {isSavingVisibility ? "Saving..." : isVisible ? "Hide from students" : "Show to students"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeletePrompt(prompt)}
+                          disabled={isDeletingPrompt}
+                          style={clampButton(isDeletingPrompt, {
+                            ...styles.promptAssignmentButton,
+                            borderColor: "#fecaca",
+                            color: "#b91c1c",
+                          })}
+                        >
+                          {isDeletingPrompt ? "Deleting..." : "Delete prompt"}
                         </button>
                       </div>
                     </div>
@@ -1578,6 +1737,11 @@ export default function TeacherDashboard() {
               </div>
             </div>
 
+            {submissionsSuccess ? (
+              <div style={{ ...styles.success, marginBottom: "12px", padding: "10px 12px", borderRadius: "12px", background: "#ecfeff", border: "1px solid #99f6e4" }}>
+                {submissionsSuccess}
+              </div>
+            ) : null}
             {submissionsError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{submissionsError}</div> : null}
 
             <div style={styles.submissionsScroller}>
@@ -1586,6 +1750,7 @@ export default function TeacherDashboard() {
                 const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
                 const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
                 const isExpanded = Boolean(expandedSubmissionIds[submission.id]);
+                const isDeletingSubmission = Boolean(deletingSubmissionById[submission.id]);
                 const scoreSummary = submission.teacher_score ?? submission.ai_score;
                 const scoreSource = submission.teacher_score != null ? "Teacher score" : submission.ai_score != null ? "AI score" : "";
 
@@ -1745,6 +1910,23 @@ export default function TeacherDashboard() {
                           ) : !draft.teacherPreviewUrl ? (
                             <div style={styles.helper}>{buildAudioLabel(savedTeacherAudioUrl)}</div>
                           ) : null}
+                        </div>
+
+                        <div style={styles.sectionBox}>
+                          <div style={{ ...styles.sectionTitle, color: "#b91c1c" }}>Danger zone</div>
+                          <div style={{ ...styles.helper, marginBottom: "10px" }}>Delete this submission only if it is old or invalid.</div>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteSubmission(submission)}
+                            disabled={isDeletingSubmission}
+                            style={clampButton(isDeletingSubmission, {
+                              ...styles.secondaryButton,
+                              borderColor: "#fecaca",
+                              color: "#b91c1c",
+                            })}
+                          >
+                            {isDeletingSubmission ? "Deleting..." : "Delete submission"}
+                          </button>
                         </div>
                       </>
                     ) : null}
