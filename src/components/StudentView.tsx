@@ -566,11 +566,12 @@ export default function StudentView() {
 
     const rows = ((data ?? []) as PromptRow[]).filter((row) => {
       const promptClassName = row.class_name?.trim() || "";
-      return !promptClassName || promptClassName === className;
+      if (!className) return false;
+      return promptClassName === className && Boolean(row.is_active);
     });
 
     setAssignedPrompts(rows);
-    const preferredPrompt = rows.find((row) => row.is_active) || rows[0] || null;
+    const preferredPrompt = rows[0] || null;
     setSelectedPromptId(preferredPrompt?.id ?? null);
     return rows;
   }
@@ -1220,7 +1221,7 @@ export default function StudentView() {
               })}
             </div>
           ) : (
-            <div style={styles.helperText}>No prompts are assigned to your class yet.</div>
+            <div style={styles.helperText}>No visible prompts are assigned to your class right now.</div>
           )
         ) : null}
 
