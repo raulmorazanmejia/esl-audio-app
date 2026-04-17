@@ -105,12 +105,24 @@ const styles = {
     padding: "28px",
   },
   panelLabel: {
-    fontSize: "13px",
+    fontSize: "12px",
     fontWeight: 900,
     textTransform: "uppercase" as const,
-    letterSpacing: "0.14em",
-    color: "#94a3b8",
-    marginBottom: "18px",
+    letterSpacing: "0.16em",
+    color: "#64748b",
+    marginBottom: "8px",
+  },
+  panelHeading: {
+    fontSize: "24px",
+    fontWeight: 900,
+    color: "#0f172a",
+    marginBottom: "6px",
+    lineHeight: 1.2,
+  },
+  panelDescription: {
+    fontSize: "14px",
+    color: "#64748b",
+    marginBottom: "14px",
   },
   promptInputRow: {
     display: "flex",
@@ -165,32 +177,57 @@ const styles = {
   promptCard: {
     borderRadius: "20px",
     border: "1px solid #e2e8f0",
-    padding: "14px",
-    marginBottom: "10px",
+    padding: "16px",
+    marginBottom: "14px",
   },
   promptTitle: {
-    fontSize: "16px",
+    fontSize: "17px",
     fontWeight: 800,
-    lineHeight: 1.25,
-    marginBottom: "0",
+    lineHeight: 1.3,
+    marginBottom: "2px",
   },
   promptMeta: {
     fontSize: "12px",
     lineHeight: 1.3,
     color: "#94a3b8",
-    marginTop: "4px",
+    marginTop: "0",
   },
   promptHeader: {
     display: "flex",
     justifyContent: "space-between",
     gap: "10px",
-    alignItems: "center" as const,
-    marginBottom: "8px",
+    alignItems: "flex-start" as const,
+    marginBottom: "10px",
+  },
+  promptInfoWrap: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "8px",
+  },
+  promptBadgeRow: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap" as const,
+    gap: "6px",
+    marginTop: "2px",
+  },
+  promptBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "999px",
+    border: "1px solid #cbd5e1",
+    padding: "4px 10px",
+    fontSize: "11px",
+    fontWeight: 800,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase" as const,
+    background: "#ffffff",
+    color: "#475569",
   },
   promptStatusBadge: {
     borderRadius: "999px",
-    padding: "6px 10px",
-    fontSize: "12px",
+    padding: "5px 10px",
+    fontSize: "11px",
     fontWeight: 800,
     letterSpacing: "0.04em",
     textTransform: "uppercase" as const,
@@ -202,6 +239,8 @@ const styles = {
     gap: "8px",
     marginTop: "8px",
     flexWrap: "wrap" as const,
+    paddingTop: "8px",
+    borderTop: "1px solid #e2e8f0",
   },
   promptAssignmentSelect: {
     minHeight: "34px",
@@ -220,6 +259,17 @@ const styles = {
     background: "#ffffff",
     color: "#334155",
     fontSize: "13px",
+    fontWeight: 700,
+    padding: "0 10px",
+    cursor: "pointer",
+  },
+  promptDeleteButton: {
+    minHeight: "34px",
+    borderRadius: "10px",
+    border: "1px solid #fecaca",
+    background: "#fff7f7",
+    color: "#b91c1c",
+    fontSize: "12px",
     fontWeight: 700,
     padding: "0 10px",
     cursor: "pointer",
@@ -287,15 +337,22 @@ const styles = {
     letterSpacing: "0.08em",
     color: "#64748b",
     background: "#f8fafc",
-    padding: "10px 12px",
+    padding: "11px 12px",
     borderBottom: "1px solid #e2e8f0",
   },
   rosterTd: {
-    padding: "10px 12px",
+    padding: "11px 12px",
     borderBottom: "1px solid #e2e8f0",
     verticalAlign: "middle" as const,
     fontSize: "14px",
     color: "#1e293b",
+  },
+  rosterSummaryCard: {
+    marginTop: "12px",
+    borderRadius: "14px",
+    border: "1px solid #dbe3f0",
+    background: "#f8fafc",
+    padding: "10px 12px 12px",
   },
   submissionsScroller: {
     maxHeight: "78vh",
@@ -338,6 +395,18 @@ const styles = {
     fontWeight: 800,
     textTransform: "uppercase" as const,
     letterSpacing: "0.05em",
+  },
+  reviewStatePill: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "999px",
+    border: "1px solid #cbd5e1",
+    padding: "6px 12px",
+    fontSize: "12px",
+    fontWeight: 800,
+    letterSpacing: "0.05em",
+    textTransform: "uppercase" as const,
   },
   promptBanner: {
     marginTop: "18px",
@@ -1323,7 +1392,8 @@ export default function TeacherDashboard() {
         <div style={styles.grid} className="teacher-dashboard-grid">
           <section style={styles.panel}>
             <div style={styles.panelLabel}>Roster</div>
-            <div style={{ ...styles.helper, marginBottom: "10px" }}>Add student codes for each class/group.</div>
+            <div style={styles.panelHeading}>Class roster</div>
+            <div style={styles.panelDescription}>Add student codes for each class/group.</div>
             <div style={{ marginBottom: "10px" }}>
               <div style={{ ...styles.helper, marginBottom: "6px" }}>Selected Class</div>
               <select
@@ -1430,8 +1500,8 @@ export default function TeacherDashboard() {
             {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
 
             {selectedClassName ? (
-              <div>
-                <div style={{ ...styles.helper, marginTop: "12px", color: "#334155", fontWeight: 700 }}>
+              <div style={styles.rosterSummaryCard}>
+                <div style={{ ...styles.helper, marginTop: "2px", marginBottom: "8px", color: "#334155", fontWeight: 800 }}>
                   {selectedClassName} roster ({selectedClassStudents.length})
                 </div>
                 <table style={styles.rosterTable}>
@@ -1444,8 +1514,8 @@ export default function TeacherDashboard() {
                   </thead>
                   <tbody>
                     {selectedClassStudents.length ? (
-                      selectedClassStudents.map((student) => (
-                        <tr key={`table-${student.id}`}>
+                      selectedClassStudents.map((student, index) => (
+                        <tr key={`table-${student.id}`} style={{ background: index % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
                           <td style={styles.rosterTd}>{student.student_name}</td>
                           <td style={{ ...styles.rosterTd, fontWeight: 800, letterSpacing: "0.04em" }}>{student.student_code}</td>
                           <td style={styles.rosterTd}>Edit below</td>
@@ -1502,6 +1572,8 @@ export default function TeacherDashboard() {
 
           <section style={styles.panel}>
             <div style={styles.panelLabel}>Classroom prompts</div>
+            <div style={styles.panelHeading}>Prompt library</div>
+            <div style={styles.panelDescription}>Create prompts and manage class assignment and visibility.</div>
             <div style={styles.promptInputRow}>
               <div style={styles.promptInputs}>
                 <input
@@ -1608,10 +1680,19 @@ export default function TeacherDashboard() {
                   }}
                 >
                   <div style={styles.promptHeader}>
-                    <div>
+                    <div style={styles.promptInfoWrap}>
                       <div style={{ ...styles.promptTitle, color: isVisible ? "#4f46e5" : "#1e293b" }}>{prompt.prompt_text}</div>
-                      <div style={styles.promptMeta}>Class: {prompt.class_name?.trim() || "Not assigned"}</div>
-                      {prompt.suggested_time ? <div style={styles.promptMeta}>Suggested time: {prompt.suggested_time}</div> : null}
+                      <div style={styles.promptMeta}>Prompt details</div>
+                      <div style={styles.promptBadgeRow}>
+                        <span style={{ ...styles.promptBadge, borderColor: "#bfdbfe", background: "#eff6ff", color: "#1d4ed8" }}>
+                          Assignment: {prompt.class_name?.trim() || "All classes"}
+                        </span>
+                        {prompt.suggested_time ? (
+                          <span style={{ ...styles.promptBadge, borderColor: "#dbeafe", background: "#f8fafc", color: "#475569" }}>
+                            Suggested time: {prompt.suggested_time}
+                          </span>
+                        ) : null}
+                      </div>
                       <div style={styles.promptAssignmentControls}>
                         <select
                           value={assignmentValue}
@@ -1654,11 +1735,7 @@ export default function TeacherDashboard() {
                           type="button"
                           onClick={() => void handleDeletePrompt(prompt)}
                           disabled={isDeletingPrompt}
-                          style={clampButton(isDeletingPrompt, {
-                            ...styles.promptAssignmentButton,
-                            borderColor: "#fecaca",
-                            color: "#b91c1c",
-                          })}
+                          style={clampButton(isDeletingPrompt, styles.promptDeleteButton)}
                         >
                           {isDeletingPrompt ? "Deleting..." : "Delete prompt"}
                         </button>
@@ -1736,6 +1813,8 @@ export default function TeacherDashboard() {
                 </button>
               </div>
             </div>
+            <div style={{ ...styles.panelHeading, fontSize: "22px", marginBottom: "8px" }}>Submission queue</div>
+            <div style={styles.panelDescription}>Review recordings, save overrides, and send teacher audio feedback.</div>
 
             {submissionsSuccess ? (
               <div style={{ ...styles.success, marginBottom: "12px", padding: "10px 12px", borderRadius: "12px", background: "#ecfeff", border: "1px solid #99f6e4" }}>
@@ -1771,18 +1850,16 @@ export default function TeacherDashboard() {
                       <div style={styles.pillRow}>
                         <span style={styles.pill}>{submission.status || "unknown"}</span>
                         <span style={styles.pill}>{submission.feedback_status || "no feedback audio"}</span>
-                        {needsTeacherReview ? (
-                          <span
-                            style={{
-                              ...styles.pill,
-                              borderColor: "#f59e0b",
-                              color: "#b45309",
-                              background: "#fffbeb",
-                            }}
-                          >
-                            Needs review
-                          </span>
-                        ) : null}
+                        <span
+                          style={{
+                            ...styles.reviewStatePill,
+                            borderColor: needsTeacherReview ? "#f59e0b" : "#10b981",
+                            color: needsTeacherReview ? "#b45309" : "#047857",
+                            background: needsTeacherReview ? "#fffbeb" : "#ecfdf5",
+                          }}
+                        >
+                          {needsTeacherReview ? "Needs review" : "Reviewed"}
+                        </span>
                       </div>
                     </div>
 
