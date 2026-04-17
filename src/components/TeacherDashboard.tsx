@@ -623,6 +623,8 @@ export default function TeacherDashboard() {
   const [drafts, setDrafts] = useState<DraftsById>({});
   const [expandedSubmissionIds, setExpandedSubmissionIds] = useState<Record<string, boolean>>({});
   const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
+  const [submissionClassFilter, setSubmissionClassFilter] = useState("__all_classes__");
+  const [submissionPromptFilter, setSubmissionPromptFilter] = useState("__all_prompts__");
   const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
   const [isLoadingProjectVideoSubmissions, setIsLoadingProjectVideoSubmissions] = useState(false);
   const [projectVideoSubmissionsError, setProjectVideoSubmissionsError] = useState("");
@@ -635,16 +637,96 @@ export default function TeacherDashboard() {
     });
   }, [prompts]);
 
+  const studentClassByCode = useMemo(() => {
+    const map = new Map<string, string>();
+    students.forEach((student) => {
+      const code = student.student_code.trim();
+      const className = student.class_name?.trim() ?? "";
+      if (!code || !className) return;
+      map.set(code, className);
+    });
+    return map;
+  }, [students]);
+
+  const studentClassByName = useMemo(() => {
+    const grouped = new Map<string, Set<string>>();
+    students.forEach((student) => {
+      const name = student.student_name.trim().toLowerCase();
+      const className = student.class_name?.trim() ?? "";
+      if (!name || !className) return;
+      if (!grouped.has(name)) grouped.set(name, new Set());
+      grouped.get(name)?.add(className);
+    });
+
+    const map = new Map<string, string>();
+    grouped.forEach((classNames, name) => {
+      if (classNames.size === 1) {
+        map.set(name, Array.from(classNames)[0]);
+      }
+    });
+    return map;
+  }, [students]);
+
+  const getSubmissionClassName = useCallback(
+    (submission: SubmissionRow) => {
+      const codeKey = submission.student_code?.trim() ?? "";
+      if (codeKey && studentClassByCode.has(codeKey)) {
+        return studentClassByCode.get(codeKey) ?? "";
+      }
+      const nameKey = submission.student_name?.trim().toLowerCase() ?? "";
+      if (nameKey && studentClassByName.has(nameKey)) {
+        return studentClassByName.get(nameKey) ?? "";
+      }
+      return "";
+    },
+    [studentClassByCode, studentClassByName],
+  );
+
+  const submissionPromptOptions = useMemo(() => {
+    const promptSet = new Set<string>();
+    const selectedClass = submissionClassFilter === "__all_classes__" ? "" : submissionClassFilter;
+
+    prompts.forEach((prompt) => {
+      const promptText = prompt.prompt_text?.trim() ?? "";
+      if (!promptText) return;
+      const promptClass = prompt.class_name?.trim() ?? "";
+      if (!selectedClass || !promptClass || promptClass === selectedClass) {
+        promptSet.add(promptText);
+      }
+    });
+
+    submissions.forEach((submission) => {
+      const promptText = submission.prompt_text?.trim() ?? "";
+      if (!promptText) return;
+      if (!selectedClass || getSubmissionClassName(submission) === selectedClass) {
+        promptSet.add(promptText);
+      }
+    });
+
+    return Array.from(promptSet).sort((a, b) => a.localeCompare(b));
+  }, [prompts, submissions, submissionClassFilter, getSubmissionClassName]);
+
+  useEffect(() => {
+    if (submissionPromptFilter === "__all_prompts__") return;
+    if (!submissionPromptOptions.includes(submissionPromptFilter)) {
+      setSubmissionPromptFilter("__all_prompts__");
+    }
+  }, [submissionPromptFilter, submissionPromptOptions]);
+
   const filteredSubmissions = useMemo(() => {
     return submissions.filter((submission) => {
       const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
       const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
 
-      if (reviewFilter === "needs_review") return needsTeacherReview;
-      if (reviewFilter === "reviewed") return !needsTeacherReview;
-      return true;
+      const submissionClassName = getSubmissionClassName(submission);
+      const matchesClass = submissionClassFilter === "__all_classes__" || submissionClassName === submissionClassFilter;
+      const submissionPrompt = submission.prompt_text?.trim() ?? "";
+      const matchesPrompt = submissionPromptFilter === "__all_prompts__" || submissionPrompt === submissionPromptFilter;
+      const matchesReview = reviewFilter === "needs_review" ? needsTeacherReview : reviewFilter === "reviewed" ? !needsTeacherReview : true;
+
+      return matchesClass && matchesPrompt && matchesReview;
     });
-  }, [submissions, reviewFilter]);
+  }, [submissions, reviewFilter, submissionClassFilter, submissionPromptFilter, getSubmissionClassName]);
 
   const filteredPrompts = useMemo(() => {
     if (promptListFilter === "__all_prompts__") return sortedPrompts;
@@ -1813,6 +1895,45 @@ export default function TeacherDashboard() {
                 </button>
               </div>
             </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: "10px",
+                marginBottom: "12px",
+              }}
+            >
+              <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Class
+                <select
+                  value={submissionClassFilter}
+                  onChange={(e) => setSubmissionClassFilter(e.target.value)}
+                  style={{ ...styles.rosterInput, minHeight: "42px", fontSize: "14px", textTransform: "none", letterSpacing: "normal", fontWeight: 600 }}
+                >
+                  <option value="__all_classes__">All classes</option>
+                  {classNameOptions.map((className) => (
+                    <option key={className} value={className}>
+                      {className}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Prompt
+                <select
+                  value={submissionPromptFilter}
+                  onChange={(e) => setSubmissionPromptFilter(e.target.value)}
+                  style={{ ...styles.rosterInput, minHeight: "42px", fontSize: "14px", textTransform: "none", letterSpacing: "normal", fontWeight: 600 }}
+                >
+                  <option value="__all_prompts__">All prompts</option>
+                  {submissionPromptOptions.map((promptText) => (
+                    <option key={promptText} value={promptText}>
+                      {promptText}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <div style={{ ...styles.panelHeading, fontSize: "22px", marginBottom: "8px" }}>Submission queue</div>
             <div style={styles.panelDescription}>Review recordings, save overrides, and send teacher audio feedback.</div>
 
@@ -1828,6 +1949,7 @@ export default function TeacherDashboard() {
                 const draft = drafts[submission.id] ?? buildDraft(submission);
                 const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
                 const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
+                const submissionClassName = getSubmissionClassName(submission);
                 const isExpanded = Boolean(expandedSubmissionIds[submission.id]);
                 const isDeletingSubmission = Boolean(deletingSubmissionById[submission.id]);
                 const scoreSummary = submission.teacher_score ?? submission.ai_score;
@@ -1848,6 +1970,7 @@ export default function TeacherDashboard() {
                         {submission.student_name && submission.student_code ? <div style={styles.studentName}>{submission.student_name}</div> : null}
                       </div>
                       <div style={styles.pillRow}>
+                        {submissionClassName ? <span style={styles.pill}>{submissionClassName}</span> : null}
                         <span style={styles.pill}>{submission.status || "unknown"}</span>
                         <span style={styles.pill}>{submission.feedback_status || "no feedback audio"}</span>
                         <span
