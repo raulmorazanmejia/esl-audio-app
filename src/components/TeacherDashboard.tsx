@@ -625,6 +625,8 @@ export default function TeacherDashboard() {
   const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
   const [submissionClassFilter, setSubmissionClassFilter] = useState("__all_classes__");
   const [submissionPromptFilter, setSubmissionPromptFilter] = useState("__all_prompts__");
+  const [analyticsClassFilter, setAnalyticsClassFilter] = useState("");
+  const [analyticsPromptFilter, setAnalyticsPromptFilter] = useState("");
   const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
   const [isLoadingProjectVideoSubmissions, setIsLoadingProjectVideoSubmissions] = useState(false);
   const [projectVideoSubmissionsError, setProjectVideoSubmissionsError] = useState("");
@@ -742,6 +744,81 @@ export default function TeacherDashboard() {
       .filter((className) => className.length > 0);
     return Array.from(new Set(classNames)).sort((a, b) => a.localeCompare(b));
   }, [students]);
+
+  useEffect(() => {
+    if (analyticsClassFilter && classNameOptions.includes(analyticsClassFilter)) return;
+    setAnalyticsClassFilter(classNameOptions[0] ?? "");
+  }, [classNameOptions, analyticsClassFilter]);
+
+  const analyticsPromptOptions = useMemo(() => {
+    if (!analyticsClassFilter) return [];
+    const promptSet = new Set<string>();
+
+    prompts.forEach((prompt) => {
+      const promptText = prompt.prompt_text?.trim() ?? "";
+      const promptClass = prompt.class_name?.trim() ?? "";
+      if (!promptText) return;
+      if (!promptClass || promptClass === analyticsClassFilter) {
+        promptSet.add(promptText);
+      }
+    });
+
+    submissions.forEach((submission) => {
+      const promptText = submission.prompt_text?.trim() ?? "";
+      if (!promptText) return;
+      if (getSubmissionClassName(submission) === analyticsClassFilter) {
+        promptSet.add(promptText);
+      }
+    });
+
+    return Array.from(promptSet).sort((a, b) => a.localeCompare(b));
+  }, [prompts, submissions, analyticsClassFilter, getSubmissionClassName]);
+
+  useEffect(() => {
+    if (!analyticsPromptOptions.length) {
+      if (analyticsPromptFilter) setAnalyticsPromptFilter("");
+      return;
+    }
+    if (analyticsPromptFilter && analyticsPromptOptions.includes(analyticsPromptFilter)) return;
+    setAnalyticsPromptFilter(analyticsPromptOptions[0] ?? "");
+  }, [analyticsPromptOptions, analyticsPromptFilter]);
+
+  const submissionAnalytics = useMemo(() => {
+    if (!analyticsClassFilter || !analyticsPromptFilter) {
+      return {
+        selectedClassStudents: [] as StudentRow[],
+        submittedStudents: [] as StudentRow[],
+        notSubmittedStudents: [] as StudentRow[],
+        totalSubmissions: 0,
+      };
+    }
+
+    const classStudents = students.filter((student) => (student.class_name?.trim() ?? "") === analyticsClassFilter);
+    const rosterCodeSet = new Set(
+      classStudents
+        .map((student) => student.student_code.trim())
+        .filter((studentCode) => studentCode.length > 0),
+    );
+
+    const relevantSubmissions = submissions.filter((submission) => {
+      const submissionPrompt = submission.prompt_text?.trim() ?? "";
+      const submissionCode = submission.student_code?.trim() ?? "";
+      if (submissionPrompt !== analyticsPromptFilter || !submissionCode) return false;
+      if (getSubmissionClassName(submission) !== analyticsClassFilter) return false;
+      return rosterCodeSet.has(submissionCode);
+    });
+
+    const submittedCodeSet = new Set(relevantSubmissions.map((submission) => submission.student_code?.trim() ?? "").filter(Boolean));
+    const submittedStudents = classStudents.filter((student) => submittedCodeSet.has(student.student_code.trim()));
+    const notSubmittedStudents = classStudents.filter((student) => !submittedCodeSet.has(student.student_code.trim()));
+
+    return {
+      selectedClassStudents: classStudents,
+      submittedStudents,
+      notSubmittedStudents,
+      totalSubmissions: relevantSubmissions.length,
+    };
+  }, [students, submissions, analyticsClassFilter, analyticsPromptFilter, getSubmissionClassName]);
 
   const filteredStudents = useMemo(() => {
     const className = selectedClassName.trim();
@@ -1936,6 +2013,95 @@ export default function TeacherDashboard() {
             </div>
             <div style={{ ...styles.panelHeading, fontSize: "22px", marginBottom: "8px" }}>Submission queue</div>
             <div style={styles.panelDescription}>Review recordings, save overrides, and send teacher audio feedback.</div>
+
+            <div style={{ ...styles.sectionBox, marginBottom: "16px", background: "#f8fafc", borderStyle: "dashed" }}>
+              <div style={{ ...styles.sectionTitle, marginBottom: "10px" }}>Submission analytics</div>
+              <div style={{ ...styles.helper, marginBottom: "12px" }}>
+                Uses existing prompt submissions matched by <strong>student code + prompt text</strong> within the selected class.
+              </div>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gap: "10px",
+                  marginBottom: "12px",
+                }}
+              >
+                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Class
+                  <select
+                    value={analyticsClassFilter}
+                    onChange={(e) => setAnalyticsClassFilter(e.target.value)}
+                    style={{ ...styles.rosterInput, minHeight: "40px", fontSize: "14px", textTransform: "none", letterSpacing: "normal", fontWeight: 600 }}
+                  >
+                    {classNameOptions.map((className) => (
+                      <option key={`analytics-${className}`} value={className}>
+                        {className}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Prompt
+                  <select
+                    value={analyticsPromptFilter}
+                    onChange={(e) => setAnalyticsPromptFilter(e.target.value)}
+                    style={{ ...styles.rosterInput, minHeight: "40px", fontSize: "14px", textTransform: "none", letterSpacing: "normal", fontWeight: 600 }}
+                    disabled={!analyticsPromptOptions.length}
+                  >
+                    {!analyticsPromptOptions.length ? <option value="">No prompts available</option> : null}
+                    {analyticsPromptOptions.map((promptText) => (
+                      <option key={`analytics-${promptText}`} value={promptText}>
+                        {promptText}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {analyticsClassFilter && analyticsPromptFilter ? (
+                <>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
+                    <span style={styles.pill}>Total students: {submissionAnalytics.selectedClassStudents.length}</span>
+                    <span style={{ ...styles.pill, borderColor: "#86efac", background: "#f0fdf4", color: "#166534" }}>Submitted: {submissionAnalytics.submittedStudents.length}</span>
+                    <span style={{ ...styles.pill, borderColor: "#fecaca", background: "#fef2f2", color: "#b91c1c" }}>Not submitted: {submissionAnalytics.notSubmittedStudents.length}</span>
+                    <span style={{ ...styles.pill, borderColor: "#bfdbfe", background: "#eff6ff", color: "#1d4ed8" }}>Total submissions: {submissionAnalytics.totalSubmissions}</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
+                    <div style={{ ...styles.sectionBox, margin: 0, background: "#ffffff" }}>
+                      <div style={styles.sectionTitle}>Submitted students</div>
+                      {submissionAnalytics.submittedStudents.length ? (
+                        <ul style={{ margin: "8px 0 0", paddingLeft: "18px", color: "#0f172a" }}>
+                          {submissionAnalytics.submittedStudents.map((student) => (
+                            <li key={`submitted-${student.id}`} style={{ marginBottom: "4px", fontSize: "14px" }}>
+                              {student.student_name} ({student.student_code})
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div style={{ ...styles.helper, marginTop: "8px" }}>No students have submitted this prompt yet.</div>
+                      )}
+                    </div>
+                    <div style={{ ...styles.sectionBox, margin: 0, background: "#ffffff" }}>
+                      <div style={styles.sectionTitle}>Not submitted students</div>
+                      {submissionAnalytics.notSubmittedStudents.length ? (
+                        <ul style={{ margin: "8px 0 0", paddingLeft: "18px", color: "#0f172a" }}>
+                          {submissionAnalytics.notSubmittedStudents.map((student) => (
+                            <li key={`missing-${student.id}`} style={{ marginBottom: "4px", fontSize: "14px" }}>
+                              {student.student_name} ({student.student_code})
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div style={{ ...styles.helper, marginTop: "8px", color: "#166534" }}>Everyone in this class has submitted.</div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div style={styles.helper}>Choose a class and prompt to view participation analytics.</div>
+              )}
+            </div>
 
             {submissionsSuccess ? (
               <div style={{ ...styles.success, marginBottom: "12px", padding: "10px 12px", borderRadius: "12px", background: "#ecfeff", border: "1px solid #99f6e4" }}>
