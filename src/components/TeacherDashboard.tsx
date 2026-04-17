@@ -184,16 +184,17 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     gap: "10px",
-    alignItems: "flex-start" as const,
+    alignItems: "center" as const,
     marginBottom: "8px",
   },
-  promptUseButton: {
-    minHeight: "36px",
-    minWidth: "72px",
-    borderRadius: "12px",
-    fontSize: "14px",
-    padding: "0 14px",
-    flexShrink: 0,
+  promptStatusBadge: {
+    borderRadius: "999px",
+    padding: "6px 10px",
+    fontSize: "12px",
+    fontWeight: 800,
+    letterSpacing: "0.04em",
+    textTransform: "uppercase" as const,
+    border: "1px solid #cbd5e1",
   },
   promptAssignmentControls: {
     display: "flex",
@@ -270,6 +271,31 @@ const styles = {
     gap: "8px",
     maxHeight: "260px",
     overflowY: "auto" as const,
+  },
+  rosterTable: {
+    width: "100%",
+    borderCollapse: "collapse" as const,
+    marginTop: "12px",
+    borderRadius: "14px",
+    overflow: "hidden",
+    border: "1px solid #dbe3f0",
+  },
+  rosterTh: {
+    textAlign: "left" as const,
+    fontSize: "12px",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.08em",
+    color: "#64748b",
+    background: "#f8fafc",
+    padding: "10px 12px",
+    borderBottom: "1px solid #e2e8f0",
+  },
+  rosterTd: {
+    padding: "10px 12px",
+    borderBottom: "1px solid #e2e8f0",
+    verticalAlign: "middle" as const,
+    fontSize: "14px",
+    color: "#1e293b",
   },
   submissionsScroller: {
     maxHeight: "78vh",
@@ -505,6 +531,7 @@ export default function TeacherDashboard() {
   const [promptSuccess, setPromptSuccess] = useState("");
   const [promptAssignmentDrafts, setPromptAssignmentDrafts] = useState<Record<string, string>>({});
   const [savingPromptAssignmentById, setSavingPromptAssignmentById] = useState<Record<string, boolean>>({});
+  const [savingPromptVisibilityById, setSavingPromptVisibilityById] = useState<Record<string, boolean>>({});
   const [promptListFilter, setPromptListFilter] = useState("__all_prompts__");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClassName, setSelectedClassName] = useState("");
@@ -522,7 +549,6 @@ export default function TeacherDashboard() {
   const [submissionsError, setSubmissionsError] = useState("");
   const [drafts, setDrafts] = useState<DraftsById>({});
   const [expandedSubmissionIds, setExpandedSubmissionIds] = useState<Record<string, boolean>>({});
-  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
   const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
   const [isLoadingProjectVideoSubmissions, setIsLoadingProjectVideoSubmissions] = useState(false);
@@ -565,6 +591,12 @@ export default function TeacherDashboard() {
   const filteredStudents = useMemo(() => {
     const className = selectedClassName.trim();
     if (!className) return students;
+    return students.filter((student) => (student.class_name?.trim() ?? "") === className);
+  }, [students, selectedClassName]);
+
+  const selectedClassStudents = useMemo(() => {
+    const className = selectedClassName.trim();
+    if (!className) return [];
     return students.filter((student) => (student.class_name?.trim() ?? "") === className);
   }, [students, selectedClassName]);
 
@@ -649,8 +681,6 @@ export default function TeacherDashboard() {
     }
     const rows = (data ?? []) as PromptRow[];
     setPrompts(rows);
-    const active = rows.find((row) => row.is_active);
-    setSelectedPromptId(active?.id ?? null);
   }, []);
 
   const fetchSubmissions = useCallback(async () => {
@@ -784,22 +814,36 @@ export default function TeacherDashboard() {
     await fetchPrompts();
   }
 
-  async function handleUsePrompt(promptId: string) {
+  async function handleTogglePromptVisibility(prompt: PromptRow) {
     setPromptError("");
-    const { error: deactivateError } = await supabase
-      .from("prompts")
-      .update({ is_active: false })
-      .neq("id", "00000000-0000-0000-0000-000000000000");
-    if (deactivateError) {
-      setPromptError(deactivateError.message);
+    setPromptSuccess("");
+    setSavingPromptVisibilityById((prev) => ({ ...prev, [prompt.id]: true }));
+    const nextVisible = !Boolean(prompt.is_active);
+    const { error } = await supabase.from("prompts").update({ is_active: nextVisible }).eq("id", prompt.id);
+    if (error) {
+      setPromptError(error.message);
+      setSavingPromptVisibilityById((prev) => ({ ...prev, [prompt.id]: false }));
       return;
     }
-    const { error: activateError } = await supabase.from("prompts").update({ is_active: true }).eq("id", promptId);
-    if (activateError) {
-      setPromptError(activateError.message);
+    setPromptSuccess(`Prompt is now ${nextVisible ? "visible" : "hidden"} for students.`);
+    setSavingPromptVisibilityById((prev) => ({ ...prev, [prompt.id]: false }));
+    await fetchPrompts();
+  }
+
+  async function handleClearVisiblePromptsForSelectedClass() {
+    const className = selectedClassName.trim();
+    if (!className) {
+      setPromptError("Select a class first to clear visible prompts.");
       return;
     }
-    setSelectedPromptId(promptId);
+    setPromptError("");
+    setPromptSuccess("");
+    const { error } = await supabase.from("prompts").update({ is_active: false }).eq("class_name", className);
+    if (error) {
+      setPromptError(error.message);
+      return;
+    }
+    setPromptSuccess(`No prompts are currently visible for ${className}.`);
     await fetchPrompts();
   }
 
@@ -817,7 +861,7 @@ export default function TeacherDashboard() {
       setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
       return;
     }
-    const assignmentLabel = className || "All classes";
+    const assignmentLabel = className || "Not assigned";
     setPromptSuccess(`Prompt assignment saved: ${assignmentLabel}`);
     setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
     await fetchPrompts();
@@ -1239,6 +1283,40 @@ export default function TeacherDashboard() {
             ) : null}
             {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
 
+            {selectedClassName ? (
+              <div>
+                <div style={{ ...styles.helper, marginTop: "12px", color: "#334155", fontWeight: 700 }}>
+                  {selectedClassName} roster ({selectedClassStudents.length})
+                </div>
+                <table style={styles.rosterTable}>
+                  <thead>
+                    <tr>
+                      <th style={styles.rosterTh}>Student name</th>
+                      <th style={styles.rosterTh}>Code</th>
+                      <th style={styles.rosterTh}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedClassStudents.length ? (
+                      selectedClassStudents.map((student) => (
+                        <tr key={`table-${student.id}`}>
+                          <td style={styles.rosterTd}>{student.student_name}</td>
+                          <td style={{ ...styles.rosterTd, fontWeight: 800, letterSpacing: "0.04em" }}>{student.student_code}</td>
+                          <td style={styles.rosterTd}>Edit below</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td style={styles.rosterTd} colSpan={3}>
+                          No students in this class yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
             <div style={styles.rosterRows}>
               {filteredStudents.map((student) => (
                 <div key={student.id} style={styles.rosterGrid}>
@@ -1350,32 +1428,42 @@ export default function TeacherDashboard() {
               <div style={{ ...styles.promptHelper, marginTop: "0" }}>Filter prompts</div>
               <select value={promptListFilter} onChange={(e) => setPromptListFilter(e.target.value)} style={{ ...styles.promptInput, minHeight: "40px", fontSize: "14px" }}>
                 <option value="__all_prompts__">All prompts</option>
-                <option value="__all_classes_only__">All classes only</option>
+                <option value="__all_classes_only__">Unassigned prompts</option>
                 {classNameOptions.map((className) => (
                   <option key={className} value={className}>
                     {className}
                   </option>
                 ))}
               </select>
+              {selectedClassName ? (
+                <button
+                  type="button"
+                  onClick={() => void handleClearVisiblePromptsForSelectedClass()}
+                  style={{ ...styles.promptAssignmentButton, borderColor: "#fecaca", color: "#b91c1c" }}
+                >
+                  Set “{selectedClassName}” to no visible prompt
+                </button>
+              ) : null}
             </div>
 
             {filteredPrompts.map((prompt) => {
-              const isActive = selectedPromptId === prompt.id || Boolean(prompt.is_active);
+              const isVisible = Boolean(prompt.is_active);
               const assignmentValue = promptAssignmentDrafts[prompt.id] ?? (prompt.class_name?.trim() || "");
               const isSavingAssignment = Boolean(savingPromptAssignmentById[prompt.id]);
+              const isSavingVisibility = Boolean(savingPromptVisibilityById[prompt.id]);
               return (
                 <div
                   key={prompt.id}
                   style={{
                     ...styles.promptCard,
-                    background: isActive ? "#eef2ff" : "#ffffff",
-                    borderColor: isActive ? "#818cf8" : "#e2e8f0",
+                    background: isVisible ? "#eef2ff" : "#ffffff",
+                    borderColor: isVisible ? "#818cf8" : "#e2e8f0",
                   }}
                 >
                   <div style={styles.promptHeader}>
                     <div>
-                      <div style={{ ...styles.promptTitle, color: isActive ? "#4f46e5" : "#1e293b" }}>{prompt.prompt_text}</div>
-                      <div style={styles.promptMeta}>Class: {prompt.class_name?.trim() || "All classes"}</div>
+                      <div style={{ ...styles.promptTitle, color: isVisible ? "#4f46e5" : "#1e293b" }}>{prompt.prompt_text}</div>
+                      <div style={styles.promptMeta}>Class: {prompt.class_name?.trim() || "Not assigned"}</div>
                       {prompt.suggested_time ? <div style={styles.promptMeta}>Suggested time: {prompt.suggested_time}</div> : null}
                       <div style={styles.promptAssignmentControls}>
                         <select
@@ -1388,7 +1476,7 @@ export default function TeacherDashboard() {
                           }
                           style={styles.promptAssignmentSelect}
                         >
-                          <option value="">All classes</option>
+                          <option value="">Not assigned</option>
                           {classNameOptions.map((className) => (
                             <option key={`${prompt.id}-${className}`} value={className}>
                               {className}
@@ -1401,23 +1489,32 @@ export default function TeacherDashboard() {
                           disabled={isSavingAssignment}
                           style={clampButton(isSavingAssignment, styles.promptAssignmentButton)}
                         >
-                          {isSavingAssignment ? "Saving..." : "Save assignment"}
+                          {isSavingAssignment ? "Saving..." : "Save class"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleTogglePromptVisibility(prompt)}
+                          disabled={isSavingVisibility}
+                          style={clampButton(isSavingVisibility, {
+                            ...styles.promptAssignmentButton,
+                            borderColor: isVisible ? "#fecaca" : "#bfdbfe",
+                            color: isVisible ? "#b91c1c" : "#1d4ed8",
+                          })}
+                        >
+                          {isSavingVisibility ? "Saving..." : isVisible ? "Hide from students" : "Show to students"}
                         </button>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleUsePrompt(prompt.id)}
+                    <span
                       style={{
-                        ...styles.secondaryButton,
-                        ...styles.promptUseButton,
-                        background: isActive ? "#eef2ff" : "#ffffff",
-                        color: isActive ? "#4f46e5" : "#334155",
-                        borderColor: isActive ? "#818cf8" : "#cbd5e1",
+                        ...styles.promptStatusBadge,
+                        background: isVisible ? "#ede9fe" : "#f8fafc",
+                        color: isVisible ? "#5b21b6" : "#64748b",
+                        borderColor: isVisible ? "#c4b5fd" : "#cbd5e1",
                       }}
                     >
-                      {isActive ? "✓" : "Use"}
-                    </button>
+                      {isVisible ? "Visible" : "Hidden"}
+                    </span>
                   </div>
                   {prompt.prompt_image_url ? (
                     <img
