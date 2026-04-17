@@ -195,6 +195,41 @@ const styles = {
     padding: "0 14px",
     flexShrink: 0,
   },
+  promptAssignmentControls: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginTop: "8px",
+    flexWrap: "wrap" as const,
+  },
+  promptAssignmentSelect: {
+    minHeight: "34px",
+    borderRadius: "10px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    padding: "0 10px",
+    fontSize: "13px",
+    color: "#334155",
+    minWidth: "150px",
+  },
+  promptAssignmentButton: {
+    minHeight: "34px",
+    borderRadius: "10px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#334155",
+    fontSize: "13px",
+    fontWeight: 700,
+    padding: "0 10px",
+    cursor: "pointer",
+  },
+  promptFilterRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    marginBottom: "12px",
+    flexWrap: "wrap" as const,
+  },
   promptImage: {
     width: "100%",
     height: "112px",
@@ -468,6 +503,9 @@ export default function TeacherDashboard() {
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
   const [promptSuccess, setPromptSuccess] = useState("");
+  const [promptAssignmentDrafts, setPromptAssignmentDrafts] = useState<Record<string, string>>({});
+  const [savingPromptAssignmentById, setSavingPromptAssignmentById] = useState<Record<string, boolean>>({});
+  const [promptListFilter, setPromptListFilter] = useState("__all_prompts__");
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClassName, setSelectedClassName] = useState("");
   const [newClassName, setNewClassName] = useState("");
@@ -508,6 +546,14 @@ export default function TeacherDashboard() {
       return true;
     });
   }, [submissions, reviewFilter]);
+
+  const filteredPrompts = useMemo(() => {
+    if (promptListFilter === "__all_prompts__") return sortedPrompts;
+    if (promptListFilter === "__all_classes_only__") {
+      return sortedPrompts.filter((prompt) => !(prompt.class_name?.trim() || ""));
+    }
+    return sortedPrompts.filter((prompt) => (prompt.class_name?.trim() || "") === promptListFilter);
+  }, [sortedPrompts, promptListFilter]);
 
   const classNameOptions = useMemo(() => {
     const classNames = students
@@ -757,6 +803,26 @@ export default function TeacherDashboard() {
     await fetchPrompts();
   }
 
+  async function handleSavePromptAssignment(promptId: string) {
+    const className = (promptAssignmentDrafts[promptId] ?? "").trim();
+    setPromptError("");
+    setPromptSuccess("");
+    setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: true }));
+    const { error } = await supabase
+      .from("prompts")
+      .update({ class_name: className || null })
+      .eq("id", promptId);
+    if (error) {
+      setPromptError(error.message);
+      setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
+      return;
+    }
+    const assignmentLabel = className || "All classes";
+    setPromptSuccess(`Prompt assignment saved: ${assignmentLabel}`);
+    setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
+    await fetchPrompts();
+  }
+
   async function handleAddStudent() {
     if (isSavingStudent) return;
     const className = selectedClassName.trim();
@@ -829,6 +895,17 @@ export default function TeacherDashboard() {
   function updateStudentDraft(id: string, patch: Partial<StudentRow>) {
     setStudents((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
+
+  useEffect(() => {
+    setPromptAssignmentDrafts((prev) => {
+      const next: Record<string, string> = {};
+      prompts.forEach((prompt) => {
+        const normalized = prompt.class_name?.trim() || "";
+        next[prompt.id] = Object.prototype.hasOwnProperty.call(prev, prompt.id) ? prev[prompt.id] : normalized;
+      });
+      return next;
+    });
+  }, [prompts]);
 
   async function handleSaveStudent(student: StudentRow) {
     const className = (student.class_name ?? "").trim();
@@ -1269,8 +1346,23 @@ export default function TeacherDashboard() {
             ) : null}
             {promptError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{promptError}</div> : null}
 
-            {sortedPrompts.map((prompt) => {
+            <div style={styles.promptFilterRow}>
+              <div style={{ ...styles.promptHelper, marginTop: "0" }}>Filter prompts</div>
+              <select value={promptListFilter} onChange={(e) => setPromptListFilter(e.target.value)} style={{ ...styles.promptInput, minHeight: "40px", fontSize: "14px" }}>
+                <option value="__all_prompts__">All prompts</option>
+                <option value="__all_classes_only__">All classes only</option>
+                {classNameOptions.map((className) => (
+                  <option key={className} value={className}>
+                    {className}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {filteredPrompts.map((prompt) => {
               const isActive = selectedPromptId === prompt.id || Boolean(prompt.is_active);
+              const assignmentValue = promptAssignmentDrafts[prompt.id] ?? (prompt.class_name?.trim() || "");
+              const isSavingAssignment = Boolean(savingPromptAssignmentById[prompt.id]);
               return (
                 <div
                   key={prompt.id}
@@ -1285,6 +1377,33 @@ export default function TeacherDashboard() {
                       <div style={{ ...styles.promptTitle, color: isActive ? "#4f46e5" : "#1e293b" }}>{prompt.prompt_text}</div>
                       <div style={styles.promptMeta}>Class: {prompt.class_name?.trim() || "All classes"}</div>
                       {prompt.suggested_time ? <div style={styles.promptMeta}>Suggested time: {prompt.suggested_time}</div> : null}
+                      <div style={styles.promptAssignmentControls}>
+                        <select
+                          value={assignmentValue}
+                          onChange={(e) =>
+                            setPromptAssignmentDrafts((prev) => ({
+                              ...prev,
+                              [prompt.id]: e.target.value,
+                            }))
+                          }
+                          style={styles.promptAssignmentSelect}
+                        >
+                          <option value="">All classes</option>
+                          {classNameOptions.map((className) => (
+                            <option key={`${prompt.id}-${className}`} value={className}>
+                              {className}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => void handleSavePromptAssignment(prompt.id)}
+                          disabled={isSavingAssignment}
+                          style={clampButton(isSavingAssignment, styles.promptAssignmentButton)}
+                        >
+                          {isSavingAssignment ? "Saving..." : "Save assignment"}
+                        </button>
+                      </div>
                     </div>
                     <button
                       type="button"
