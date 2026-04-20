@@ -502,6 +502,26 @@ const styles = {
     padding: "14px",
     marginTop: "10px",
   },
+  classesScreen: {
+    background: "#ffffff",
+    borderRadius: "30px",
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
+    padding: "28px",
+  },
+  classCardGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "12px",
+    marginTop: "16px",
+  },
+  classCard: {
+    border: "1px solid #dbe3f0",
+    borderRadius: "18px",
+    background: "#f8fafc",
+    padding: "14px 16px",
+    textAlign: "left" as const,
+  },
 } as const;
 
 function clampScore(value: number) {
@@ -604,7 +624,7 @@ export default function TeacherDashboard() {
   const [deletingPromptById, setDeletingPromptById] = useState<Record<string, boolean>>({});
   const [promptListFilter, setPromptListFilter] = useState("__all_prompts__");
   const [students, setStudents] = useState<StudentRow[]>([]);
-  const [selectedClassName, setSelectedClassName] = useState("");
+  const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [newClassName, setNewClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentCode, setNewStudentCode] = useState("");
@@ -623,9 +643,7 @@ export default function TeacherDashboard() {
   const [drafts, setDrafts] = useState<DraftsById>({});
   const [expandedSubmissionIds, setExpandedSubmissionIds] = useState<Record<string, boolean>>({});
   const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
-  const [submissionClassFilter, setSubmissionClassFilter] = useState("__all_classes__");
   const [submissionPromptFilter, setSubmissionPromptFilter] = useState("__all_prompts__");
-  const [analyticsClassFilter, setAnalyticsClassFilter] = useState("");
   const [analyticsPromptFilter, setAnalyticsPromptFilter] = useState("");
   const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
   const [isLoadingProjectVideoSubmissions, setIsLoadingProjectVideoSubmissions] = useState(false);
@@ -684,15 +702,16 @@ export default function TeacherDashboard() {
     [studentClassByCode, studentClassByName],
   );
 
+  const selectedClassName = selectedClass?.trim() ?? "";
+
   const submissionPromptOptions = useMemo(() => {
     const promptSet = new Set<string>();
-    const selectedClass = submissionClassFilter === "__all_classes__" ? "" : submissionClassFilter;
 
     prompts.forEach((prompt) => {
       const promptText = prompt.prompt_text?.trim() ?? "";
       if (!promptText) return;
       const promptClass = prompt.class_name?.trim() ?? "";
-      if (!selectedClass || !promptClass || promptClass === selectedClass) {
+      if (!selectedClassName || !promptClass || promptClass === selectedClassName) {
         promptSet.add(promptText);
       }
     });
@@ -700,13 +719,13 @@ export default function TeacherDashboard() {
     submissions.forEach((submission) => {
       const promptText = submission.prompt_text?.trim() ?? "";
       if (!promptText) return;
-      if (!selectedClass || getSubmissionClassName(submission) === selectedClass) {
+      if (!selectedClassName || getSubmissionClassName(submission) === selectedClassName) {
         promptSet.add(promptText);
       }
     });
 
     return Array.from(promptSet).sort((a, b) => a.localeCompare(b));
-  }, [prompts, submissions, submissionClassFilter, getSubmissionClassName]);
+  }, [prompts, submissions, selectedClassName, getSubmissionClassName]);
 
   useEffect(() => {
     if (submissionPromptFilter === "__all_prompts__") return;
@@ -715,28 +734,38 @@ export default function TeacherDashboard() {
     }
   }, [submissionPromptFilter, submissionPromptOptions]);
 
+  useEffect(() => {
+    setPromptListFilter("__all_prompts__");
+    setSubmissionPromptFilter("__all_prompts__");
+    setNewPromptClassName(selectedClassName);
+  }, [selectedClassName]);
+
   const filteredSubmissions = useMemo(() => {
     return submissions.filter((submission) => {
       const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
       const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
 
       const submissionClassName = getSubmissionClassName(submission);
-      const matchesClass = submissionClassFilter === "__all_classes__" || submissionClassName === submissionClassFilter;
+      const matchesClass = !selectedClassName || submissionClassName === selectedClassName;
       const submissionPrompt = submission.prompt_text?.trim() ?? "";
       const matchesPrompt = submissionPromptFilter === "__all_prompts__" || submissionPrompt === submissionPromptFilter;
       const matchesReview = reviewFilter === "needs_review" ? needsTeacherReview : reviewFilter === "reviewed" ? !needsTeacherReview : true;
 
       return matchesClass && matchesPrompt && matchesReview;
     });
-  }, [submissions, reviewFilter, submissionClassFilter, submissionPromptFilter, getSubmissionClassName]);
+  }, [submissions, reviewFilter, selectedClassName, submissionPromptFilter, getSubmissionClassName]);
 
   const filteredPrompts = useMemo(() => {
-    if (promptListFilter === "__all_prompts__") return sortedPrompts;
+    const bySelectedClass = sortedPrompts.filter((prompt) => {
+      const promptClass = prompt.class_name?.trim() ?? "";
+      return !selectedClassName || !promptClass || promptClass === selectedClassName;
+    });
+    if (promptListFilter === "__all_prompts__") return bySelectedClass;
     if (promptListFilter === "__all_classes_only__") {
-      return sortedPrompts.filter((prompt) => !(prompt.class_name?.trim() || ""));
+      return bySelectedClass.filter((prompt) => !(prompt.class_name?.trim() || ""));
     }
-    return sortedPrompts.filter((prompt) => (prompt.class_name?.trim() || "") === promptListFilter);
-  }, [sortedPrompts, promptListFilter]);
+    return bySelectedClass.filter((prompt) => (prompt.class_name?.trim() || "") === promptListFilter);
+  }, [sortedPrompts, promptListFilter, selectedClassName]);
 
   const classNameOptions = useMemo(() => {
     const classNames = students
@@ -745,20 +774,27 @@ export default function TeacherDashboard() {
     return Array.from(new Set(classNames)).sort((a, b) => a.localeCompare(b));
   }, [students]);
 
-  useEffect(() => {
-    if (analyticsClassFilter && classNameOptions.includes(analyticsClassFilter)) return;
-    setAnalyticsClassFilter(classNameOptions[0] ?? "");
-  }, [classNameOptions, analyticsClassFilter]);
+  const classSummaries = useMemo(() => {
+    const counts = new Map<string, number>();
+    students.forEach((student) => {
+      const className = student.class_name?.trim() ?? "";
+      if (!className) return;
+      counts.set(className, (counts.get(className) ?? 0) + 1);
+    });
+    return Array.from(counts.entries())
+      .map(([className, studentCount]) => ({ className, studentCount }))
+      .sort((a, b) => a.className.localeCompare(b.className));
+  }, [students]);
 
   const analyticsPromptOptions = useMemo(() => {
-    if (!analyticsClassFilter) return [];
+    if (!selectedClassName) return [];
     const promptSet = new Set<string>();
 
     prompts.forEach((prompt) => {
       const promptText = prompt.prompt_text?.trim() ?? "";
       const promptClass = prompt.class_name?.trim() ?? "";
       if (!promptText) return;
-      if (!promptClass || promptClass === analyticsClassFilter) {
+      if (!promptClass || promptClass === selectedClassName) {
         promptSet.add(promptText);
       }
     });
@@ -766,13 +802,13 @@ export default function TeacherDashboard() {
     submissions.forEach((submission) => {
       const promptText = submission.prompt_text?.trim() ?? "";
       if (!promptText) return;
-      if (getSubmissionClassName(submission) === analyticsClassFilter) {
+      if (getSubmissionClassName(submission) === selectedClassName) {
         promptSet.add(promptText);
       }
     });
 
     return Array.from(promptSet).sort((a, b) => a.localeCompare(b));
-  }, [prompts, submissions, analyticsClassFilter, getSubmissionClassName]);
+  }, [prompts, submissions, selectedClassName, getSubmissionClassName]);
 
   useEffect(() => {
     if (!analyticsPromptOptions.length) {
@@ -784,7 +820,7 @@ export default function TeacherDashboard() {
   }, [analyticsPromptOptions, analyticsPromptFilter]);
 
   const submissionAnalytics = useMemo(() => {
-    if (!analyticsClassFilter || !analyticsPromptFilter) {
+    if (!selectedClassName || !analyticsPromptFilter) {
       return {
         selectedClassStudents: [] as StudentRow[],
         submittedStudents: [] as StudentRow[],
@@ -793,7 +829,7 @@ export default function TeacherDashboard() {
       };
     }
 
-    const classStudents = students.filter((student) => (student.class_name?.trim() ?? "") === analyticsClassFilter);
+    const classStudents = students.filter((student) => (student.class_name?.trim() ?? "") === selectedClassName);
     const rosterCodeSet = new Set(
       classStudents
         .map((student) => student.student_code.trim())
@@ -804,7 +840,7 @@ export default function TeacherDashboard() {
       const submissionPrompt = submission.prompt_text?.trim() ?? "";
       const submissionCode = submission.student_code?.trim() ?? "";
       if (submissionPrompt !== analyticsPromptFilter || !submissionCode) return false;
-      if (getSubmissionClassName(submission) !== analyticsClassFilter) return false;
+      if (getSubmissionClassName(submission) !== selectedClassName) return false;
       return rosterCodeSet.has(submissionCode);
     });
 
@@ -818,30 +854,26 @@ export default function TeacherDashboard() {
       notSubmittedStudents,
       totalSubmissions: relevantSubmissions.length,
     };
-  }, [students, submissions, analyticsClassFilter, analyticsPromptFilter, getSubmissionClassName]);
+  }, [students, submissions, selectedClassName, analyticsPromptFilter, getSubmissionClassName]);
 
   const filteredStudents = useMemo(() => {
-    const className = selectedClassName.trim();
-    if (!className) return students;
-    return students.filter((student) => (student.class_name?.trim() ?? "") === className);
+    if (!selectedClassName) return students;
+    return students.filter((student) => (student.class_name?.trim() ?? "") === selectedClassName);
   }, [students, selectedClassName]);
 
   const selectedClassStudents = useMemo(() => {
-    const className = selectedClassName.trim();
-    if (!className) return [];
-    return students.filter((student) => (student.class_name?.trim() ?? "") === className);
+    if (!selectedClassName) return [];
+    return students.filter((student) => (student.class_name?.trim() ?? "") === selectedClassName);
   }, [students, selectedClassName]);
 
   const selectedClassVideoEnabled = useMemo(() => {
-    const className = selectedClassName.trim();
-    if (!className) return false;
-    return Boolean(classVideoSettings[className]);
+    if (!selectedClassName) return false;
+    return Boolean(classVideoSettings[selectedClassName]);
   }, [classVideoSettings, selectedClassName]);
 
   const filteredProjectVideoSubmissions = useMemo(() => {
-    const className = selectedClassName.trim();
-    if (!className) return projectVideoSubmissions;
-    return projectVideoSubmissions.filter((submission) => (submission.class_name?.trim() ?? "") === className);
+    if (!selectedClassName) return projectVideoSubmissions;
+    return projectVideoSubmissions.filter((submission) => (submission.class_name?.trim() ?? "") === selectedClassName);
   }, [projectVideoSubmissions, selectedClassName]);
 
   const stopRecorderAndTracks = useCallback(() => {
@@ -1069,7 +1101,7 @@ export default function TeacherDashboard() {
   }
 
   async function handleClearVisiblePromptsForSelectedClass() {
-    const className = selectedClassName.trim();
+    const className = selectedClass?.trim() ?? "";
     if (!className) {
       setPromptError("Select a class first to clear visible prompts.");
       return;
@@ -1143,7 +1175,7 @@ export default function TeacherDashboard() {
 
   async function handleAddStudent() {
     if (isSavingStudent) return;
-    const className = selectedClassName.trim();
+    const className = selectedClass?.trim() ?? "";
     const studentName = newStudentName.trim();
     const studentCode = newStudentCode.trim().toUpperCase();
 
@@ -1169,7 +1201,7 @@ export default function TeacherDashboard() {
 
     setNewStudentName("");
     setNewStudentCode("");
-    setSelectedClassName(className);
+    setSelectedClass(className);
     setRosterSuccess(`Added: ${studentName} (${studentCode})`);
     newStudentNameInputRef.current?.focus();
     setIsSavingStudent(false);
@@ -1179,12 +1211,12 @@ export default function TeacherDashboard() {
   function handleUseNewClass() {
     const className = newClassName.trim();
     if (!className) return;
-    setSelectedClassName(className);
+    setSelectedClass(className);
     setNewClassName("");
   }
 
   async function handleToggleProjectVideoForSelectedClass() {
-    const className = selectedClassName.trim();
+    const className = selectedClass?.trim() ?? "";
     if (!className || isSavingClassVideoSetting) return;
     const nextEnabled = !selectedClassVideoEnabled;
     setIsSavingClassVideoSetting(true);
@@ -1211,7 +1243,7 @@ export default function TeacherDashboard() {
   }
 
   async function handleDeleteSelectedClass() {
-    const className = selectedClassName.trim();
+    const className = selectedClass?.trim() ?? "";
     if (!className || isDeletingClass) return;
 
     const assignedStudents = students.filter((student) => (student.class_name?.trim() ?? "") === className);
@@ -1241,7 +1273,7 @@ export default function TeacherDashboard() {
         delete next[className];
         return next;
       });
-      setSelectedClassName("");
+      setSelectedClass(null);
       setRosterSuccess(`Class "${className}" deleted.`);
       await fetchPrompts();
     } catch (error: any) {
@@ -1548,77 +1580,86 @@ export default function TeacherDashboard() {
         }
       `}</style>
       <div style={styles.container}>
-        <div style={styles.grid} className="teacher-dashboard-grid">
-          <section style={styles.panel}>
-            <div style={styles.panelLabel}>Roster</div>
-            <div style={styles.panelHeading}>Class roster</div>
-            <div style={styles.panelDescription}>Add student codes for each class/group.</div>
-            <div style={{ marginBottom: "10px" }}>
-              <div style={{ ...styles.helper, marginBottom: "6px" }}>Selected Class</div>
-              <select
-                value={selectedClassName}
-                onChange={(e) => setSelectedClassName(e.target.value)}
-                style={styles.rosterInput}
-              >
-                <option value="">All classes/groups</option>
-                {classNameOptions.map((className) => (
-                  <option key={className} value={className}>
-                    {className}
-                  </option>
-                ))}
-              </select>
-              <div style={{ ...styles.helper, marginTop: "8px" }}>Need a new class/group? Add it below, then click Select.</div>
-              {selectedClassName ? (
-                <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <div style={styles.helper}>
-                    Project Update Video for <strong>{selectedClassName}</strong>:{" "}
-                    <strong style={{ color: selectedClassVideoEnabled ? "#047857" : "#b45309" }}>
-                      {selectedClassVideoEnabled ? "Enabled" : "Disabled"}
-                    </strong>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleToggleProjectVideoForSelectedClass()}
-                    disabled={isSavingClassVideoSetting}
-                    style={clampButton(isSavingClassVideoSetting, {
-                      ...styles.secondaryButton,
-                      minHeight: "42px",
-                      borderColor: selectedClassVideoEnabled ? "#fecaca" : "#86efac",
-                      color: selectedClassVideoEnabled ? "#b91c1c" : "#166534",
-                    })}
-                  >
-                    {isSavingClassVideoSetting ? "Saving..." : selectedClassVideoEnabled ? "Disable project video updates" : "Enable project video updates"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteSelectedClass()}
-                    disabled={isDeletingClass}
-                    style={clampButton(isDeletingClass, {
-                      ...styles.secondaryButton,
-                      minHeight: "42px",
-                      borderColor: "#fecaca",
-                      color: "#b91c1c",
-                    })}
-                  >
-                    {isDeletingClass ? "Deleting..." : "Delete class"}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-            <div style={{ ...styles.rosterGrid, marginBottom: "10px" }}>
+        {!selectedClassName ? (
+          <section style={styles.classesScreen}>
+            <div style={styles.panelLabel}>Teacher dashboard</div>
+            <div style={styles.panelHeading}>Classes</div>
+            <div style={styles.panelDescription}>Start by choosing a class, then manage roster, prompts, submissions, and analytics in one place.</div>
+            <div style={{ ...styles.rosterGrid, marginTop: "8px" }}>
               <input
                 value={newClassName}
                 onChange={(e) => setNewClassName(e.target.value)}
                 placeholder="New class / group"
                 style={styles.rosterInput}
               />
-              <button
-                type="button"
-                onClick={handleUseNewClass}
-                style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
-              >
-                Select
+              <button type="button" onClick={handleUseNewClass} style={{ ...styles.primaryButton, minHeight: "44px" }}>
+                Create class
               </button>
+              <button type="button" onClick={() => void fetchStudents()} style={{ ...styles.secondaryButton, minHeight: "44px" }}>
+                Refresh classes
+              </button>
+            </div>
+            {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
+            <div style={styles.classCardGrid}>
+              {classSummaries.map((row) => (
+                <button
+                  key={row.className}
+                  type="button"
+                  onClick={() => setSelectedClass(row.className)}
+                  style={{ ...styles.classCard, cursor: "pointer" }}
+                >
+                  <div style={{ fontSize: "18px", fontWeight: 900, color: "#0f172a" }}>{row.className}</div>
+                  <div style={{ ...styles.helper, marginTop: "6px" }}>{row.studentCount} student{row.studentCount === 1 ? "" : "s"}</div>
+                </button>
+              ))}
+            </div>
+            {!classSummaries.length ? <div style={{ ...styles.helper, marginTop: "16px" }}>No classes yet. Create one to get started.</div> : null}
+          </section>
+        ) : null}
+        {selectedClassName ? (
+        <div style={styles.grid} className="teacher-dashboard-grid">
+          <section style={styles.panel}>
+            <button type="button" onClick={() => setSelectedClass(null)} style={{ ...styles.secondaryButton, minHeight: "38px", marginBottom: "10px" }}>
+              ← Back to Classes
+            </button>
+            <div style={styles.panelLabel}>Roster</div>
+            <div style={styles.panelHeading}>{selectedClassName}</div>
+            <div style={styles.panelDescription}>Manage roster and class settings.</div>
+            <div style={{ marginBottom: "10px" }}>
+              <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={styles.helper}>
+                  Project Update Video for <strong>{selectedClassName}</strong>:{" "}
+                  <strong style={{ color: selectedClassVideoEnabled ? "#047857" : "#b45309" }}>
+                    {selectedClassVideoEnabled ? "Enabled" : "Disabled"}
+                  </strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleToggleProjectVideoForSelectedClass()}
+                  disabled={isSavingClassVideoSetting}
+                  style={clampButton(isSavingClassVideoSetting, {
+                    ...styles.secondaryButton,
+                    minHeight: "42px",
+                    borderColor: selectedClassVideoEnabled ? "#fecaca" : "#86efac",
+                    color: selectedClassVideoEnabled ? "#b91c1c" : "#166534",
+                  })}
+                >
+                  {isSavingClassVideoSetting ? "Saving..." : selectedClassVideoEnabled ? "Disable project video updates" : "Enable project video updates"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteSelectedClass()}
+                  disabled={isDeletingClass}
+                  style={clampButton(isDeletingClass, {
+                    ...styles.secondaryButton,
+                    minHeight: "42px",
+                    borderColor: "#fecaca",
+                    color: "#b91c1c",
+                  })}
+                >
+                  {isDeletingClass ? "Deleting..." : "Delete class"}
+                </button>
+              </div>
             </div>
             <div style={styles.rosterGrid}>
               <input
@@ -1802,25 +1843,19 @@ export default function TeacherDashboard() {
             {promptError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{promptError}</div> : null}
 
             <div style={styles.promptFilterRow}>
-              <div style={{ ...styles.promptHelper, marginTop: "0" }}>Filter prompts</div>
+              <div style={{ ...styles.promptHelper, marginTop: "0" }}>Filter prompts for {selectedClassName}</div>
               <select value={promptListFilter} onChange={(e) => setPromptListFilter(e.target.value)} style={{ ...styles.promptInput, minHeight: "40px", fontSize: "14px" }}>
                 <option value="__all_prompts__">All prompts</option>
                 <option value="__all_classes_only__">Unassigned prompts</option>
-                {classNameOptions.map((className) => (
-                  <option key={className} value={className}>
-                    {className}
-                  </option>
-                ))}
+                <option value={selectedClassName}>{selectedClassName}</option>
               </select>
-              {selectedClassName ? (
-                <button
-                  type="button"
-                  onClick={() => void handleClearVisiblePromptsForSelectedClass()}
-                  style={{ ...styles.promptAssignmentButton, borderColor: "#fecaca", color: "#b91c1c" }}
-                >
-                  Set “{selectedClassName}” to no visible prompt
-                </button>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleClearVisiblePromptsForSelectedClass()}
+                style={{ ...styles.promptAssignmentButton, borderColor: "#fecaca", color: "#b91c1c" }}
+              >
+                Set “{selectedClassName}” to no visible prompt
+              </button>
             </div>
 
             {filteredPrompts.map((prompt) => {
@@ -1975,28 +2010,13 @@ export default function TeacherDashboard() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                 gap: "10px",
                 marginBottom: "12px",
               }}
             >
               <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Class
-                <select
-                  value={submissionClassFilter}
-                  onChange={(e) => setSubmissionClassFilter(e.target.value)}
-                  style={{ ...styles.rosterInput, minHeight: "42px", fontSize: "14px", textTransform: "none", letterSpacing: "normal", fontWeight: 600 }}
-                >
-                  <option value="__all_classes__">All classes</option>
-                  {classNameOptions.map((className) => (
-                    <option key={className} value={className}>
-                      {className}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Prompt
+                Prompt ({selectedClassName})
                 <select
                   value={submissionPromptFilter}
                   onChange={(e) => setSubmissionPromptFilter(e.target.value)}
@@ -2022,27 +2042,13 @@ export default function TeacherDashboard() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                   gap: "10px",
                   marginBottom: "12px",
                 }}
               >
                 <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  Class
-                  <select
-                    value={analyticsClassFilter}
-                    onChange={(e) => setAnalyticsClassFilter(e.target.value)}
-                    style={{ ...styles.rosterInput, minHeight: "40px", fontSize: "14px", textTransform: "none", letterSpacing: "normal", fontWeight: 600 }}
-                  >
-                    {classNameOptions.map((className) => (
-                      <option key={`analytics-${className}`} value={className}>
-                        {className}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  Prompt
+                  Prompt ({selectedClassName})
                   <select
                     value={analyticsPromptFilter}
                     onChange={(e) => setAnalyticsPromptFilter(e.target.value)}
@@ -2059,7 +2065,7 @@ export default function TeacherDashboard() {
                 </label>
               </div>
 
-              {analyticsClassFilter && analyticsPromptFilter ? (
+              {selectedClassName && analyticsPromptFilter ? (
                 <>
                   <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
                     <span style={styles.pill}>Total students: {submissionAnalytics.selectedClassStudents.length}</span>
@@ -2343,6 +2349,7 @@ export default function TeacherDashboard() {
             </div>
           </section>
         </div>
+        ) : null}
       </div>
     </div>
   );
