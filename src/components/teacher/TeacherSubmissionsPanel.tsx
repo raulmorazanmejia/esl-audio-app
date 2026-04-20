@@ -12,6 +12,8 @@ type Props = {
   submissionPromptFilter: string;
   setSubmissionPromptFilter: (v: string) => void;
   submissionPromptOptions: string[];
+  selectedStudentFilter: { code: string; name?: string } | null;
+  onClearStudentFilter: () => void;
   filteredSubmissions: SubmissionRow[];
   drafts: DraftsById;
   toggleSubmissionDetails: (id: string) => void;
@@ -43,6 +45,14 @@ export default function TeacherSubmissionsPanel(p: Props) {
       <option value="__all_prompts__">All prompts</option>
       {p.submissionPromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}
     </select>
+    {p.selectedStudentFilter ? (
+      <div style={{ marginTop: 8, marginBottom: 8, padding: "8px 10px", border: "1px solid #bae6fd", borderRadius: 10, background: "#f0f9ff", display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#0c4a6e" }}>
+          Showing submissions for {p.selectedStudentFilter.name || "student"} ({p.selectedStudentFilter.code})
+        </div>
+        <button type="button" onClick={p.onClearStudentFilter}>Clear student filter</button>
+      </div>
+    ) : null}
 
     <TeacherAnalyticsPanel
       selectedClassName={p.selectedClassName}
@@ -52,7 +62,7 @@ export default function TeacherSubmissionsPanel(p: Props) {
       submissionAnalytics={p.submissionAnalytics}
     />
 
-    {p.filteredSubmissions.length === 0 ? <div>No submissions for this class.</div> : null}
+    {p.filteredSubmissions.length === 0 ? <div>No submissions for this class and filter selection.</div> : null}
     {p.filteredSubmissions.map((submission) => {
       const draft = p.drafts[submission.id];
       const isExpanded = Boolean(p.expandedSubmissionIds[submission.id]);

@@ -573,6 +573,7 @@ export default function TeacherDashboard() {
   const [expandedSubmissionIds, setExpandedSubmissionIds] = useState<Record<string, boolean>>({});
   const [reviewFilter, setReviewFilter] = useState<"all" | "needs_review" | "reviewed">("all");
   const [submissionPromptFilter, setSubmissionPromptFilter] = useState("__all_prompts__");
+  const [selectedStudentFilter, setSelectedStudentFilter] = useState<{ code: string; name?: string } | null>(null);
   const [analyticsPromptFilter, setAnalyticsPromptFilter] = useState("");
   const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
   const [isLoadingProjectVideoSubmissions, setIsLoadingProjectVideoSubmissions] = useState(false);
@@ -667,6 +668,7 @@ export default function TeacherDashboard() {
     setPromptListFilter("__all_prompts__");
     setSubmissionPromptFilter("__all_prompts__");
     setNewPromptClassName(selectedClassName);
+    setSelectedStudentFilter(null);
   }, [selectedClassName]);
 
   const filteredSubmissions = useMemo(() => {
@@ -679,10 +681,21 @@ export default function TeacherDashboard() {
       const submissionPrompt = submission.prompt_text?.trim() ?? "";
       const matchesPrompt = submissionPromptFilter === "__all_prompts__" || submissionPrompt === submissionPromptFilter;
       const matchesReview = reviewFilter === "needs_review" ? needsTeacherReview : reviewFilter === "reviewed" ? !needsTeacherReview : true;
+      const submissionStudentCode = submission.student_code?.trim() ?? "";
+      const matchesStudent = !selectedStudentFilter || submissionStudentCode === selectedStudentFilter.code;
 
-      return matchesClass && matchesPrompt && matchesReview;
+      return matchesClass && matchesPrompt && matchesReview && matchesStudent;
     });
-  }, [submissions, reviewFilter, selectedClassName, submissionPromptFilter, getSubmissionClassName]);
+  }, [submissions, reviewFilter, selectedClassName, submissionPromptFilter, getSubmissionClassName, selectedStudentFilter]);
+
+  const classNeedsReviewCount = useMemo(() => {
+    if (!selectedClassName) return 0;
+    return submissions.filter((submission) => {
+      if (getSubmissionClassName(submission) !== selectedClassName) return false;
+      const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
+      return !submission.teacher_comment && !savedTeacherAudioUrl;
+    }).length;
+  }, [submissions, selectedClassName, getSubmissionClassName]);
 
   const filteredPrompts = useMemo(() => {
     const bySelectedClass = sortedPrompts.filter((prompt) => {
@@ -818,6 +831,14 @@ export default function TeacherDashboard() {
     if (!selectedClassName) return [];
     return students.filter((student) => (student.class_name?.trim() ?? "") === selectedClassName);
   }, [students, selectedClassName]);
+
+  useEffect(() => {
+    if (!selectedStudentFilter) return;
+    const stillInClass = selectedClassStudents.some((student) => student.student_code.trim() === selectedStudentFilter.code);
+    if (!stillInClass) {
+      setSelectedStudentFilter(null);
+    }
+  }, [selectedClassStudents, selectedStudentFilter]);
 
   const selectedClassVideoEnabled = useMemo(() => {
     if (!selectedClassName) return false;
@@ -1287,6 +1308,11 @@ export default function TeacherDashboard() {
       return;
     }
     setStudents((prev) => prev.filter((row) => row.id !== studentId));
+    setSelectedStudentFilter((prev) => {
+      if (!prev) return prev;
+      const stillExists = students.some((row) => row.id !== studentId && row.student_code.trim() === prev.code);
+      return stillExists ? prev : null;
+    });
   }
 
   function updateDraft(id: string, patch: Partial<DraftState>) {
@@ -1549,7 +1575,7 @@ export default function TeacherDashboard() {
           <TeacherClassDetail
             selectedClassName={selectedClassName}
             selectedClassStudents={selectedClassStudents}
-            needsReviewCount={filteredSubmissions.filter((submission) => !submission.teacher_comment && !(submission.feedback_audio_url || submission.feedback_url)).length}
+            needsReviewCount={classNeedsReviewCount}
             assignedPromptCount={sortedPrompts.filter((prompt) => (prompt.class_name?.trim() || "") === selectedClassName).length}
             rosterPanelProps={{
               selectedClassName,
@@ -1570,6 +1596,9 @@ export default function TeacherDashboard() {
               rosterError,
               selectedClassStudents,
               filteredStudents,
+              selectedStudentCode: selectedStudentFilter?.code ?? "",
+              onSelectStudent: (student: StudentRow) =>
+                setSelectedStudentFilter({ code: student.student_code.trim(), name: student.student_name.trim() }),
               updateStudentDraft,
               onSaveStudent: (student: StudentRow) => void handleSaveStudent(student),
               onDeleteStudent: (id: string) => void handleDeleteStudent(id),
@@ -1610,6 +1639,8 @@ export default function TeacherDashboard() {
               submissionPromptFilter,
               setSubmissionPromptFilter,
               submissionPromptOptions,
+              selectedStudentFilter,
+              onClearStudentFilter: () => setSelectedStudentFilter(null),
               filteredSubmissions,
               drafts,
               toggleSubmissionDetails,
