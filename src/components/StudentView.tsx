@@ -556,6 +556,8 @@ export default function StudentView() {
     const { data, error } = await supabase
       .from("prompts")
       .select(PROMPT_SELECT)
+      .eq("class_name", className)
+      .eq("is_active", true)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -564,11 +566,7 @@ export default function StudentView() {
       return [];
     }
 
-    const rows = ((data ?? []) as PromptRow[]).filter((row) => {
-      const promptClassName = row.class_name?.trim() || "";
-      if (!className) return false;
-      return promptClassName === className && Boolean(row.is_active);
-    });
+    const rows = (data ?? []) as PromptRow[];
 
     setAssignedPrompts(rows);
     const preferredPrompt = rows[0] || null;

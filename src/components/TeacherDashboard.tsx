@@ -1,83 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
-import ReliableAudioPlayer from "./ReliableAudioPlayer";
-
-type PromptRow = {
-  id: string;
-  prompt_text: string | null;
-  class_name: string | null;
-  suggested_time: string | null;
-  prompt_image_path: string | null;
-  prompt_image_url: string | null;
-  example_text: string | null;
-  is_active: boolean | null;
-  created_at?: string | null;
-};
-
-type SubmissionRow = {
-  id: string;
-  student_name: string | null;
-  prompt_text: string | null;
-  audio_path: string | null;
-  audio_url: string | null;
-  status: string | null;
-  created_at: string | null;
-  feedback_audio_path: string | null;
-  feedback_audio_url: string | null;
-  feedback_status: string | null;
-  feedback_created_at: string | null;
-  student_email: string | null;
-  student_auth_id: string | null;
-  feedback_url: string | null;
-  transcript: string | null;
-  ai_score: number | null;
-  ai_comment: string | null;
-  teacher_score: number | null;
-  teacher_comment: string | null;
-  student_code: string | null;
-};
-
-type StudentRow = {
-  id: string;
-  class_name: string | null;
-  student_name: string;
-  student_code: string;
-  created_at: string | null;
-};
-
-type ClassVideoSettingRow = {
-  class_name: string;
-  project_video_updates_enabled: boolean | null;
-};
-
-type ProjectVideoSubmissionRow = {
-  id: string;
-  student_name: string | null;
-  student_code: string | null;
-  class_name: string | null;
-  video_path: string | null;
-  video_url: string | null;
-  created_at: string | null;
-};
+import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
+import TeacherClassDetail from "./teacher/TeacherClassDetail";
+import { ClassVideoSettingRow, DraftState, DraftsById, ProjectVideoSubmissionRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 const PROJECT_VIDEO_SUBMISSION_SELECT = "id, student_name, student_code, class_name, video_path, video_url, created_at";
-
-type DraftState = {
-  score: number;
-  comment: string;
-  savingOverride: boolean;
-  savingAudio: boolean;
-  savedMessage: string;
-  error: string;
-  teacherBlob: Blob | null;
-  teacherPreviewUrl: string;
-  isRecordingTeacher: boolean;
-  recordingError: string;
-};
-
-type DraftsById = Record<string, DraftState>;
 
 const styles = {
   page: {
@@ -711,7 +640,7 @@ export default function TeacherDashboard() {
       const promptText = prompt.prompt_text?.trim() ?? "";
       if (!promptText) return;
       const promptClass = prompt.class_name?.trim() ?? "";
-      if (!selectedClassName || !promptClass || promptClass === selectedClassName) {
+      if (!selectedClassName || promptClass === selectedClassName) {
         promptSet.add(promptText);
       }
     });
@@ -758,13 +687,13 @@ export default function TeacherDashboard() {
   const filteredPrompts = useMemo(() => {
     const bySelectedClass = sortedPrompts.filter((prompt) => {
       const promptClass = prompt.class_name?.trim() ?? "";
-      return !selectedClassName || !promptClass || promptClass === selectedClassName;
+      return !selectedClassName ? Boolean(promptClass) : promptClass === selectedClassName;
     });
     if (promptListFilter === "__all_prompts__") return bySelectedClass;
-    if (promptListFilter === "__all_classes_only__") {
-      return bySelectedClass.filter((prompt) => !(prompt.class_name?.trim() || ""));
+    if (promptListFilter === "__unassigned_only__") {
+      return sortedPrompts.filter((prompt) => !(prompt.class_name?.trim() || ""));
     }
-    return bySelectedClass.filter((prompt) => (prompt.class_name?.trim() || "") === promptListFilter);
+    return bySelectedClass;
   }, [sortedPrompts, promptListFilter, selectedClassName]);
 
   const classNameOptions = useMemo(() => {
@@ -781,10 +710,34 @@ export default function TeacherDashboard() {
       if (!className) return;
       counts.set(className, (counts.get(className) ?? 0) + 1);
     });
+
+    const promptCounts = new Map<string, number>();
+    prompts.forEach((prompt) => {
+      const className = prompt.class_name?.trim() ?? "";
+      if (!className) return;
+      promptCounts.set(className, (promptCounts.get(className) ?? 0) + 1);
+    });
+
+    const needsReviewCounts = new Map<string, number>();
+    submissions.forEach((submission) => {
+      const className = getSubmissionClassName(submission);
+      if (!className) return;
+      const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
+      const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
+      if (!needsTeacherReview) return;
+      needsReviewCounts.set(className, (needsReviewCounts.get(className) ?? 0) + 1);
+    });
+
     return Array.from(counts.entries())
-      .map(([className, studentCount]) => ({ className, studentCount }))
+      .map(([className, studentCount]) => ({
+        className,
+        studentCount,
+        promptCount: promptCounts.get(className) ?? 0,
+        needsReviewCount: needsReviewCounts.get(className) ?? 0,
+        projectVideoEnabled: Boolean(classVideoSettings[className]),
+      }))
       .sort((a, b) => a.className.localeCompare(b.className));
-  }, [students]);
+  }, [students, prompts, submissions, getSubmissionClassName, classVideoSettings]);
 
   const analyticsPromptOptions = useMemo(() => {
     if (!selectedClassName) return [];
@@ -794,7 +747,7 @@ export default function TeacherDashboard() {
       const promptText = prompt.prompt_text?.trim() ?? "";
       const promptClass = prompt.class_name?.trim() ?? "";
       if (!promptText) return;
-      if (!promptClass || promptClass === selectedClassName) {
+      if (promptClass === selectedClassName) {
         promptSet.add(promptText);
       }
     });
@@ -1581,774 +1534,101 @@ export default function TeacherDashboard() {
       `}</style>
       <div style={styles.container}>
         {!selectedClassName ? (
-          <section style={styles.classesScreen}>
-            <div style={styles.panelLabel}>Teacher dashboard</div>
-            <div style={styles.panelHeading}>Classes</div>
-            <div style={styles.panelDescription}>Start by choosing a class, then manage roster, prompts, submissions, and analytics in one place.</div>
-            <div style={{ ...styles.rosterGrid, marginTop: "8px" }}>
-              <input
-                value={newClassName}
-                onChange={(e) => setNewClassName(e.target.value)}
-                placeholder="New class / group"
-                style={styles.rosterInput}
-              />
-              <button type="button" onClick={handleUseNewClass} style={{ ...styles.primaryButton, minHeight: "44px" }}>
-                Create class
-              </button>
-              <button type="button" onClick={() => void fetchStudents()} style={{ ...styles.secondaryButton, minHeight: "44px" }}>
-                Refresh classes
-              </button>
-            </div>
-            {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
-            <div style={styles.classCardGrid}>
-              {classSummaries.map((row) => (
-                <button
-                  key={row.className}
-                  type="button"
-                  onClick={() => setSelectedClass(row.className)}
-                  style={{ ...styles.classCard, cursor: "pointer" }}
-                >
-                  <div style={{ fontSize: "18px", fontWeight: 900, color: "#0f172a" }}>{row.className}</div>
-                  <div style={{ ...styles.helper, marginTop: "6px" }}>{row.studentCount} student{row.studentCount === 1 ? "" : "s"}</div>
-                </button>
-              ))}
-            </div>
-            {!classSummaries.length ? <div style={{ ...styles.helper, marginTop: "16px" }}>No classes yet. Create one to get started.</div> : null}
-          </section>
+          <TeacherClassesOverview
+            classSummaries={classSummaries}
+            newClassName={newClassName}
+            onNewClassNameChange={setNewClassName}
+            onUseNewClass={handleUseNewClass}
+            onRefreshClasses={() => void fetchStudents()}
+            onSelectClass={setSelectedClass}
+            rosterError={rosterError}
+          />
         ) : null}
+
         {selectedClassName ? (
-        <div style={styles.grid} className="teacher-dashboard-grid">
-          <section style={styles.panel}>
-            <button type="button" onClick={() => setSelectedClass(null)} style={{ ...styles.secondaryButton, minHeight: "38px", marginBottom: "10px" }}>
-              ← Back to Classes
-            </button>
-            <div style={styles.panelLabel}>Roster</div>
-            <div style={styles.panelHeading}>{selectedClassName}</div>
-            <div style={styles.panelDescription}>Manage roster and class settings.</div>
-            <div style={{ marginBottom: "10px" }}>
-              <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                <div style={styles.helper}>
-                  Project Update Video for <strong>{selectedClassName}</strong>:{" "}
-                  <strong style={{ color: selectedClassVideoEnabled ? "#047857" : "#b45309" }}>
-                    {selectedClassVideoEnabled ? "Enabled" : "Disabled"}
-                  </strong>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleToggleProjectVideoForSelectedClass()}
-                  disabled={isSavingClassVideoSetting}
-                  style={clampButton(isSavingClassVideoSetting, {
-                    ...styles.secondaryButton,
-                    minHeight: "42px",
-                    borderColor: selectedClassVideoEnabled ? "#fecaca" : "#86efac",
-                    color: selectedClassVideoEnabled ? "#b91c1c" : "#166534",
-                  })}
-                >
-                  {isSavingClassVideoSetting ? "Saving..." : selectedClassVideoEnabled ? "Disable project video updates" : "Enable project video updates"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleDeleteSelectedClass()}
-                  disabled={isDeletingClass}
-                  style={clampButton(isDeletingClass, {
-                    ...styles.secondaryButton,
-                    minHeight: "42px",
-                    borderColor: "#fecaca",
-                    color: "#b91c1c",
-                  })}
-                >
-                  {isDeletingClass ? "Deleting..." : "Delete class"}
-                </button>
-              </div>
-            </div>
-            <div style={styles.rosterGrid}>
-              <input
-                value={newStudentName}
-                onChange={(e) => setNewStudentName(e.target.value)}
-                placeholder="Student name"
-                style={styles.rosterInput}
-                ref={newStudentNameInputRef}
-              />
-              <input
-                value={newStudentCode}
-                onChange={(e) => setNewStudentCode(e.target.value.toUpperCase())}
-                placeholder="Code"
-                style={styles.rosterInput}
-              />
-              <button
-                type="button"
-                onClick={() => void handleAddStudent()}
-                disabled={isSavingStudent}
-                style={clampButton(isSavingStudent, { ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" })}
-              >
-                {isSavingStudent ? "Saving..." : "Add"}
-              </button>
-              <button
-                type="button"
-                onClick={() => void fetchStudents()}
-                style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
-              >
-                Refresh
-              </button>
-            </div>
-
-            {rosterSuccess ? (
-              <div style={{ ...styles.success, marginTop: "10px", padding: "10px 12px", borderRadius: "12px", background: "#ecfeff", border: "1px solid #99f6e4" }}>
-                {rosterSuccess}
-              </div>
-            ) : null}
-            {rosterError ? <div style={{ ...styles.error, marginTop: "10px" }}>{rosterError}</div> : null}
-
-            {selectedClassName ? (
-              <div style={styles.rosterSummaryCard}>
-                <div style={{ ...styles.helper, marginTop: "2px", marginBottom: "8px", color: "#334155", fontWeight: 800 }}>
-                  {selectedClassName} roster ({selectedClassStudents.length})
-                </div>
-                <table style={styles.rosterTable}>
-                  <thead>
-                    <tr>
-                      <th style={styles.rosterTh}>Student name</th>
-                      <th style={styles.rosterTh}>Code</th>
-                      <th style={styles.rosterTh}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedClassStudents.length ? (
-                      selectedClassStudents.map((student, index) => (
-                        <tr key={`table-${student.id}`} style={{ background: index % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
-                          <td style={styles.rosterTd}>{student.student_name}</td>
-                          <td style={{ ...styles.rosterTd, fontWeight: 800, letterSpacing: "0.04em" }}>{student.student_code}</td>
-                          <td style={styles.rosterTd}>Edit below</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td style={styles.rosterTd} colSpan={3}>
-                          No students in this class yet.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            ) : null}
-
-            <div style={styles.rosterRows}>
-              {filteredStudents.map((student) => (
-                <div key={student.id} style={styles.rosterGrid}>
-                  <input
-                    value={student.class_name ?? ""}
-                    onChange={(e) => updateStudentDraft(student.id, { class_name: e.target.value })}
-                    style={styles.rosterInput}
-                  />
-                  <input
-                    value={student.student_name}
-                    onChange={(e) => updateStudentDraft(student.id, { student_name: e.target.value })}
-                    style={styles.rosterInput}
-                  />
-                  <input
-                    value={student.student_code}
-                    onChange={(e) => updateStudentDraft(student.id, { student_code: e.target.value.toUpperCase() })}
-                    style={styles.rosterInput}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleSaveStudent(student)}
-                    style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px" }}
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteStudent(student.id)}
-                    style={{ ...styles.secondaryButton, minHeight: "44px", padding: "0 12px", borderColor: "#fecaca", color: "#b91c1c" }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section style={styles.panel}>
-            <div style={styles.panelLabel}>Classroom prompts</div>
-            <div style={styles.panelHeading}>Prompt library</div>
-            <div style={styles.panelDescription}>Create prompts and manage class assignment and visibility.</div>
-            <div style={styles.promptInputRow}>
-              <div style={styles.promptInputs}>
-                <input
-                  value={newPrompt}
-                  onChange={(e) => setNewPrompt(e.target.value)}
-                  placeholder="Type a new prompt"
-                  style={styles.promptInput}
-                />
-                <input
-                  value={newSuggestedTime}
-                  onChange={(e) => setNewSuggestedTime(e.target.value)}
-                  placeholder="Suggested speaking time (optional)"
-                  style={styles.promptInput}
-                />
-                <select
-                  value={newPromptClassName}
-                  onChange={(e) => setNewPromptClassName(e.target.value)}
-                  style={styles.promptInput}
-                >
-                  <option value="">All classes</option>
-                  {classNameOptions.map((className) => (
-                    <option key={className} value={className}>
-                      {className}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={styles.promptHelper}>Suggested speaking time (optional)</div>
-              <label style={{ ...styles.promptHelper, marginTop: "2px" }}>
-                Optional prompt image
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] ?? null;
-                    setNewPromptImageFile(file);
-                    if (newPromptImagePreviewUrl) {
-                      URL.revokeObjectURL(newPromptImagePreviewUrl);
-                      setNewPromptImagePreviewUrl("");
-                    }
-                    if (file) {
-                      setNewPromptImagePreviewUrl(URL.createObjectURL(file));
-                    }
-                  }}
-                  style={{ display: "block", marginTop: "8px", fontSize: "14px", color: "#334155" }}
-                />
-              </label>
-              {newPromptImagePreviewUrl ? (
-                <div style={{ marginTop: "2px" }}>
-                  <img
-                    src={newPromptImagePreviewUrl}
-                    alt="New prompt preview"
-                    style={{ maxWidth: "160px", maxHeight: "110px", borderRadius: "12px", border: "1px solid #cbd5e1", objectFit: "cover" }}
-                  />
-                </div>
-              ) : null}
-              <button type="button" onClick={() => void handleSavePrompt()} disabled={isSavingPrompt} style={clampButton(isSavingPrompt, styles.primaryButton)}>
-                {isSavingPrompt ? "Saving..." : "Save"}
-              </button>
-            </div>
-
-            {promptSuccess ? (
-              <div style={{ ...styles.success, marginBottom: "12px", padding: "10px 12px", borderRadius: "12px", background: "#ecfeff", border: "1px solid #99f6e4" }}>
-                {promptSuccess}
-              </div>
-            ) : null}
-            {promptError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{promptError}</div> : null}
-
-            <div style={styles.promptFilterRow}>
-              <div style={{ ...styles.promptHelper, marginTop: "0" }}>Filter prompts for {selectedClassName}</div>
-              <select value={promptListFilter} onChange={(e) => setPromptListFilter(e.target.value)} style={{ ...styles.promptInput, minHeight: "40px", fontSize: "14px" }}>
-                <option value="__all_prompts__">All prompts</option>
-                <option value="__all_classes_only__">Unassigned prompts</option>
-                <option value={selectedClassName}>{selectedClassName}</option>
-              </select>
-              <button
-                type="button"
-                onClick={() => void handleClearVisiblePromptsForSelectedClass()}
-                style={{ ...styles.promptAssignmentButton, borderColor: "#fecaca", color: "#b91c1c" }}
-              >
-                Set “{selectedClassName}” to no visible prompt
-              </button>
-            </div>
-
-            {filteredPrompts.map((prompt) => {
-              const isVisible = Boolean(prompt.is_active);
-              const assignmentValue = promptAssignmentDrafts[prompt.id] ?? (prompt.class_name?.trim() || "");
-              const isSavingAssignment = Boolean(savingPromptAssignmentById[prompt.id]);
-              const isSavingVisibility = Boolean(savingPromptVisibilityById[prompt.id]);
-              const isDeletingPrompt = Boolean(deletingPromptById[prompt.id]);
-              return (
-                <div
-                  key={prompt.id}
-                  style={{
-                    ...styles.promptCard,
-                    background: isVisible ? "#eef2ff" : "#ffffff",
-                    borderColor: isVisible ? "#818cf8" : "#e2e8f0",
-                  }}
-                >
-                  <div style={styles.promptHeader}>
-                    <div style={styles.promptInfoWrap}>
-                      <div style={{ ...styles.promptTitle, color: isVisible ? "#4f46e5" : "#1e293b" }}>{prompt.prompt_text}</div>
-                      <div style={styles.promptMeta}>Prompt details</div>
-                      <div style={styles.promptBadgeRow}>
-                        <span style={{ ...styles.promptBadge, borderColor: "#bfdbfe", background: "#eff6ff", color: "#1d4ed8" }}>
-                          Assignment: {prompt.class_name?.trim() || "All classes"}
-                        </span>
-                        {prompt.suggested_time ? (
-                          <span style={{ ...styles.promptBadge, borderColor: "#dbeafe", background: "#f8fafc", color: "#475569" }}>
-                            Suggested time: {prompt.suggested_time}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div style={styles.promptAssignmentControls}>
-                        <select
-                          value={assignmentValue}
-                          onChange={(e) =>
-                            setPromptAssignmentDrafts((prev) => ({
-                              ...prev,
-                              [prompt.id]: e.target.value,
-                            }))
-                          }
-                          style={styles.promptAssignmentSelect}
-                        >
-                          <option value="">Not assigned</option>
-                          {classNameOptions.map((className) => (
-                            <option key={`${prompt.id}-${className}`} value={className}>
-                              {className}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={() => void handleSavePromptAssignment(prompt.id)}
-                          disabled={isSavingAssignment}
-                          style={clampButton(isSavingAssignment, styles.promptAssignmentButton)}
-                        >
-                          {isSavingAssignment ? "Saving..." : "Save class"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleTogglePromptVisibility(prompt)}
-                          disabled={isSavingVisibility}
-                          style={clampButton(isSavingVisibility, {
-                            ...styles.promptAssignmentButton,
-                            borderColor: isVisible ? "#fecaca" : "#bfdbfe",
-                            color: isVisible ? "#b91c1c" : "#1d4ed8",
-                          })}
-                        >
-                          {isSavingVisibility ? "Saving..." : isVisible ? "Hide from students" : "Show to students"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDeletePrompt(prompt)}
-                          disabled={isDeletingPrompt}
-                          style={clampButton(isDeletingPrompt, styles.promptDeleteButton)}
-                        >
-                          {isDeletingPrompt ? "Deleting..." : "Delete prompt"}
-                        </button>
-                      </div>
-                    </div>
-                    <span
-                      style={{
-                        ...styles.promptStatusBadge,
-                        background: isVisible ? "#ede9fe" : "#f8fafc",
-                        color: isVisible ? "#5b21b6" : "#64748b",
-                        borderColor: isVisible ? "#c4b5fd" : "#cbd5e1",
-                      }}
-                    >
-                      {isVisible ? "Visible" : "Hidden"}
-                    </span>
-                  </div>
-                  {prompt.prompt_image_url ? (
-                    <img
-                      src={prompt.prompt_image_url}
-                      alt="Prompt visual"
-                      style={styles.promptImage}
-                    />
-                  ) : null}
-                  {prompt.example_text ? <div style={styles.exampleBox}>{prompt.example_text}</div> : null}
-                </div>
-              );
-            })}
-          </section>
-
-          <section style={styles.panel}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginBottom: "18px", flexWrap: "wrap" }}>
-              <div style={styles.panelLabel}>Student submissions</div>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter("all")}
-                  style={{
-                    ...styles.secondaryButton,
-                    minHeight: "44px",
-                    background: reviewFilter === "all" ? "#0f172a" : "#ffffff",
-                    color: reviewFilter === "all" ? "#ffffff" : "#334155",
-                    border: reviewFilter === "all" ? "none" : "1px solid #cbd5e1",
-                  }}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter("needs_review")}
-                  style={{
-                    ...styles.secondaryButton,
-                    minHeight: "44px",
-                    background: reviewFilter === "needs_review" ? "#fffbeb" : "#ffffff",
-                    color: reviewFilter === "needs_review" ? "#b45309" : "#334155",
-                    borderColor: reviewFilter === "needs_review" ? "#f59e0b" : "#cbd5e1",
-                  }}
-                >
-                  Needs review
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReviewFilter("reviewed")}
-                  style={{
-                    ...styles.secondaryButton,
-                    minHeight: "44px",
-                    background: reviewFilter === "reviewed" ? "#ecfdf5" : "#ffffff",
-                    color: reviewFilter === "reviewed" ? "#047857" : "#334155",
-                    borderColor: reviewFilter === "reviewed" ? "#10b981" : "#cbd5e1",
-                  }}
-                >
-                  Reviewed
-                </button>
-                <button type="button" onClick={() => void fetchSubmissions()} disabled={isLoadingSubmissions} style={clampButton(isLoadingSubmissions, styles.secondaryButton)}>
-                  {isLoadingSubmissions ? "Refreshing..." : "Refresh"}
-                </button>
-              </div>
-            </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: "10px",
-                marginBottom: "12px",
-              }}
-            >
-              <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Prompt ({selectedClassName})
-                <select
-                  value={submissionPromptFilter}
-                  onChange={(e) => setSubmissionPromptFilter(e.target.value)}
-                  style={{ ...styles.rosterInput, minHeight: "42px", fontSize: "14px", textTransform: "none", letterSpacing: "normal", fontWeight: 600 }}
-                >
-                  <option value="__all_prompts__">All prompts</option>
-                  {submissionPromptOptions.map((promptText) => (
-                    <option key={promptText} value={promptText}>
-                      {promptText}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div style={{ ...styles.panelHeading, fontSize: "22px", marginBottom: "8px" }}>Submission queue</div>
-            <div style={styles.panelDescription}>Review recordings, save overrides, and send teacher audio feedback.</div>
-
-            <div style={{ ...styles.sectionBox, marginBottom: "16px", background: "#f8fafc", borderStyle: "dashed" }}>
-              <div style={{ ...styles.sectionTitle, marginBottom: "10px" }}>Submission analytics</div>
-              <div style={{ ...styles.helper, marginBottom: "12px" }}>
-                Uses existing prompt submissions matched by <strong>student code + prompt text</strong> within the selected class.
-              </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: "10px",
-                  marginBottom: "12px",
-                }}
-              >
-                <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "12px", fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  Prompt ({selectedClassName})
-                  <select
-                    value={analyticsPromptFilter}
-                    onChange={(e) => setAnalyticsPromptFilter(e.target.value)}
-                    style={{ ...styles.rosterInput, minHeight: "40px", fontSize: "14px", textTransform: "none", letterSpacing: "normal", fontWeight: 600 }}
-                    disabled={!analyticsPromptOptions.length}
-                  >
-                    {!analyticsPromptOptions.length ? <option value="">No prompts available</option> : null}
-                    {analyticsPromptOptions.map((promptText) => (
-                      <option key={`analytics-${promptText}`} value={promptText}>
-                        {promptText}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              {selectedClassName && analyticsPromptFilter ? (
-                <>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
-                    <span style={styles.pill}>Total students: {submissionAnalytics.selectedClassStudents.length}</span>
-                    <span style={{ ...styles.pill, borderColor: "#86efac", background: "#f0fdf4", color: "#166534" }}>Submitted: {submissionAnalytics.submittedStudents.length}</span>
-                    <span style={{ ...styles.pill, borderColor: "#fecaca", background: "#fef2f2", color: "#b91c1c" }}>Not submitted: {submissionAnalytics.notSubmittedStudents.length}</span>
-                    <span style={{ ...styles.pill, borderColor: "#bfdbfe", background: "#eff6ff", color: "#1d4ed8" }}>Total submissions: {submissionAnalytics.totalSubmissions}</span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
-                    <div style={{ ...styles.sectionBox, margin: 0, background: "#ffffff" }}>
-                      <div style={styles.sectionTitle}>Submitted students</div>
-                      {submissionAnalytics.submittedStudents.length ? (
-                        <ul style={{ margin: "8px 0 0", paddingLeft: "18px", color: "#0f172a" }}>
-                          {submissionAnalytics.submittedStudents.map((student) => (
-                            <li key={`submitted-${student.id}`} style={{ marginBottom: "4px", fontSize: "14px" }}>
-                              {student.student_name} ({student.student_code})
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div style={{ ...styles.helper, marginTop: "8px" }}>No students have submitted this prompt yet.</div>
-                      )}
-                    </div>
-                    <div style={{ ...styles.sectionBox, margin: 0, background: "#ffffff" }}>
-                      <div style={styles.sectionTitle}>Not submitted students</div>
-                      {submissionAnalytics.notSubmittedStudents.length ? (
-                        <ul style={{ margin: "8px 0 0", paddingLeft: "18px", color: "#0f172a" }}>
-                          {submissionAnalytics.notSubmittedStudents.map((student) => (
-                            <li key={`missing-${student.id}`} style={{ marginBottom: "4px", fontSize: "14px" }}>
-                              {student.student_name} ({student.student_code})
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div style={{ ...styles.helper, marginTop: "8px", color: "#166534" }}>Everyone in this class has submitted.</div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div style={styles.helper}>Choose a class and prompt to view participation analytics.</div>
-              )}
-            </div>
-
-            {submissionsSuccess ? (
-              <div style={{ ...styles.success, marginBottom: "12px", padding: "10px 12px", borderRadius: "12px", background: "#ecfeff", border: "1px solid #99f6e4" }}>
-                {submissionsSuccess}
-              </div>
-            ) : null}
-            {submissionsError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{submissionsError}</div> : null}
-
-            <div style={styles.submissionsScroller}>
-              {filteredSubmissions.map((submission) => {
-                const draft = drafts[submission.id] ?? buildDraft(submission);
-                const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
-                const needsTeacherReview = !submission.teacher_comment && !savedTeacherAudioUrl;
-                const submissionClassName = getSubmissionClassName(submission);
-                const isExpanded = Boolean(expandedSubmissionIds[submission.id]);
-                const isDeletingSubmission = Boolean(deletingSubmissionById[submission.id]);
-                const scoreSummary = submission.teacher_score ?? submission.ai_score;
-                const scoreSource = submission.teacher_score != null ? "Teacher score" : submission.ai_score != null ? "AI score" : "";
-
-                return (
-                  <article
-                    key={submission.id}
-                    style={{
-                      ...styles.submissionCard,
-                      borderColor: needsTeacherReview ? "#f59e0b" : "#e2e8f0",
-                      boxShadow: needsTeacherReview ? "0 0 0 2px rgba(245, 158, 11, 0.18)" : undefined,
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: "18px", flexWrap: "wrap", marginBottom: "16px" }}>
-                      <div>
-                        <div style={styles.studentCode}>{submission.student_code || submission.student_name || "No code"}</div>
-                        {submission.student_name && submission.student_code ? <div style={styles.studentName}>{submission.student_name}</div> : null}
-                      </div>
-                      <div style={styles.pillRow}>
-                        {submissionClassName ? <span style={styles.pill}>{submissionClassName}</span> : null}
-                        <span style={styles.pill}>{submission.status || "unknown"}</span>
-                        <span style={styles.pill}>{submission.feedback_status || "no feedback audio"}</span>
-                        <span
-                          style={{
-                            ...styles.reviewStatePill,
-                            borderColor: needsTeacherReview ? "#f59e0b" : "#10b981",
-                            color: needsTeacherReview ? "#b45309" : "#047857",
-                            background: needsTeacherReview ? "#fffbeb" : "#ecfdf5",
-                          }}
-                        >
-                          {needsTeacherReview ? "Needs review" : "Reviewed"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div style={styles.promptBanner}>“{submission.prompt_text || "No prompt saved"}”</div>
-
-                    {scoreSummary != null ? (
-                      <div style={{ ...styles.sectionBox, marginTop: "-6px", marginBottom: "16px", padding: "16px 18px" }}>
-                        <div style={{ ...styles.sectionTitle, marginBottom: "8px" }}>{scoreSource}</div>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-                          <div style={{ fontSize: "20px", fontWeight: 800, color: "#0f172a" }}>{scoreSummary}/5</div>
-                          <StarRow value={clampScore(scoreSummary)} />
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div style={styles.sectionTitle}>Student recording</div>
-                    {submission.audio_url ? <ReliableAudioPlayer src={submission.audio_url} style={{ width: "100%", marginBottom: "18px" }} /> : <div style={{ ...styles.helper, marginBottom: "18px" }}>No student audio found.</div>}
-
-                    <div style={{ marginBottom: "14px" }}>
-                      <button
-                        type="button"
-                        onClick={() => toggleSubmissionDetails(submission.id)}
-                        style={{
-                          ...styles.secondaryButton,
-                          minHeight: "42px",
-                          borderRadius: "999px",
-                          padding: "0 16px",
-                          fontSize: "14px",
-                        }}
-                      >
-                        {isExpanded ? "Hide details" : "View details"}
-                      </button>
-                    </div>
-
-                    {isExpanded ? (
-                      <>
-                        <div style={styles.infoGrid}>
-                          <div style={styles.sectionBox}>
-                            <div style={styles.sectionTitle}>AI feedback</div>
-                            <div style={styles.bodyText}><span style={styles.labelStrong}>Transcript:</span> {submission.transcript || "Pending"}</div>
-                            <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Score:</span> {submission.ai_score ?? "Pending"}</div>
-                            <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Comment:</span> {submission.ai_comment || "Pending"}</div>
-                          </div>
-                          <div style={styles.sectionBox}>
-                            <div style={styles.sectionTitle}>Submission info</div>
-                            <div style={styles.bodyText}><span style={styles.labelStrong}>Date:</span> {formatDate(submission.created_at) || "Unknown"}</div>
-                            <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Student email:</span> {submission.student_email || "—"}</div>
-                            <div style={{ ...styles.bodyText, marginTop: "10px" }}><span style={styles.labelStrong}>Feedback created:</span> {submission.feedback_created_at ? formatDate(submission.feedback_created_at) : "—"}</div>
-                          </div>
-                        </div>
-
-                        <div style={styles.sectionBox}>
-                          <div style={styles.sectionTitle}>Override score and comment</div>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", alignItems: "center", flexWrap: "wrap", marginBottom: "12px" }}>
-                            <div style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a" }}>Teacher score: {draft.score}/5</div>
-                            <StarRow value={draft.score} />
-                          </div>
-                          <input
-                            type="range"
-                            min={1}
-                            max={5}
-                            step={1}
-                            value={draft.score}
-                            onChange={(e) => updateDraft(submission.id, { score: clampScore(Number(e.target.value)), savedMessage: "", error: "" })}
-                            style={styles.slider}
-                          />
-                          <textarea
-                            value={draft.comment}
-                            onChange={(e) => updateDraft(submission.id, { comment: e.target.value, savedMessage: "", error: "" })}
-                            rows={4}
-                            placeholder="Write or edit the teacher feedback here"
-                            style={styles.textarea}
-                          />
-                          <div style={styles.footerRow}>
-                            <div>
-                              {draft.error ? (
-                                <span style={styles.error}>{draft.error}</span>
-                              ) : draft.savedMessage ? (
-                                <span style={styles.success}>{draft.savedMessage}</span>
-                              ) : (
-                                <span style={styles.helper}>Save only if you want to override the AI.</span>
-                              )}
-                            </div>
-                            <button type="button" onClick={() => void handleSaveOverride(submission)} disabled={draft.savingOverride} style={clampButton(draft.savingOverride, styles.primaryButton)}>
-                              {draft.savingOverride ? "Saving..." : "Save override"}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div style={styles.sectionBox}>
-                          <div style={styles.sectionTitle}>Teacher audio feedback</div>
-                          <div style={styles.buttonRow}>
-                            {!draft.isRecordingTeacher ? (
-                              <button type="button" onClick={() => void startTeacherRecording(submission.id)} style={{ ...styles.secondaryButton, background: "#4f46e5", color: "#ffffff", borderColor: "#4f46e5" }}>
-                                Start recording
-                              </button>
-                            ) : (
-                              <button type="button" onClick={() => stopTeacherRecording(submission.id)} style={{ ...styles.secondaryButton, background: "#dc2626", color: "#ffffff", borderColor: "#dc2626" }}>
-                                Stop recording
-                              </button>
-                            )}
-                            <button type="button" onClick={() => void handleSaveTeacherAudio(submission)} disabled={!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher} style={clampButton(!draft.teacherBlob || draft.savingAudio || draft.isRecordingTeacher, styles.primaryButton)}>
-                              {draft.savingAudio ? "Saving audio..." : "Save teacher audio"}
-                            </button>
-                            <button type="button" onClick={() => clearTeacherRecording(submission.id)} disabled={!draft.teacherBlob || draft.isRecordingTeacher} style={clampButton(!draft.teacherBlob || draft.isRecordingTeacher, styles.secondaryButton)}>
-                              Clear
-                            </button>
-                          </div>
-
-                          {draft.isRecordingTeacher ? <div style={{ ...styles.error, marginBottom: "12px", color: "#be123c" }}>Recording in progress...</div> : null}
-                          {draft.recordingError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{draft.recordingError}</div> : null}
-
-                          {draft.teacherPreviewUrl ? (
-                            <div style={styles.audioWrap}>
-                              <div style={{ ...styles.helper, marginBottom: "8px", color: "#475569", fontWeight: 700 }}>Preview new teacher audio</div>
-                              <ReliableAudioPlayer src={draft.teacherPreviewUrl} style={{ width: "100%" }} />
-                            </div>
-                          ) : null}
-
-                          {savedTeacherAudioUrl ? (
-                            <div style={{ ...styles.audioWrap, marginTop: draft.teacherPreviewUrl ? "12px" : "0" }}>
-                              <div style={{ ...styles.helper, marginBottom: "8px", color: "#475569", fontWeight: 700 }}>Saved teacher audio</div>
-                              <ReliableAudioPlayer src={savedTeacherAudioUrl} style={{ width: "100%" }} />
-                            </div>
-                          ) : !draft.teacherPreviewUrl ? (
-                            <div style={styles.helper}>{buildAudioLabel(savedTeacherAudioUrl)}</div>
-                          ) : null}
-                        </div>
-
-                        <div style={styles.sectionBox}>
-                          <div style={{ ...styles.sectionTitle, color: "#b91c1c" }}>Danger zone</div>
-                          <div style={{ ...styles.helper, marginBottom: "10px" }}>Delete this submission only if it is old or invalid.</div>
-                          <button
-                            type="button"
-                            onClick={() => void handleDeleteSubmission(submission)}
-                            disabled={isDeletingSubmission}
-                            style={clampButton(isDeletingSubmission, {
-                              ...styles.secondaryButton,
-                              borderColor: "#fecaca",
-                              color: "#b91c1c",
-                            })}
-                          >
-                            {isDeletingSubmission ? "Deleting..." : "Delete submission"}
-                          </button>
-                        </div>
-                      </>
-                    ) : null}
-                  </article>
-                );
-              })}
-            </div>
-
-            <div style={{ marginTop: "28px", borderTop: "1px solid #e2e8f0", paddingTop: "20px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
-                <div style={styles.panelLabel}>Project update video submissions</div>
-                <button
-                  type="button"
-                  onClick={() => void fetchProjectVideoSubmissions()}
-                  disabled={isLoadingProjectVideoSubmissions}
-                  style={clampButton(isLoadingProjectVideoSubmissions, styles.secondaryButton)}
-                >
-                  {isLoadingProjectVideoSubmissions ? "Refreshing..." : "Refresh"}
-                </button>
-              </div>
-              <div style={{ ...styles.helper, marginBottom: "12px" }}>
-                Manual review only. These video submissions are separate from prompt-based speaking submissions.
-              </div>
-              {projectVideoSubmissionsError ? <div style={{ ...styles.error, marginBottom: "12px" }}>{projectVideoSubmissionsError}</div> : null}
-              <div style={styles.submissionsScroller}>
-                {filteredProjectVideoSubmissions.map((submission) => (
-                  <article key={submission.id} style={{ ...styles.submissionCard, background: "#f8fafc" }}>
-                    <div style={{ ...styles.sectionTitle, marginBottom: "8px" }}>Project update video</div>
-                    <div style={styles.bodyText}><span style={styles.labelStrong}>Student:</span> {submission.student_name || "—"}</div>
-                    <div style={{ ...styles.bodyText, marginTop: "8px" }}><span style={styles.labelStrong}>Student code:</span> {submission.student_code || "—"}</div>
-                    <div style={{ ...styles.bodyText, marginTop: "8px" }}><span style={styles.labelStrong}>Class:</span> {submission.class_name || "—"}</div>
-                    <div style={{ ...styles.bodyText, marginTop: "8px", marginBottom: "12px" }}>
-                      <span style={styles.labelStrong}>Submitted:</span> {formatDate(submission.created_at)}
-                    </div>
-                    {submission.video_url ? (
-                      <video controls playsInline style={{ width: "100%", borderRadius: "16px", border: "1px solid #cbd5e1", background: "#000000" }}>
-                        <source src={submission.video_url} />
-                      </video>
-                    ) : (
-                      <div style={styles.helper}>Video not available.</div>
-                    )}
-                  </article>
-                ))}
-                {!filteredProjectVideoSubmissions.length ? (
-                  <div style={styles.helper}>No project update videos submitted yet.</div>
-                ) : null}
-              </div>
-            </div>
-          </section>
-        </div>
+          <TeacherClassDetail
+            selectedClassName={selectedClassName}
+            selectedClassStudents={selectedClassStudents}
+            needsReviewCount={filteredSubmissions.filter((submission) => !submission.teacher_comment && !(submission.feedback_audio_url || submission.feedback_url)).length}
+            assignedPromptCount={sortedPrompts.filter((prompt) => (prompt.class_name?.trim() || "") === selectedClassName).length}
+            rosterPanelProps={{
+              selectedClassName,
+              selectedClassVideoEnabled,
+              isSavingClassVideoSetting,
+              isDeletingClass,
+              onBack: () => setSelectedClass(null),
+              onToggleProjectVideo: () => void handleToggleProjectVideoForSelectedClass(),
+              onDeleteClass: () => void handleDeleteSelectedClass(),
+              newStudentName,
+              newStudentCode,
+              setNewStudentName,
+              setNewStudentCode,
+              onAddStudent: () => void handleAddStudent(),
+              onRefreshStudents: () => void fetchStudents(),
+              isSavingStudent,
+              rosterSuccess,
+              rosterError,
+              selectedClassStudents,
+              filteredStudents,
+              updateStudentDraft,
+              onSaveStudent: (student: StudentRow) => void handleSaveStudent(student),
+              onDeleteStudent: (id: string) => void handleDeleteStudent(id),
+              newStudentNameInputRef,
+            }}
+            promptPanelProps={{
+              selectedClassName,
+              newPrompt,
+              newSuggestedTime,
+              newPromptClassName,
+              setNewPrompt,
+              setNewSuggestedTime,
+              setNewPromptClassName,
+              classNameOptions,
+              onSavePrompt: () => void handleSavePrompt(),
+              isSavingPrompt,
+              promptSuccess,
+              promptError,
+              promptListFilter,
+              setPromptListFilter,
+              filteredPrompts,
+              promptAssignmentDrafts,
+              setPromptAssignmentDrafts,
+              onSavePromptAssignment: (id: string) => void handleSavePromptAssignment(id),
+              onTogglePromptVisibility: (prompt: PromptRow) => void handleTogglePromptVisibility(prompt),
+              onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
+              savingPromptAssignmentById,
+              savingPromptVisibilityById,
+              deletingPromptById,
+              onClearVisiblePromptsForSelectedClass: () => void handleClearVisiblePromptsForSelectedClass(),
+            }}
+            submissionsPanelProps={{
+              selectedClassName,
+              reviewFilter,
+              setReviewFilter,
+              onRefreshSubmissions: () => void fetchSubmissions(),
+              isLoadingSubmissions,
+              submissionPromptFilter,
+              setSubmissionPromptFilter,
+              submissionPromptOptions,
+              filteredSubmissions,
+              drafts,
+              toggleSubmissionDetails,
+              expandedSubmissionIds,
+              onSaveOverride: (submission: SubmissionRow) => void handleSaveOverride(submission),
+              onStartTeacherRecording: (id: string) => void startTeacherRecording(id),
+              onStopTeacherRecording: (id: string) => stopTeacherRecording(id),
+              onSaveTeacherAudio: (submission: SubmissionRow) => void handleSaveTeacherAudio(submission),
+              onClearTeacherRecording: (id: string) => clearTeacherRecording(id),
+              onDeleteSubmission: (submission: SubmissionRow) => void handleDeleteSubmission(submission),
+              deletingSubmissionById,
+              updateDraft,
+              analyticsPromptFilter,
+              setAnalyticsPromptFilter,
+              analyticsPromptOptions,
+              submissionAnalytics,
+              filteredProjectVideoSubmissions,
+            }}
+          />
         ) : null}
       </div>
     </div>
