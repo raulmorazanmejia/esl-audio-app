@@ -20,6 +20,8 @@ type Props = {
   rosterError: string;
   selectedClassStudents: StudentRow[];
   filteredStudents: StudentRow[];
+  selectedStudentCode: string;
+  onSelectStudent: (student: StudentRow) => void;
   updateStudentDraft: (id: string, patch: Partial<StudentRow>) => void;
   onSaveStudent: (student: StudentRow) => void;
   onDeleteStudent: (id: string) => void;
@@ -30,7 +32,7 @@ export default function TeacherRosterPanel(props: Props) {
   const {
     selectedClassName, selectedClassVideoEnabled, isSavingClassVideoSetting, isDeletingClass, onBack, onToggleProjectVideo, onDeleteClass,
     newStudentName, newStudentCode, setNewStudentName, setNewStudentCode, onAddStudent, onRefreshStudents, isSavingStudent, rosterSuccess, rosterError,
-    selectedClassStudents, filteredStudents, updateStudentDraft, onSaveStudent, onDeleteStudent, newStudentNameInputRef,
+    selectedClassStudents, filteredStudents, selectedStudentCode, onSelectStudent, updateStudentDraft, onSaveStudent, onDeleteStudent, newStudentNameInputRef,
   } = props;
   return <section>{/* extracted UI kept in dashboard in this refactor step */}
     <button type="button" onClick={onBack} style={{ minHeight: 44, borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 800, marginBottom: 10 }}>← Back to Classes</button>
@@ -48,10 +50,39 @@ export default function TeacherRosterPanel(props: Props) {
     </div>
     {rosterSuccess ? <div>{rosterSuccess}</div> : null}
     {rosterError ? <div>{rosterError}</div> : null}
-    <div style={{ marginTop: 10 }}>
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontWeight: 800, fontSize: 13, color: "#475569", marginBottom: 6 }}>Class roster</div>
+      {!selectedClassStudents.length ? <div style={{ color: "#64748b", fontSize: 13 }}>No students yet.</div> : null}
+      {selectedClassStudents.length ? (
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, border: "1px solid #e2e8f0", borderRadius: 10, overflow: "hidden" }}>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              <th style={{ textAlign: "left", padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 11 }}>Student</th>
+              <th style={{ textAlign: "left", padding: "7px 8px", borderBottom: "1px solid #e2e8f0", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 11 }}>Code</th>
+            </tr>
+          </thead>
+          <tbody>
+            {selectedClassStudents.map((student) => {
+              const isSelected = selectedStudentCode === student.student_code.trim();
+              return (
+                <tr
+                  key={student.id}
+                  onClick={() => onSelectStudent(student)}
+                  style={{ background: isSelected ? "#e0f2fe" : "#fff", cursor: "pointer", borderLeft: isSelected ? "3px solid #0284c7" : "3px solid transparent" }}
+                >
+                  <td style={{ padding: "8px", borderBottom: "1px solid #f1f5f9", fontWeight: isSelected ? 700 : 500 }}>{student.student_name}</td>
+                  <td style={{ padding: "8px", borderBottom: "1px solid #f1f5f9", color: "#0f172a", fontWeight: 800 }}>{student.student_code}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : null}
+    </div>
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontWeight: 800, fontSize: 13, color: "#475569", marginBottom: 6 }}>Edit roster</div>
       {filteredStudents.map((student) => (
-        <div key={student.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto auto", gap: 6, marginBottom: 6 }}>
-          <input value={student.class_name ?? ""} onChange={(e) => updateStudentDraft(student.id, { class_name: e.target.value })} />
+        <div key={student.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto", gap: 6, marginBottom: 6 }}>
           <input value={student.student_name} onChange={(e) => updateStudentDraft(student.id, { student_name: e.target.value })} />
           <input value={student.student_code} onChange={(e) => updateStudentDraft(student.id, { student_code: e.target.value.toUpperCase() })} />
           <button type="button" onClick={() => onSaveStudent(student)}>Save</button>
