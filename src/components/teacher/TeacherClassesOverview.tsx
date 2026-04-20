@@ -16,9 +16,11 @@ type Props = {
   onRefreshClasses: () => void;
   onSelectClass: (className: string) => void;
   rosterError: string;
+  unassignedPromptCount: number;
+  onManageUnassignedPrompts: () => void;
 };
 
-export default function TeacherClassesOverview({ classSummaries, newClassName, onNewClassNameChange, onUseNewClass, onRefreshClasses, onSelectClass, rosterError }: Props) {
+export default function TeacherClassesOverview({ classSummaries, newClassName, onNewClassNameChange, onUseNewClass, onRefreshClasses, onSelectClass, rosterError, unassignedPromptCount, onManageUnassignedPrompts }: Props) {
   return (
     <section style={{ background: "#fff", borderRadius: 30, border: "1px solid #e2e8f0", boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)", padding: 28 }}>
       <div style={{ fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.16em", color: "#64748b", marginBottom: 8 }}>Teacher LMS</div>
@@ -28,6 +30,10 @@ export default function TeacherClassesOverview({ classSummaries, newClassName, o
         <input value={newClassName} onChange={(e) => onNewClassNameChange(e.target.value)} placeholder="New class / group" style={{ minHeight: 44, borderRadius: 12, border: "1px solid #dbe3f0", background: "#f8fafc", padding: "0 12px" }} />
         <button type="button" onClick={onUseNewClass} style={{ minHeight: 44, borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800 }}>Create class</button>
         <button type="button" onClick={onRefreshClasses} style={{ minHeight: 44, borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 800 }}>Refresh classes</button>
+        <button type="button" onClick={onManageUnassignedPrompts} style={{ minHeight: 44, borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 800 }}>
+          Unassigned prompts ({unassignedPromptCount})
+        </button>
+
       </div>
       {rosterError ? <div style={{ fontSize: 14, color: "#dc2626", fontWeight: 700, marginBottom: 10 }}>{rosterError}</div> : null}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
