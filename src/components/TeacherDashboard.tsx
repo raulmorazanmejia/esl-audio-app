@@ -4,11 +4,11 @@ import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
 import TeacherClassDetail from "./teacher/TeacherClassDetail";
 import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
-import { AssignmentResponseMode, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
+import { AssignmentActivityType, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
-const PROMPT_SELECT = "id, prompt_text, response_mode, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
+const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, response_mode, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
 
 const styles = {
   page: {
@@ -531,6 +531,12 @@ function buildAudioLabel(url?: string | null) {
   return url ? "Saved teacher audio" : "No saved teacher audio yet";
 }
 
+function deriveAssignmentType(prompt: Pick<PromptRow, "assignment_type" | "response_mode">): AssignmentActivityType {
+  if (prompt.assignment_type) return prompt.assignment_type;
+  if (prompt.response_mode === "video") return "video_response";
+  return "audio_response";
+}
+
 const PROMPT_IMAGES_BUCKET = "prompt-images";
 
 export default function TeacherDashboard() {
@@ -543,7 +549,9 @@ export default function TeacherDashboard() {
   const [prompts, setPrompts] = useState<PromptRow[]>([]);
   const [newPrompt, setNewPrompt] = useState("");
   const [newSuggestedTime, setNewSuggestedTime] = useState("");
-  const [newResponseMode, setNewResponseMode] = useState<AssignmentResponseMode>("audio");
+  const [newAssignmentType, setNewAssignmentType] = useState<AssignmentActivityType>("audio_response");
+  const [newInstructions, setNewInstructions] = useState("");
+  const [newExternalUrl, setNewExternalUrl] = useState("");
   const [newPromptImageFile, setNewPromptImageFile] = useState<File | null>(null);
   const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -914,6 +922,7 @@ export default function TeacherDashboard() {
     const rows = ((data ?? []) as PromptRow[]).map((prompt) => {
       const normalizedPrompt: PromptRow = {
         ...prompt,
+        assignment_type: deriveAssignmentType(prompt),
         response_mode: prompt.response_mode ?? "audio",
       };
       if (normalizedPrompt.prompt_assignments?.length) return normalizedPrompt;
@@ -974,14 +983,20 @@ export default function TeacherDashboard() {
   async function handleSavePrompt() {
     if (isSavingPrompt) return;
     const text = newPrompt.trim();
+    const instructions = newInstructions.trim();
+    const externalUrl = newExternalUrl.trim();
     if (!text) return;
+    if (newAssignmentType === "external_link" && !externalUrl) {
+      setPromptError("External URL is required for external activity assignments.");
+      return;
+    }
     setIsSavingPrompt(true);
     setPromptError("");
     setPromptSuccess("");
     let promptImagePath: string | null = null;
     let promptImageUrl: string | null = null;
 
-    if (newPromptImageFile) {
+    if (newPromptImageFile && newAssignmentType !== "external_link") {
       const ext = newPromptImageFile.name.split(".").pop()?.toLowerCase() || "jpg";
       const imagePath = `prompts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const { error: uploadError } = await supabase.storage.from(PROMPT_IMAGES_BUCKET).upload(imagePath, newPromptImageFile, {
@@ -1005,17 +1020,20 @@ export default function TeacherDashboard() {
       .from("prompts")
       .insert({
         prompt_text: text,
-        response_mode: newResponseMode,
+        assignment_type: newAssignmentType,
+        external_url: newAssignmentType === "external_link" ? externalUrl : null,
+        response_mode: newAssignmentType === "video_response" ? "video" : "audio",
         class_name: null,
         suggested_time: newSuggestedTime.trim() || null,
         prompt_image_path: promptImagePath,
         prompt_image_url: promptImageUrl,
+        example_text: instructions || null,
         is_active: false,
       })
       .select("id")
       .single();
     if (error || !insertedPrompt?.id) {
-      setPromptError(error?.message || "Could not save prompt.");
+      setPromptError(error?.message || "Could not save assignment.");
       if (promptImagePath) {
         await supabase.storage.from(PROMPT_IMAGES_BUCKET).remove([promptImagePath]);
       }
@@ -1024,13 +1042,15 @@ export default function TeacherDashboard() {
     }
     setNewPrompt("");
     setNewSuggestedTime("");
-    setNewResponseMode("audio");
+    setNewAssignmentType("audio_response");
+    setNewInstructions("");
+    setNewExternalUrl("");
     setNewPromptImageFile(null);
     if (newPromptImagePreviewUrl) {
       URL.revokeObjectURL(newPromptImagePreviewUrl);
       setNewPromptImagePreviewUrl("");
     }
-    setPromptSuccess(`Prompt saved: “${text}”`);
+    setPromptSuccess(`Assignment saved: “${text}”`);
     setIsSavingPrompt(false);
     await fetchPrompts();
   }
@@ -1129,6 +1149,14 @@ export default function TeacherDashboard() {
       setNewPromptImagePreviewUrl("");
     }
     setNewPromptImageFile(null);
+  }
+
+  function handleAssignmentTypeChange(value: AssignmentActivityType) {
+    setNewAssignmentType(value);
+    if (value === "external_link") {
+      handleClearNewPromptImage();
+      setNewSuggestedTime("");
+    }
   }
 
   async function handleDeletePrompt(prompt: PromptRow) {
@@ -1611,10 +1639,14 @@ export default function TeacherDashboard() {
               selectedClassName,
               newPrompt,
               newSuggestedTime,
-              newResponseMode,
+              newAssignmentType,
+              newInstructions,
+              newExternalUrl,
               setNewPrompt,
               setNewSuggestedTime,
-              setNewResponseMode,
+              setNewAssignmentType: handleAssignmentTypeChange,
+              setNewInstructions,
+              setNewExternalUrl,
               newPromptImagePreviewUrl,
               onPromptImageChange: handleNewPromptImageChange,
               onClearPromptImage: handleClearNewPromptImage,
@@ -1633,7 +1665,7 @@ export default function TeacherDashboard() {
               savingPromptVisibilityById,
               deletingPromptById,
               onClearVisiblePromptsForSelectedClass: () => void handleClearVisiblePromptsForSelectedClass(),
-              emptyStateText: `No prompts are currently assigned to ${selectedClassName}. Browse the Assignment Library to assign one.`,
+              emptyStateText: `No assignments are currently assigned to ${selectedClassName}. Browse the Assignment Library to assign one.`,
               showCreateForm: false,
               showBulkHideButton: false,
               onHeaderAction: () => setTeacherScreen("assignment_library"),
@@ -1679,14 +1711,18 @@ export default function TeacherDashboard() {
             promptPanelProps={{
               mode: "library",
               selectedClassName: "Assignment Library",
-              title: "Prompt & assignment library",
-              createPromptLabel: "Create prompts with optional images, then assign/reassign to classes.",
+              title: "Assignment library",
+              createPromptLabel: "Create assignments and activities, then assign/reassign to classes.",
               newPrompt,
               newSuggestedTime,
-              newResponseMode,
+              newAssignmentType,
+              newInstructions,
+              newExternalUrl,
               setNewPrompt,
               setNewSuggestedTime,
-              setNewResponseMode,
+              setNewAssignmentType: handleAssignmentTypeChange,
+              setNewInstructions,
+              setNewExternalUrl,
               createClassName: "",
               setCreateClassName: () => undefined,
               newPromptImagePreviewUrl,
@@ -1706,7 +1742,7 @@ export default function TeacherDashboard() {
               onClearVisiblePromptsForSelectedClass: () => setPromptError("Use the prompt-level visibility controls in Assignment Library."),
               classNameOptions,
               showBulkHideButton: false,
-              emptyStateText: "No prompts exist in the assignment library yet.",
+              emptyStateText: "No assignments exist in the assignment library yet.",
             }}
           />
         ) : null}

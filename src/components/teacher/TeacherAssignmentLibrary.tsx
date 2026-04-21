@@ -16,7 +16,7 @@ export default function TeacherAssignmentLibrary({ totalPromptCount, classNameOp
         <div style={{ fontSize: 12, fontWeight: 800, color: "#64748b", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>Content management</div>
         <div style={{ fontSize: 29, fontWeight: 900, lineHeight: 1.15 }}>Assignment Library</div>
         <div style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
-          {totalPromptCount} prompts total • {unassignedPromptCount} unassigned • {classNameOptions.length} classes available for assignment
+          {totalPromptCount} assignments total • {unassignedPromptCount} unassigned • {classNameOptions.length} classes available for assignment
         </div>
         <div style={{ marginTop: 6, color: "#475569", fontSize: 13 }}>
           New class assignments are visible to students by default. Use class-level Hide/Show controls only when needed.
