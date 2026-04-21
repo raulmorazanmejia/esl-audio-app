@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
 import TeacherClassDetail from "./teacher/TeacherClassDetail";
 import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
+import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
 import { ClassVideoSettingRow, DraftState, DraftsById, ProjectVideoSubmissionRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 
 const SUBMISSION_SELECT =
@@ -544,6 +545,7 @@ export default function TeacherDashboard() {
   const [newSuggestedTime, setNewSuggestedTime] = useState("");
   const [newPromptImageFile, setNewPromptImageFile] = useState<File | null>(null);
   const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
+  const [newPromptAssignedClass, setNewPromptAssignedClass] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
   const [promptSuccess, setPromptSuccess] = useState("");
@@ -554,6 +556,7 @@ export default function TeacherDashboard() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [showUnassignedPrompts, setShowUnassignedPrompts] = useState(false);
+  const [teacherScreen, setTeacherScreen] = useState<"classes" | "assignment_library">("classes");
   const [newClassName, setNewClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentCode, setNewStudentCode] = useState("");
@@ -993,15 +996,11 @@ export default function TeacherDashboard() {
     void fetchProjectVideoSubmissions();
   }, [fetchPrompts, fetchStudents, fetchClassVideoSettings, fetchSubmissions, fetchProjectVideoSubmissions]);
 
-  async function handleSavePrompt() {
+  async function handleSavePrompt(assignedClassName?: string) {
     if (isSavingPrompt) return;
     const text = newPrompt.trim();
-    const className = selectedClassName.trim();
+    const className = (assignedClassName ?? newPromptAssignedClass ?? "").trim();
     if (!text) return;
-    if (!className) {
-      setPromptError("Select a class before creating a prompt.");
-      return;
-    }
     setIsSavingPrompt(true);
     setPromptError("");
     setPromptSuccess("");
@@ -1030,7 +1029,7 @@ export default function TeacherDashboard() {
 
     const { error } = await supabase.from("prompts").insert({
       prompt_text: text,
-      class_name: className,
+      class_name: className || null,
       suggested_time: newSuggestedTime.trim() || null,
       prompt_image_path: promptImagePath,
       prompt_image_url: promptImageUrl,
@@ -1046,6 +1045,7 @@ export default function TeacherDashboard() {
     }
     setNewPrompt("");
     setNewSuggestedTime("");
+    setNewPromptAssignedClass("");
     setNewPromptImageFile(null);
     if (newPromptImagePreviewUrl) {
       URL.revokeObjectURL(newPromptImagePreviewUrl);
@@ -1576,7 +1576,40 @@ export default function TeacherDashboard() {
         }
       `}</style>
       <div style={styles.container}>
-        {!selectedClassName ? (
+        <section style={{ background: "#fff", borderRadius: 18, border: "1px solid #e2e8f0", padding: 10, display: "inline-flex", gap: 8, marginBottom: 14 }}>
+          <button
+            type="button"
+            onClick={() => setTeacherScreen("classes")}
+            style={{
+              minHeight: 38,
+              borderRadius: 10,
+              border: "1px solid #cbd5e1",
+              padding: "0 14px",
+              fontWeight: 800,
+              background: teacherScreen === "classes" ? "#0f172a" : "#fff",
+              color: teacherScreen === "classes" ? "#fff" : "#334155",
+            }}
+          >
+            Classes
+          </button>
+          <button
+            type="button"
+            onClick={() => setTeacherScreen("assignment_library")}
+            style={{
+              minHeight: 38,
+              borderRadius: 10,
+              border: "1px solid #cbd5e1",
+              padding: "0 14px",
+              fontWeight: 800,
+              background: teacherScreen === "assignment_library" ? "#0f172a" : "#fff",
+              color: teacherScreen === "assignment_library" ? "#fff" : "#334155",
+            }}
+          >
+            Assignment Library
+          </button>
+        </section>
+
+        {teacherScreen === "classes" && !selectedClassName ? (
           <TeacherClassesOverview
             classSummaries={classSummaries}
             newClassName={newClassName}
@@ -1593,7 +1626,7 @@ export default function TeacherDashboard() {
           />
         ) : null}
 
-        {!selectedClassName && showUnassignedPrompts ? (
+        {teacherScreen === "classes" && !selectedClassName && showUnassignedPrompts ? (
           <section style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 14, marginTop: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ fontSize: 20, fontWeight: 900 }}>Unassigned prompts</div>
@@ -1627,12 +1660,14 @@ export default function TeacherDashboard() {
               deletingPromptById={deletingPromptById}
               onClearVisiblePromptsForSelectedClass={() => void handleClearVisiblePromptsForSelectedClass()}
               classNameOptions={classNameOptions}
+              createClassName={newPromptAssignedClass}
+              setCreateClassName={setNewPromptAssignedClass}
               emptyStateText="No unassigned prompts right now."
             />
           </section>
         ) : null}
 
-        {selectedClassName ? (
+        {teacherScreen === "classes" && selectedClassName ? (
           <TeacherClassDetail
             selectedClassName={selectedClassName}
             selectedClassStudents={selectedClassStudents}
@@ -1674,15 +1709,15 @@ export default function TeacherDashboard() {
               newPromptImagePreviewUrl,
               onPromptImageChange: handleNewPromptImageChange,
               onClearPromptImage: handleClearNewPromptImage,
+              createClassName: selectedClassName,
+              setCreateClassName: () => undefined,
+              showCreateClassPicker: false,
               classNameOptions,
-              onSavePrompt: () => void handleSavePrompt(),
-              isSavingPrompt,
-              promptSuccess,
-              promptError,
+              onSavePrompt: () => void handleSavePrompt(selectedClassName),
+              isSavingPrompt: false,
+              promptSuccess: "",
+              promptError: "",
               filteredPrompts: classScopedPrompts,
-              assignedPrompts: classScopedPrompts,
-              allLibraryPrompts: sortedPrompts,
-              showPromptLibraryTabs: true,
               promptAssignmentDrafts,
               setPromptAssignmentDrafts,
               onSavePromptAssignment: (id: string) => void handleSavePromptAssignment(id),
@@ -1692,8 +1727,10 @@ export default function TeacherDashboard() {
               savingPromptVisibilityById,
               deletingPromptById,
               onClearVisiblePromptsForSelectedClass: () => void handleClearVisiblePromptsForSelectedClass(),
-              emptyAssignedStateText: `No prompts are currently assigned to ${selectedClassName}. Switch to All prompts library to assign one.`,
-              emptyLibraryStateText: "No prompts exist in the library yet.",
+              emptyStateText: `No prompts are currently assigned to ${selectedClassName}. Browse the Assignment Library to assign one.`,
+              showCreateForm: false,
+              onHeaderAction: () => setTeacherScreen("assignment_library"),
+              headerActionLabel: "Browse Assignment Library",
             }}
             submissionsPanelProps={{
               selectedClassName,
@@ -1723,6 +1760,47 @@ export default function TeacherDashboard() {
               analyticsPromptOptions,
               submissionAnalytics,
               filteredProjectVideoSubmissions,
+            }}
+          />
+        ) : null}
+
+        {teacherScreen === "assignment_library" ? (
+          <TeacherAssignmentLibrary
+            totalPromptCount={sortedPrompts.length}
+            classNameOptions={classNameOptions}
+            unassignedPromptCount={unassignedPrompts.length}
+            onGoToClasses={() => setTeacherScreen("classes")}
+            promptPanelProps={{
+              selectedClassName: "Assignment Library",
+              title: "Prompt & assignment library",
+              createPromptLabel: "Create prompts with optional images, then assign/reassign to classes.",
+              newPrompt,
+              newSuggestedTime,
+              setNewPrompt,
+              setNewSuggestedTime,
+              createClassName: newPromptAssignedClass,
+              setCreateClassName: setNewPromptAssignedClass,
+              showCreateClassPicker: true,
+              newPromptImagePreviewUrl,
+              onPromptImageChange: handleNewPromptImageChange,
+              onClearPromptImage: handleClearNewPromptImage,
+              onSavePrompt: () => void handleSavePrompt(),
+              isSavingPrompt,
+              promptSuccess,
+              promptError,
+              filteredPrompts: sortedPrompts,
+              promptAssignmentDrafts,
+              setPromptAssignmentDrafts,
+              onSavePromptAssignment: (id: string) => void handleSavePromptAssignment(id),
+              onTogglePromptVisibility: (prompt: PromptRow) => void handleTogglePromptVisibility(prompt),
+              onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
+              savingPromptAssignmentById,
+              savingPromptVisibilityById,
+              deletingPromptById,
+              onClearVisiblePromptsForSelectedClass: () => setPromptError("Use the prompt-level visibility controls in Assignment Library."),
+              classNameOptions,
+              showBulkHideButton: false,
+              emptyStateText: "No prompts exist in the assignment library yet.",
             }}
           />
         ) : null}
