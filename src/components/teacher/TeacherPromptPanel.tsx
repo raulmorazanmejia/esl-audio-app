@@ -30,17 +30,39 @@ type Props = {
   isAssignmentEditable?: boolean;
   showCreateForm?: boolean;
   showBulkHideButton?: boolean;
+  assignedPrompts?: PromptRow[];
+  allLibraryPrompts?: PromptRow[];
+  showPromptLibraryTabs?: boolean;
+  emptyAssignedStateText?: string;
+  emptyLibraryStateText?: string;
+  emptyStateText?: string;
 };
 
 const inputStyle: React.CSSProperties = { minHeight: 38, borderRadius: 10, border: "1px solid #dbe3f0", background: "#f8fafc", padding: "0 10px" };
 
 export default function TeacherPromptPanel(props: Props) {
   const p = props;
+  const [activePromptView, setActivePromptView] = React.useState<"assigned" | "library">("assigned");
   const title = p.title ?? "Prompt library";
   const createPromptLabel = p.createPromptLabel ?? `Create a prompt for ${p.selectedClassName}`;
   const isAssignmentEditable = p.isAssignmentEditable !== false;
   const showCreateForm = p.showCreateForm !== false;
   const showBulkHideButton = p.showBulkHideButton !== false;
+  const showPromptLibraryTabs = Boolean(p.showPromptLibraryTabs);
+
+  React.useEffect(() => {
+    setActivePromptView("assigned");
+  }, [p.selectedClassName, showPromptLibraryTabs]);
+
+  const assignedPrompts = p.assignedPrompts ?? p.filteredPrompts;
+  const allLibraryPrompts = p.allLibraryPrompts ?? p.filteredPrompts;
+  const visiblePrompts = showPromptLibraryTabs ? (activePromptView === "assigned" ? assignedPrompts : allLibraryPrompts) : p.filteredPrompts;
+
+  const emptyStateText = showPromptLibraryTabs
+    ? activePromptView === "assigned"
+      ? p.emptyAssignedStateText ?? `No prompts are currently assigned to ${p.selectedClassName}.`
+      : p.emptyLibraryStateText ?? "No prompts found in the full library."
+    : p.emptyStateText ?? `No prompts yet for this class.`;
 
   return <section>
     <div style={{ fontWeight: 900, fontSize: 22 }}>{title}</div>
@@ -70,10 +92,39 @@ export default function TeacherPromptPanel(props: Props) {
       </div>
     ) : null}
 
+    {showPromptLibraryTabs ? (
+      <div style={{ display: "inline-flex", border: "1px solid #cbd5e1", borderRadius: 10, overflow: "hidden", marginBottom: 10 }}>
+        <button
+          type="button"
+          onClick={() => setActivePromptView("assigned")}
+          style={{ minHeight: 34, border: "none", background: activePromptView === "assigned" ? "#0f172a" : "#fff", color: activePromptView === "assigned" ? "#fff" : "#334155", padding: "0 12px", fontWeight: 700 }}
+        >
+          Assigned to this class ({assignedPrompts.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActivePromptView("library")}
+          style={{ minHeight: 34, border: "none", borderLeft: "1px solid #cbd5e1", background: activePromptView === "library" ? "#0f172a" : "#fff", color: activePromptView === "library" ? "#fff" : "#334155", padding: "0 12px", fontWeight: 700 }}
+        >
+          All prompts library ({allLibraryPrompts.length})
+        </button>
+      </div>
+    ) : null}
+
     <div style={{ marginTop: 10 }}>
-      {p.filteredPrompts.map((prompt) => {
+      {visiblePrompts.map((prompt) => {
         const isVisible = Boolean(prompt.is_active);
-        const assignmentValue = p.promptAssignmentDrafts[prompt.id] ?? (prompt.class_name?.trim() || "");
+        const currentClassName = prompt.class_name?.trim() || "";
+        const assignmentValue = p.promptAssignmentDrafts[prompt.id] ?? currentClassName;
+        const assignmentChanged = assignmentValue !== currentClassName;
+        const assignmentToCurrentClass = assignmentValue === p.selectedClassName;
+        const isCurrentlyAssignedToCurrentClass = currentClassName === p.selectedClassName;
+        const assignmentButtonLabel = !assignmentChanged && isCurrentlyAssignedToCurrentClass
+          ? "Assigned to this class"
+          : assignmentToCurrentClass
+            ? "Assign to this class"
+            : "Save assignment";
+        const disableAssignmentButton = Boolean(p.savingPromptAssignmentById[prompt.id]) || (!assignmentChanged && isCurrentlyAssignedToCurrentClass);
         return <div key={prompt.id} style={{ border: "1px solid #e2e8f0", padding: 10, borderRadius: 12, marginBottom: 8, background: "#fff" }}>
           {prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Prompt" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, marginBottom: 8 }} /> : null}
           <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>{prompt.prompt_text}</div>
@@ -87,7 +138,7 @@ export default function TeacherPromptPanel(props: Props) {
                 <option value="">Unassigned</option>
                 {p.classNameOptions.map((className) => <option key={`${prompt.id}-${className}`} value={className}>{className}</option>)}
               </select>
-              <button type="button" onClick={() => p.onSavePromptAssignment(prompt.id)} disabled={Boolean(p.savingPromptAssignmentById[prompt.id])} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>Save class</button>
+              <button type="button" onClick={() => p.onSavePromptAssignment(prompt.id)} disabled={disableAssignmentButton} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>{assignmentButtonLabel}</button>
             </div>
           ) : null}
 
@@ -97,7 +148,7 @@ export default function TeacherPromptPanel(props: Props) {
           </div>
         </div>;
       })}
-      {!p.filteredPrompts.length ? <div style={{ fontSize: 13, color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 12, background: "#f8fafc", padding: 10 }}>No prompts yet for this class.</div> : null}
+      {!visiblePrompts.length ? <div style={{ fontSize: 13, color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 12, background: "#f8fafc", padding: 10 }}>{emptyStateText}</div> : null}
     </div>
   </section>;
 }

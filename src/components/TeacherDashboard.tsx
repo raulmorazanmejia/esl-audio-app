@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../lib/supabase";
 import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
 import TeacherClassDetail from "./teacher/TeacherClassDetail";
+import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import { ClassVideoSettingRow, DraftState, DraftsById, ProjectVideoSubmissionRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 
 const SUBMISSION_SELECT =
@@ -1626,6 +1627,7 @@ export default function TeacherDashboard() {
               deletingPromptById={deletingPromptById}
               onClearVisiblePromptsForSelectedClass={() => void handleClearVisiblePromptsForSelectedClass()}
               classNameOptions={classNameOptions}
+              emptyStateText="No unassigned prompts right now."
             />
           </section>
         ) : null}
@@ -1678,6 +1680,9 @@ export default function TeacherDashboard() {
               promptSuccess,
               promptError,
               filteredPrompts: classScopedPrompts,
+              assignedPrompts: classScopedPrompts,
+              allLibraryPrompts: sortedPrompts,
+              showPromptLibraryTabs: true,
               promptAssignmentDrafts,
               setPromptAssignmentDrafts,
               onSavePromptAssignment: (id: string) => void handleSavePromptAssignment(id),
@@ -1687,6 +1692,8 @@ export default function TeacherDashboard() {
               savingPromptVisibilityById,
               deletingPromptById,
               onClearVisiblePromptsForSelectedClass: () => void handleClearVisiblePromptsForSelectedClass(),
+              emptyAssignedStateText: `No prompts are currently assigned to ${selectedClassName}. Switch to All prompts library to assign one.`,
+              emptyLibraryStateText: "No prompts exist in the library yet.",
             }}
             submissionsPanelProps={{
               selectedClassName,
