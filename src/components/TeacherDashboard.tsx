@@ -546,17 +546,13 @@ export default function TeacherDashboard() {
   const [newSuggestedTime, setNewSuggestedTime] = useState("");
   const [newPromptImageFile, setNewPromptImageFile] = useState<File | null>(null);
   const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
-  const [newPromptAssignedClass, setNewPromptAssignedClass] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
   const [promptSuccess, setPromptSuccess] = useState("");
-  const [promptAssignmentDrafts, setPromptAssignmentDrafts] = useState<Record<string, string[]>>({});
-  const [savingPromptAssignmentById, setSavingPromptAssignmentById] = useState<Record<string, boolean>>({});
   const [savingPromptVisibilityById, setSavingPromptVisibilityById] = useState<Record<string, boolean>>({});
   const [deletingPromptById, setDeletingPromptById] = useState<Record<string, boolean>>({});
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
-  const [showUnassignedPrompts, setShowUnassignedPrompts] = useState(false);
   const [teacherScreen, setTeacherScreen] = useState<"classes" | "assignment_library">("classes");
   const [newClassName, setNewClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
@@ -1021,10 +1017,9 @@ export default function TeacherDashboard() {
     void fetchProjectVideoSubmissions();
   }, [fetchPrompts, fetchStudents, fetchClassVideoSettings, fetchSubmissions, fetchProjectVideoSubmissions]);
 
-  async function handleSavePrompt(assignedClassName?: string) {
+  async function handleSavePrompt() {
     if (isSavingPrompt) return;
     const text = newPrompt.trim();
-    const className = (assignedClassName ?? newPromptAssignedClass ?? "").trim();
     if (!text) return;
     setIsSavingPrompt(true);
     setPromptError("");
@@ -1056,7 +1051,7 @@ export default function TeacherDashboard() {
       .from("prompts")
       .insert({
         prompt_text: text,
-        class_name: className || null,
+        class_name: null,
         suggested_time: newSuggestedTime.trim() || null,
         prompt_image_path: promptImagePath,
         prompt_image_url: promptImageUrl,
@@ -1072,21 +1067,8 @@ export default function TeacherDashboard() {
       setIsSavingPrompt(false);
       return;
     }
-    if (className) {
-      const { error: assignmentError } = await supabase.from("prompt_assignments").upsert({
-        prompt_id: insertedPrompt.id,
-        class_name: className,
-        is_visible: false,
-      }, { onConflict: "prompt_id,class_name" });
-      if (assignmentError) {
-        setPromptError(assignmentError.message);
-        setIsSavingPrompt(false);
-        return;
-      }
-    }
     setNewPrompt("");
     setNewSuggestedTime("");
-    setNewPromptAssignedClass("");
     setNewPromptImageFile(null);
     if (newPromptImagePreviewUrl) {
       URL.revokeObjectURL(newPromptImagePreviewUrl);
@@ -1142,48 +1124,33 @@ export default function TeacherDashboard() {
     await fetchPrompts();
   }
 
-  async function handleSavePromptAssignment(promptId: string) {
-    const nextClasses = (promptAssignmentDrafts[promptId] ?? []).map((row) => row.trim()).filter(Boolean);
-    const currentAssignments = promptAssignmentsByPromptId.get(promptId) ?? [];
-    const currentClasses = currentAssignments.map((row) => row.class_name.trim()).filter(Boolean);
-    const classesToAdd = nextClasses.filter((row) => !currentClasses.includes(row));
-    const classesToRemove = currentClasses.filter((row) => !nextClasses.includes(row));
+  async function handleTogglePromptAssignment(prompt: PromptRow, className: string, shouldAssign: boolean) {
+    const trimmedClassName = className.trim();
+    if (!trimmedClassName) return;
+    const currentAssignments = promptAssignmentsByPromptId.get(prompt.id) ?? [];
+    const hasAssignment = currentAssignments.some((row) => row.class_name.trim() === trimmedClassName);
+    if (shouldAssign === hasAssignment) return;
+
     setPromptError("");
     setPromptSuccess("");
-    setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: true }));
-
-    if (classesToAdd.length) {
-      const { error: addError } = await supabase.from("prompt_assignments").upsert(
-        classesToAdd.map((class_name) => ({ prompt_id: promptId, class_name, is_visible: false })),
-        { onConflict: "prompt_id,class_name" }
-      );
-      if (addError) {
-        setPromptError(addError.message);
-        setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
-        return;
-      }
-    }
-
-    if (classesToRemove.length) {
-      const { error: removeError } = await supabase.from("prompt_assignments").delete().eq("prompt_id", promptId).in("class_name", classesToRemove);
-      if (removeError) {
-        setPromptError(removeError.message);
-        setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
-        return;
-      }
-    }
-
-    const primaryClass = nextClasses[0] ?? null;
-    const { error } = await supabase.from("prompts").update({ class_name: primaryClass }).eq("id", promptId);
+    const query = shouldAssign
+      ? supabase.from("prompt_assignments").upsert({
+        prompt_id: prompt.id,
+        class_name: trimmedClassName,
+        is_visible: false,
+      }, { onConflict: "prompt_id,class_name" })
+      : supabase.from("prompt_assignments").delete().eq("prompt_id", prompt.id).eq("class_name", trimmedClassName);
+    const { error } = await query;
     if (error) {
       setPromptError(error.message);
-      setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
       return;
     }
-    const assignmentLabel = nextClasses.length ? nextClasses.join(", ") : "Not assigned";
-    setPromptSuccess(`Prompt assignment saved: ${assignmentLabel}`);
-    setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
+    setPromptSuccess(`${shouldAssign ? "Assigned" : "Removed"} "${prompt.prompt_text ?? "Prompt"}" ${shouldAssign ? "to" : "from"} ${trimmedClassName}.`);
     await fetchPrompts();
+  }
+
+  async function handleRemovePromptFromClass(prompt: PromptRow, className: string) {
+    await handleTogglePromptAssignment(prompt, className, false);
   }
 
   function handleNewPromptImageChange(file: File | null) {
@@ -1226,12 +1193,6 @@ export default function TeacherDashboard() {
       if (error) throw error;
 
       setPrompts((prev) => prev.filter((row) => row.id !== prompt.id));
-      setPromptAssignmentDrafts((prev) => {
-        if (!Object.prototype.hasOwnProperty.call(prev, prompt.id)) return prev;
-        const next = { ...prev };
-        delete next[prompt.id];
-        return next;
-      });
       setPromptSuccess("Prompt deleted.");
     } catch (error: any) {
       setPromptError(error?.message || "Could not delete prompt.");
@@ -1278,7 +1239,6 @@ export default function TeacherDashboard() {
   function handleUseNewClass() {
     const className = newClassName.trim();
     if (!className) return;
-    setShowUnassignedPrompts(false);
     setSelectedClass(className);
     setNewClassName("");
   }
@@ -1357,17 +1317,6 @@ export default function TeacherDashboard() {
   function updateStudentDraft(id: string, patch: Partial<StudentRow>) {
     setStudents((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
-
-  useEffect(() => {
-    setPromptAssignmentDrafts((prev) => {
-      const next: Record<string, string[]> = {};
-      prompts.forEach((prompt) => {
-        const normalized = (prompt.prompt_assignments ?? []).map((row) => row.class_name.trim()).filter(Boolean);
-        next[prompt.id] = Object.prototype.hasOwnProperty.call(prev, prompt.id) ? prev[prompt.id] : normalized;
-      });
-      return next;
-    });
-  }, [prompts]);
 
   async function handleSaveStudent(student: StudentRow) {
     const className = (student.class_name ?? "").trim();
@@ -1696,55 +1645,10 @@ export default function TeacherDashboard() {
             onNewClassNameChange={setNewClassName}
             onUseNewClass={handleUseNewClass}
             onRefreshClasses={() => void fetchStudents()}
-            onSelectClass={(className: string) => {
-              setShowUnassignedPrompts(false);
-              setSelectedClass(className);
-            }}
+            onSelectClass={(className: string) => setSelectedClass(className)}
             rosterError={rosterError}
-            unassignedPromptCount={unassignedPrompts.length}
-            onManageUnassignedPrompts={() => setShowUnassignedPrompts(true)}
+            onOpenAssignmentLibrary={() => setTeacherScreen("assignment_library")}
           />
-        ) : null}
-
-        {teacherScreen === "classes" && !selectedClassName && showUnassignedPrompts ? (
-          <section style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 14, marginTop: 14 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div style={{ fontSize: 20, fontWeight: 900 }}>Unassigned prompts</div>
-              <button type="button" onClick={() => setShowUnassignedPrompts(false)}>Close</button>
-            </div>
-            <TeacherPromptPanel
-              selectedClassName="Unassigned prompts"
-              title="Unassigned prompt cleanup"
-              createPromptLabel=""
-              showCreateForm={false}
-              showBulkHideButton={false}
-              newPrompt={newPrompt}
-              newSuggestedTime={newSuggestedTime}
-              setNewPrompt={setNewPrompt}
-              setNewSuggestedTime={setNewSuggestedTime}
-              newPromptImagePreviewUrl={newPromptImagePreviewUrl}
-              onPromptImageChange={handleNewPromptImageChange}
-              onClearPromptImage={handleClearNewPromptImage}
-              onSavePrompt={() => void handleSavePrompt()}
-              isSavingPrompt={isSavingPrompt}
-              promptSuccess={promptSuccess}
-              promptError={promptError}
-              filteredPrompts={unassignedPrompts}
-              promptAssignmentDrafts={promptAssignmentDrafts}
-              setPromptAssignmentDrafts={setPromptAssignmentDrafts}
-              onSavePromptAssignment={(id: string) => void handleSavePromptAssignment(id)}
-              onTogglePromptVisibility={(prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className)}
-              onDeletePrompt={(prompt: PromptRow) => void handleDeletePrompt(prompt)}
-              savingPromptAssignmentById={savingPromptAssignmentById}
-              savingPromptVisibilityById={savingPromptVisibilityById}
-              deletingPromptById={deletingPromptById}
-              onClearVisiblePromptsForSelectedClass={() => void handleClearVisiblePromptsForSelectedClass()}
-              classNameOptions={classNameOptions}
-              createClassName={newPromptAssignedClass}
-              setCreateClassName={setNewPromptAssignedClass}
-              emptyStateText="No unassigned prompts right now."
-            />
-          </section>
         ) : null}
 
         {teacherScreen === "classes" && selectedClassName ? (
@@ -1781,6 +1685,7 @@ export default function TeacherDashboard() {
               newStudentNameInputRef,
             }}
             promptPanelProps={{
+              mode: "class",
               selectedClassName,
               newPrompt,
               newSuggestedTime,
@@ -1789,26 +1694,24 @@ export default function TeacherDashboard() {
               newPromptImagePreviewUrl,
               onPromptImageChange: handleNewPromptImageChange,
               onClearPromptImage: handleClearNewPromptImage,
-              createClassName: selectedClassName,
+              createClassName: "",
               setCreateClassName: () => undefined,
-              showCreateClassPicker: false,
               classNameOptions,
-              onSavePrompt: () => void handleSavePrompt(selectedClassName),
+              onSavePrompt: () => void handleSavePrompt(),
               isSavingPrompt: false,
               promptSuccess: "",
               promptError: "",
               filteredPrompts: classScopedPrompts,
-              promptAssignmentDrafts,
-              setPromptAssignmentDrafts,
-              onSavePromptAssignment: (id: string) => void handleSavePromptAssignment(id),
+              onTogglePromptAssignment: (prompt: PromptRow, className: string, shouldAssign: boolean) => void handleTogglePromptAssignment(prompt, className, shouldAssign),
               onTogglePromptVisibility: (prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className),
+              onRemovePromptFromClass: (prompt: PromptRow, className: string) => void handleRemovePromptFromClass(prompt, className),
               onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
-              savingPromptAssignmentById,
               savingPromptVisibilityById,
               deletingPromptById,
               onClearVisiblePromptsForSelectedClass: () => void handleClearVisiblePromptsForSelectedClass(),
               emptyStateText: `No prompts are currently assigned to ${selectedClassName}. Browse the Assignment Library to assign one.`,
               showCreateForm: false,
+              showBulkHideButton: false,
               onHeaderAction: () => setTeacherScreen("assignment_library"),
               headerActionLabel: "Browse Assignment Library",
             }}
@@ -1851,6 +1754,7 @@ export default function TeacherDashboard() {
             unassignedPromptCount={unassignedPrompts.length}
             onGoToClasses={() => setTeacherScreen("classes")}
             promptPanelProps={{
+              mode: "library",
               selectedClassName: "Assignment Library",
               title: "Prompt & assignment library",
               createPromptLabel: "Create prompts with optional images, then assign/reassign to classes.",
@@ -1858,9 +1762,8 @@ export default function TeacherDashboard() {
               newSuggestedTime,
               setNewPrompt,
               setNewSuggestedTime,
-              createClassName: newPromptAssignedClass,
-              setCreateClassName: setNewPromptAssignedClass,
-              showCreateClassPicker: true,
+              createClassName: "",
+              setCreateClassName: () => undefined,
               newPromptImagePreviewUrl,
               onPromptImageChange: handleNewPromptImageChange,
               onClearPromptImage: handleClearNewPromptImage,
@@ -1869,12 +1772,10 @@ export default function TeacherDashboard() {
               promptSuccess,
               promptError,
               filteredPrompts: sortedPrompts,
-              promptAssignmentDrafts,
-              setPromptAssignmentDrafts,
-              onSavePromptAssignment: (id: string) => void handleSavePromptAssignment(id),
+              onTogglePromptAssignment: (prompt: PromptRow, className: string, shouldAssign: boolean) => void handleTogglePromptAssignment(prompt, className, shouldAssign),
               onTogglePromptVisibility: (prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className),
+              onRemovePromptFromClass: (prompt: PromptRow, className: string) => void handleRemovePromptFromClass(prompt, className),
               onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
-              savingPromptAssignmentById,
               savingPromptVisibilityById,
               deletingPromptById,
               onClearVisiblePromptsForSelectedClass: () => setPromptError("Use the prompt-level visibility controls in Assignment Library."),
