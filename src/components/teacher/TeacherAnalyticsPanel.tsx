@@ -23,7 +23,7 @@ export default function TeacherAnalyticsPanel({ selectedClassName, analyticsProm
     <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, marginBottom: 12, background: "#f8fafc" }}>
       <div style={{ fontWeight: 800, marginBottom: 8, color: "#334155" }}>Submission analytics</div>
       <select value={analyticsPromptFilter} onChange={(e) => setAnalyticsPromptFilter(e.target.value)} disabled={!analyticsPromptOptions.length} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", padding: "0 8px", fontSize: 13 }}>
-        {!analyticsPromptOptions.length ? <option value="">No prompts available</option> : null}
+        {!analyticsPromptOptions.length ? <option value="">No assignments available</option> : null}
         {analyticsPromptOptions.map((promptText) => <option key={promptText} value={promptText}>{promptText}</option>)}
       </select>
       {hasContext ? (
@@ -40,7 +40,7 @@ export default function TeacherAnalyticsPanel({ selectedClassName, analyticsProm
           </div>
         </div>
       ) : (
-        <div style={{ marginTop: 8, fontSize: 13, color: "#64748b" }}>Choose a prompt to see class submission coverage.</div>
+        <div style={{ marginTop: 8, fontSize: 13, color: "#64748b" }}>Choose an assignment to see class submission coverage.</div>
       )}
     </div>
   );

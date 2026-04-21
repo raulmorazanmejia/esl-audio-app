@@ -87,6 +87,7 @@ export default function TeacherPromptPanel(props: Props) {
       <select value={p.newAssignmentType} onChange={(e) => p.setNewAssignmentType(e.target.value as AssignmentActivityType)} style={inputStyle}>
         <option value="audio_response">Audio response</option>
         <option value="video_response">Video response</option>
+        <option value="text_response">Text response</option>
         <option value="external_link">External activity link</option>
       </select>
       {p.newAssignmentType === "external_link" ? (
@@ -173,7 +174,7 @@ export default function TeacherPromptPanel(props: Props) {
             )) : <span style={{ fontSize: 12, color: "#64748b" }}>Unassigned</span>}
           </div> : null}
           {prompt.suggested_time ? <div style={{ fontSize: 12, color: "#64748b" }}>Suggested time: {prompt.suggested_time}</div> : null}
-          <div style={{ fontSize: 12, color: "#64748b" }}>Type: {prompt.assignment_type === "external_link" ? "External activity" : prompt.assignment_type === "video_response" ? "Video response" : "Audio response"}</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>Type: {prompt.assignment_type === "external_link" ? "External activity" : prompt.assignment_type === "video_response" ? "Video response" : prompt.assignment_type === "text_response" ? "Text response" : "Audio response"}</div>
           {prompt.external_url ? <div style={{ fontSize: 12, color: "#64748b" }}>External URL: {prompt.external_url}</div> : null}
           {prompt.example_text ? <div style={{ fontSize: 12, color: "#64748b" }}>Instructions: {prompt.example_text}</div> : null}
           {prompt.created_at ? <div style={{ fontSize: 12, color: "#94a3b8" }}>Created: {new Date(prompt.created_at).toLocaleString()}</div> : null}

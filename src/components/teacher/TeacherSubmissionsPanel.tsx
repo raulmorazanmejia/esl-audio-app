@@ -46,7 +46,7 @@ export default function TeacherSubmissionsPanel(p: Props) {
     </div>
 
     <select value={p.submissionPromptFilter} onChange={(e) => p.setSubmissionPromptFilter(e.target.value)} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", padding: "0 8px", marginBottom: 8 }}>
-      <option value="__all_prompts__">All prompts</option>
+      <option value="__all_prompts__">All assignments</option>
       {p.submissionPromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}
     </select>
 
@@ -76,13 +76,28 @@ export default function TeacherSubmissionsPanel(p: Props) {
           <div style={{ fontSize: 12, fontWeight: 700, color: submission.status === "needs_review" ? "#b45309" : "#166534" }}>{submission.status?.replace("_", " ") || "submitted"}</div>
         </div>
         <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>{submission.prompt_text}</div>
-        {submission.response_mode === "video"
-          ? (submission.video_url
-            ? <video controls style={{ width: "100%" }}><source src={submission.video_url} /></video>
-            : <div style={{ fontSize: 13, color: "#64748b" }}>No video.</div>)
-          : (submission.audio_url
-            ? <ReliableAudioPlayer src={submission.audio_url} style={{ width: "100%" }} />
-            : <div style={{ fontSize: 13, color: "#64748b" }}>No audio.</div>)}
+        <div style={{ fontSize: 12, color: "#475569", marginBottom: 8 }}>
+          {submission.prompt?.assignment_type === "external_link"
+            ? "External activity completion"
+            : submission.response_mode === "video"
+              ? "Video response"
+              : submission.response_mode === "text"
+                ? "Text response"
+                : "Audio response"}
+        </div>
+        {submission.prompt?.assignment_type === "external_link" ? (
+          <div style={{ fontSize: 13, color: "#0f766e", border: "1px solid #99f6e4", borderRadius: 10, background: "#f0fdfa", padding: 10 }}>
+            Marked completed by student {submission.completion_marked_at ? `on ${new Date(submission.completion_marked_at).toLocaleString()}` : ""}.
+          </div>
+        ) : submission.response_mode === "video" ? (submission.video_url
+          ? <video controls style={{ width: "100%" }}><source src={submission.video_url} /></video>
+          : <div style={{ fontSize: 13, color: "#64748b" }}>No video.</div>) : submission.response_mode === "text" ? (
+          <div style={{ fontSize: 14, color: "#334155", border: "1px solid #e2e8f0", borderRadius: 10, background: "#f8fafc", padding: 10, whiteSpace: "pre-wrap" }}>
+            {submission.text_response || "No text response."}
+          </div>
+        ) : (submission.audio_url
+          ? <ReliableAudioPlayer src={submission.audio_url} style={{ width: "100%" }} />
+          : <div style={{ fontSize: 13, color: "#64748b" }}>No audio.</div>)}
         <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)} style={{ minHeight: 34, marginTop: 8, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 10px" }}>{isExpanded ? "Hide details" : "View details"}</button>
         {isExpanded && draft ? <>
           <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
