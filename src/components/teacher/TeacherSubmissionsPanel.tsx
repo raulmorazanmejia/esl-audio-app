@@ -1,6 +1,6 @@
 import React from "react";
 import ReliableAudioPlayer from "../ReliableAudioPlayer";
-import { DraftsById, ProjectVideoSubmissionRow, SubmissionRow } from "../TeacherDashboardTypes";
+import { DraftsById, SubmissionRow } from "../TeacherDashboardTypes";
 import TeacherAnalyticsPanel from "./TeacherAnalyticsPanel";
 
 type Props = {
@@ -30,7 +30,6 @@ type Props = {
   setAnalyticsPromptFilter: (value: string) => void;
   analyticsPromptOptions: string[];
   submissionAnalytics: any;
-  filteredProjectVideoSubmissions: ProjectVideoSubmissionRow[];
 };
 
 export default function TeacherSubmissionsPanel(p: Props) {
@@ -77,7 +76,13 @@ export default function TeacherSubmissionsPanel(p: Props) {
           <div style={{ fontSize: 12, fontWeight: 700, color: submission.status === "needs_review" ? "#b45309" : "#166534" }}>{submission.status?.replace("_", " ") || "submitted"}</div>
         </div>
         <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>{submission.prompt_text}</div>
-        {submission.audio_url ? <ReliableAudioPlayer src={submission.audio_url} style={{ width: "100%" }} /> : <div style={{ fontSize: 13, color: "#64748b" }}>No audio.</div>}
+        {submission.response_mode === "video"
+          ? (submission.video_url
+            ? <video controls style={{ width: "100%" }}><source src={submission.video_url} /></video>
+            : <div style={{ fontSize: 13, color: "#64748b" }}>No video.</div>)
+          : (submission.audio_url
+            ? <ReliableAudioPlayer src={submission.audio_url} style={{ width: "100%" }} />
+            : <div style={{ fontSize: 13, color: "#64748b" }}>No audio.</div>)}
         <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)} style={{ minHeight: 34, marginTop: 8, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 10px" }}>{isExpanded ? "Hide details" : "View details"}</button>
         {isExpanded && draft ? <>
           <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
@@ -96,15 +101,5 @@ export default function TeacherSubmissionsPanel(p: Props) {
       </article>;
     })}
 
-    <div style={{ marginTop: 16, borderTop: "1px solid #e2e8f0", paddingTop: 12 }}>
-      <div style={{ fontWeight: 800, marginBottom: 8, color: "#334155" }}>Project update video submissions</div>
-      {!p.filteredProjectVideoSubmissions.length ? <div style={{ fontSize: 13, color: "#64748b" }}>No project update videos submitted yet.</div> : null}
-      {p.filteredProjectVideoSubmissions.map((submission) => (
-        <article key={submission.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, marginBottom: 8 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>{submission.student_name} ({submission.student_code})</div>
-          {submission.video_url ? <video controls style={{ width: "100%" }}><source src={submission.video_url} /></video> : <div style={{ fontSize: 13, color: "#64748b" }}>Video not available.</div>}
-        </article>
-      ))}
-    </div>
   </section>;
 }

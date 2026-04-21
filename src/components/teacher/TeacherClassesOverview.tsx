@@ -5,7 +5,6 @@ type ClassSummary = {
   studentCount: number;
   needsReviewCount: number;
   promptCount: number;
-  projectVideoEnabled: boolean;
 };
 
 type Props = {
@@ -67,7 +66,6 @@ export default function TeacherClassesOverview({ classSummaries, newClassName, o
               <div>{row.studentCount} student{row.studentCount === 1 ? "" : "s"}</div>
               <div>{row.needsReviewCount} needing review</div>
               <div>{row.promptCount} assigned prompt{row.promptCount === 1 ? "" : "s"}</div>
-              <div>Project videos: {row.projectVideoEnabled ? "Enabled" : "Disabled"}</div>
             </div>
           </button>
         ))}

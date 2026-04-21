@@ -4,12 +4,11 @@ import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
 import TeacherClassDetail from "./teacher/TeacherClassDetail";
 import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
-import { ClassVideoSettingRow, DraftState, DraftsById, ProjectVideoSubmissionRow, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
+import { AssignmentResponseMode, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 
 const SUBMISSION_SELECT =
-  "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
-const PROJECT_VIDEO_SUBMISSION_SELECT = "id, student_name, student_code, class_name, video_path, video_url, created_at";
-const PROMPT_SELECT = "id, prompt_text, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
+  "id, prompt_id, response_mode, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
+const PROMPT_SELECT = "id, prompt_text, response_mode, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
 
 const styles = {
   page: {
@@ -544,6 +543,7 @@ export default function TeacherDashboard() {
   const [prompts, setPrompts] = useState<PromptRow[]>([]);
   const [newPrompt, setNewPrompt] = useState("");
   const [newSuggestedTime, setNewSuggestedTime] = useState("");
+  const [newResponseMode, setNewResponseMode] = useState<AssignmentResponseMode>("audio");
   const [newPromptImageFile, setNewPromptImageFile] = useState<File | null>(null);
   const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -560,8 +560,6 @@ export default function TeacherDashboard() {
   const [isSavingStudent, setIsSavingStudent] = useState(false);
   const [rosterError, setRosterError] = useState("");
   const [rosterSuccess, setRosterSuccess] = useState("");
-  const [classVideoSettings, setClassVideoSettings] = useState<Record<string, boolean>>({});
-  const [isSavingClassVideoSetting, setIsSavingClassVideoSetting] = useState(false);
   const [isDeletingClass, setIsDeletingClass] = useState(false);
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
@@ -575,9 +573,6 @@ export default function TeacherDashboard() {
   const [submissionPromptFilter, setSubmissionPromptFilter] = useState("__all_prompts__");
   const [selectedStudentFilter, setSelectedStudentFilter] = useState<{ code: string; name?: string } | null>(null);
   const [analyticsPromptFilter, setAnalyticsPromptFilter] = useState("");
-  const [projectVideoSubmissions, setProjectVideoSubmissions] = useState<ProjectVideoSubmissionRow[]>([]);
-  const [isLoadingProjectVideoSubmissions, setIsLoadingProjectVideoSubmissions] = useState(false);
-  const [projectVideoSubmissionsError, setProjectVideoSubmissionsError] = useState("");
 
   const sortedPrompts = useMemo(() => {
     return [...prompts].sort((a, b) => {
@@ -751,10 +746,9 @@ export default function TeacherDashboard() {
         studentCount,
         promptCount: promptCounts.get(className) ?? 0,
         needsReviewCount: needsReviewCounts.get(className) ?? 0,
-        projectVideoEnabled: Boolean(classVideoSettings[className]),
       }))
       .sort((a, b) => a.className.localeCompare(b.className));
-  }, [students, prompts, submissions, getSubmissionClassName, classVideoSettings]);
+  }, [students, prompts, submissions, getSubmissionClassName]);
 
   const analyticsPromptOptions = useMemo(() => {
     if (!selectedClassName) return [];
@@ -844,16 +838,6 @@ export default function TeacherDashboard() {
     }
   }, [selectedClassStudents, selectedStudentFilter]);
 
-  const selectedClassVideoEnabled = useMemo(() => {
-    if (!selectedClassName) return false;
-    return Boolean(classVideoSettings[selectedClassName]);
-  }, [classVideoSettings, selectedClassName]);
-
-  const filteredProjectVideoSubmissions = useMemo(() => {
-    if (!selectedClassName) return projectVideoSubmissions;
-    return projectVideoSubmissions.filter((submission) => (submission.class_name?.trim() ?? "") === selectedClassName);
-  }, [projectVideoSubmissions, selectedClassName]);
-
   const stopRecorderAndTracks = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
@@ -928,17 +912,21 @@ export default function TeacherDashboard() {
       return;
     }
     const rows = ((data ?? []) as PromptRow[]).map((prompt) => {
-      if (prompt.prompt_assignments?.length) return prompt;
-      const fallbackClass = prompt.class_name?.trim();
-      if (!fallbackClass) return { ...prompt, prompt_assignments: [] };
-      return {
+      const normalizedPrompt: PromptRow = {
         ...prompt,
+        response_mode: prompt.response_mode ?? "audio",
+      };
+      if (normalizedPrompt.prompt_assignments?.length) return normalizedPrompt;
+      const fallbackClass = normalizedPrompt.class_name?.trim();
+      if (!fallbackClass) return { ...normalizedPrompt, prompt_assignments: [] };
+      return {
+        ...normalizedPrompt,
         prompt_assignments: [{
-          id: `legacy-${prompt.id}-${fallbackClass}`,
-          prompt_id: prompt.id,
+          id: `legacy-${normalizedPrompt.id}-${fallbackClass}`,
+          prompt_id: normalizedPrompt.id,
           class_name: fallbackClass,
-          is_visible: Boolean(prompt.is_active),
-          created_at: prompt.created_at ?? null,
+          is_visible: Boolean(normalizedPrompt.is_active),
+          created_at: normalizedPrompt.created_at ?? null,
         }],
       };
     });
@@ -977,45 +965,11 @@ export default function TeacherDashboard() {
     setStudents((data ?? []) as StudentRow[]);
   }, []);
 
-  const fetchClassVideoSettings = useCallback(async () => {
-    const { data, error } = await supabase.from("class_video_settings").select("class_name, project_video_updates_enabled");
-    if (error) {
-      return;
-    }
-    const rows = (data ?? []) as ClassVideoSettingRow[];
-    const next: Record<string, boolean> = {};
-    rows.forEach((row) => {
-      const className = row.class_name?.trim();
-      if (className) {
-        next[className] = Boolean(row.project_video_updates_enabled);
-      }
-    });
-    setClassVideoSettings(next);
-  }, []);
-
-  const fetchProjectVideoSubmissions = useCallback(async () => {
-    setIsLoadingProjectVideoSubmissions(true);
-    setProjectVideoSubmissionsError("");
-    const { data, error } = await supabase
-      .from("project_video_submissions")
-      .select(PROJECT_VIDEO_SUBMISSION_SELECT)
-      .order("created_at", { ascending: false });
-    if (error) {
-      setProjectVideoSubmissionsError(error.message);
-      setIsLoadingProjectVideoSubmissions(false);
-      return;
-    }
-    setProjectVideoSubmissions((data ?? []) as ProjectVideoSubmissionRow[]);
-    setIsLoadingProjectVideoSubmissions(false);
-  }, []);
-
   useEffect(() => {
     void fetchPrompts();
     void fetchStudents();
-    void fetchClassVideoSettings();
     void fetchSubmissions();
-    void fetchProjectVideoSubmissions();
-  }, [fetchPrompts, fetchStudents, fetchClassVideoSettings, fetchSubmissions, fetchProjectVideoSubmissions]);
+  }, [fetchPrompts, fetchStudents, fetchSubmissions]);
 
   async function handleSavePrompt() {
     if (isSavingPrompt) return;
@@ -1051,6 +1005,7 @@ export default function TeacherDashboard() {
       .from("prompts")
       .insert({
         prompt_text: text,
+        response_mode: newResponseMode,
         class_name: null,
         suggested_time: newSuggestedTime.trim() || null,
         prompt_image_path: promptImagePath,
@@ -1069,6 +1024,7 @@ export default function TeacherDashboard() {
     }
     setNewPrompt("");
     setNewSuggestedTime("");
+    setNewResponseMode("audio");
     setNewPromptImageFile(null);
     if (newPromptImagePreviewUrl) {
       URL.revokeObjectURL(newPromptImagePreviewUrl);
@@ -1247,33 +1203,6 @@ export default function TeacherDashboard() {
     setNewClassName("");
   }
 
-  async function handleToggleProjectVideoForSelectedClass() {
-    const className = selectedClass?.trim() ?? "";
-    if (!className || isSavingClassVideoSetting) return;
-    const nextEnabled = !selectedClassVideoEnabled;
-    setIsSavingClassVideoSetting(true);
-    setRosterError("");
-    setRosterSuccess("");
-
-    const { error } = await supabase.from("class_video_settings").upsert(
-      {
-        class_name: className,
-        project_video_updates_enabled: nextEnabled,
-      },
-      { onConflict: "class_name" }
-    );
-
-    if (error) {
-      setRosterError(error.message);
-      setIsSavingClassVideoSetting(false);
-      return;
-    }
-
-    setClassVideoSettings((prev) => ({ ...prev, [className]: nextEnabled }));
-    setRosterSuccess(`Project update video ${nextEnabled ? "enabled" : "disabled"} for ${className}.`);
-    setIsSavingClassVideoSetting(false);
-  }
-
   async function handleDeleteSelectedClass() {
     const className = selectedClass?.trim() ?? "";
     if (!className || isDeletingClass) return;
@@ -1300,14 +1229,6 @@ export default function TeacherDashboard() {
       const { error: promptError } = await supabase.from("prompts").update({ class_name: null }).eq("class_name", className);
       if (promptError) throw promptError;
 
-      const { error: settingsError } = await supabase.from("class_video_settings").delete().eq("class_name", className);
-      if (settingsError) throw settingsError;
-
-      setClassVideoSettings((prev) => {
-        const next = { ...prev };
-        delete next[className];
-        return next;
-      });
       setSelectedClass(null);
       setRosterSuccess(`Class "${className}" deleted.`);
       await fetchPrompts();
@@ -1663,11 +1584,8 @@ export default function TeacherDashboard() {
             assignedPromptCount={sortedPrompts.filter((prompt) => (prompt.prompt_assignments ?? []).some((row) => row.class_name.trim() === selectedClassName)).length}
             rosterPanelProps={{
               selectedClassName,
-              selectedClassVideoEnabled,
-              isSavingClassVideoSetting,
               isDeletingClass,
               onBack: () => setSelectedClass(null),
-              onToggleProjectVideo: () => void handleToggleProjectVideoForSelectedClass(),
               onDeleteClass: () => void handleDeleteSelectedClass(),
               newStudentName,
               newStudentCode,
@@ -1693,8 +1611,10 @@ export default function TeacherDashboard() {
               selectedClassName,
               newPrompt,
               newSuggestedTime,
+              newResponseMode,
               setNewPrompt,
               setNewSuggestedTime,
+              setNewResponseMode,
               newPromptImagePreviewUrl,
               onPromptImageChange: handleNewPromptImageChange,
               onClearPromptImage: handleClearNewPromptImage,
@@ -1746,7 +1666,6 @@ export default function TeacherDashboard() {
               setAnalyticsPromptFilter,
               analyticsPromptOptions,
               submissionAnalytics,
-              filteredProjectVideoSubmissions,
             }}
           />
         ) : null}
@@ -1764,8 +1683,10 @@ export default function TeacherDashboard() {
               createPromptLabel: "Create prompts with optional images, then assign/reassign to classes.",
               newPrompt,
               newSuggestedTime,
+              newResponseMode,
               setNewPrompt,
               setNewSuggestedTime,
+              setNewResponseMode,
               createClassName: "",
               setCreateClassName: () => undefined,
               newPromptImagePreviewUrl,
