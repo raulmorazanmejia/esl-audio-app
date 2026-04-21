@@ -2,6 +2,7 @@ import React from "react";
 import { PromptRow } from "../TeacherDashboardTypes";
 
 type Props = {
+  mode?: "library" | "class";
   selectedClassName: string;
   title?: string;
   createPromptLabel?: string;
@@ -17,12 +18,10 @@ type Props = {
   promptSuccess: string;
   promptError: string;
   filteredPrompts: PromptRow[];
-  promptAssignmentDrafts: Record<string, string[]>;
-  setPromptAssignmentDrafts: React.Dispatch<React.SetStateAction<Record<string, string[]>>>;
-  onSavePromptAssignment: (id: string) => void;
+  onTogglePromptAssignment: (prompt: PromptRow, className: string, shouldAssign: boolean) => void;
   onTogglePromptVisibility: (prompt: PromptRow, className: string) => void;
+  onRemovePromptFromClass: (prompt: PromptRow, className: string) => void;
   onDeletePrompt: (prompt: PromptRow) => void;
-  savingPromptAssignmentById: Record<string, boolean>;
   savingPromptVisibilityById: Record<string, boolean>;
   deletingPromptById: Record<string, boolean>;
   onClearVisiblePromptsForSelectedClass: () => void;
@@ -78,10 +77,6 @@ export default function TeacherPromptPanel(props: Props) {
     {showCreateForm ? <div style={{ display: "grid", gap: 8, margin: "10px 0 12px", border: "1px solid #e2e8f0", borderRadius: 12, background: "#f8fafc", padding: 10 }}>
       <input value={p.newPrompt} onChange={(e) => p.setNewPrompt(e.target.value)} placeholder="Prompt title or text" style={inputStyle} />
       <input value={p.newSuggestedTime} onChange={(e) => p.setNewSuggestedTime(e.target.value)} placeholder="Suggested speaking time" style={inputStyle} />
-      {p.showCreateClassPicker ? <select value={p.createClassName} onChange={(e) => p.setCreateClassName(e.target.value)} style={inputStyle}>
-        <option value="">Unassigned (assign later)</option>
-        {p.classNameOptions.map((className) => <option key={`create-${className}`} value={className}>{className}</option>)}
-      </select> : null}
       <input type="file" accept="image/*" onChange={(e) => p.onPromptImageChange(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
       {p.newPromptImagePreviewUrl ? (
         <div style={{ display: "grid", gap: 6 }}>
@@ -126,12 +121,9 @@ export default function TeacherPromptPanel(props: Props) {
       {visiblePrompts.map((prompt) => {
         const fallbackClass = prompt.class_name?.trim();
         const currentAssignments = prompt.prompt_assignments?.map((row) => row.class_name.trim()).filter(Boolean) ?? (fallbackClass ? [fallbackClass] : []);
-        const assignmentValue = p.promptAssignmentDrafts[prompt.id] ?? currentAssignments;
-        const assignmentChanged = [...assignmentValue].sort().join("|") !== [...currentAssignments].sort().join("|");
         const selectedClassAssignment = prompt.prompt_assignments?.find((row) => row.class_name === p.selectedClassName);
         const selectedClassVisible = selectedClassAssignment ? Boolean(selectedClassAssignment.is_visible) : false;
-        const assignmentLabel = currentAssignments.length ? currentAssignments.join(", ") : "Unassigned";
-        const disableAssignmentButton = Boolean(p.savingPromptAssignmentById[prompt.id]) || !assignmentChanged;
+        const isLibraryMode = p.mode === "library";
         return <div key={prompt.id} style={{ border: "1px solid #e2e8f0", padding: 10, borderRadius: 12, marginBottom: 8, background: "#fff" }}>
           {prompt.prompt_image_url ? <div style={{ marginBottom: 8 }}>
             <img src={prompt.prompt_image_url} alt="Prompt" style={{ width: "100%", maxHeight: expandedImagePromptId === prompt.id ? 420 : 160, objectFit: "cover", borderRadius: 8, marginBottom: 6 }} />
@@ -140,7 +132,13 @@ export default function TeacherPromptPanel(props: Props) {
             </button>
           </div> : null}
           <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>{prompt.prompt_text}</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>Assignments: {assignmentLabel}</div>
+          {isLibraryMode ? <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6, marginBottom: 4 }}>
+            {currentAssignments.length ? currentAssignments.map((className) => (
+              <span key={`${prompt.id}-assigned-${className}`} style={{ display: "inline-flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: 999, padding: "3px 8px", fontSize: 12, color: "#334155", background: "#f8fafc" }}>
+                {className}
+              </span>
+            )) : <span style={{ fontSize: 12, color: "#64748b" }}>Unassigned</span>}
+          </div> : null}
           {prompt.suggested_time ? <div style={{ fontSize: 12, color: "#64748b" }}>Suggested time: {prompt.suggested_time}</div> : null}
           {prompt.example_text ? <div style={{ fontSize: 12, color: "#64748b" }}>Example: {prompt.example_text}</div> : null}
           {prompt.created_at ? <div style={{ fontSize: 12, color: "#94a3b8" }}>Created: {new Date(prompt.created_at).toLocaleString()}</div> : null}
@@ -150,40 +148,38 @@ export default function TeacherPromptPanel(props: Props) {
             </div>
           ) : null}
 
-          {isAssignmentEditable ? (
+          {isAssignmentEditable && isLibraryMode ? (
             <div style={{ display: "grid", gap: 6, marginBottom: 8, paddingTop: 8, borderTop: "1px dashed #e2e8f0" }}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {p.classNameOptions.map((className) => {
-                  const checked = assignmentValue.includes(className);
+                  const checked = currentAssignments.includes(className);
                   return (
                     <label key={`${prompt.id}-${className}`} style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12, border: "1px solid #cbd5e1", borderRadius: 999, padding: "4px 8px" }}>
                       <input
                         type="checkbox"
                         checked={checked}
-                        onChange={() => p.setPromptAssignmentDrafts((prev) => {
-                          const existing = prev[prompt.id] ?? currentAssignments;
-                          const next = checked ? existing.filter((row) => row !== className) : [...existing, className];
-                          return { ...prev, [prompt.id]: Array.from(new Set(next)).sort((a, b) => a.localeCompare(b)) };
-                        })}
+                        onChange={() => p.onTogglePromptAssignment(prompt, className, !checked)}
                       />
                       {className}
                     </label>
                   );
                 })}
               </div>
-              <button type="button" onClick={() => p.onSavePromptAssignment(prompt.id)} disabled={disableAssignmentButton} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontSize: 13, fontWeight: 700, padding: "0 10px", justifySelf: "start" }}>
-                {disableAssignmentButton ? "Assignments saved" : "Save class assignments"}
-              </button>
             </div>
           ) : null}
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {p.selectedClassName && p.selectedClassName !== "Assignment Library" && p.selectedClassName !== "Unassigned prompts" && selectedClassAssignment ? (
+            {!isLibraryMode && p.selectedClassName && p.selectedClassName !== "Assignment Library" && p.selectedClassName !== "Unassigned prompts" && selectedClassAssignment ? (
               <button type="button" onClick={() => p.onTogglePromptVisibility(prompt, p.selectedClassName)} disabled={Boolean(p.savingPromptVisibilityById[`${prompt.id}:${p.selectedClassName}`])} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>
                 {selectedClassVisible ? "Hide" : "Show"} for students in {p.selectedClassName}
               </button>
             ) : null}
-            <button type="button" onClick={() => p.onDeletePrompt(prompt)} disabled={Boolean(p.deletingPromptById[prompt.id])} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>Delete permanently</button>
+            {!isLibraryMode && selectedClassAssignment ? (
+              <button type="button" onClick={() => p.onRemovePromptFromClass(prompt, p.selectedClassName)} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>
+                Remove from {p.selectedClassName}
+              </button>
+            ) : null}
+            {isLibraryMode ? <button type="button" onClick={() => p.onDeletePrompt(prompt)} disabled={Boolean(p.deletingPromptById[prompt.id])} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>Delete permanently</button> : null}
           </div>
         </div>;
       })}
