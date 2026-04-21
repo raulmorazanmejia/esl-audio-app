@@ -8,6 +8,15 @@ export type PromptRow = {
   example_text: string | null;
   is_active: boolean | null;
   created_at?: string | null;
+  prompt_assignments?: PromptAssignmentRow[];
+};
+
+export type PromptAssignmentRow = {
+  id: string;
+  prompt_id: string;
+  class_name: string;
+  is_visible: boolean;
+  created_at: string | null;
 };
 
 export type SubmissionRow = {

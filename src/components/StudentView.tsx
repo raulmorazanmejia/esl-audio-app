@@ -12,6 +12,10 @@ type PromptRow = {
   example_text: string | null;
   is_active: boolean | null;
   created_at?: string | null;
+  prompt_assignments?: {
+    class_name: string;
+    is_visible: boolean;
+  }[];
 };
 
 type SubmissionRow = {
@@ -66,7 +70,7 @@ type AnalyzeResponse = {
   error?: string;
 };
 
-const PROMPT_SELECT = "id, prompt_text, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at";
+const PROMPT_SELECT = "id, prompt_text, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments!inner(class_name, is_visible)";
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 const PROJECT_VIDEO_SUBMISSION_SELECT = "id, student_name, student_code, class_name, video_path, video_url, created_at";
@@ -553,11 +557,16 @@ export default function StudentView() {
 
   async function fetchAssignedPrompts(classNameValue: string) {
     const className = classNameValue.trim();
+    if (!className) {
+      setAssignedPrompts([]);
+      setSelectedPromptId(null);
+      return [];
+    }
     const { data, error } = await supabase
       .from("prompts")
       .select(PROMPT_SELECT)
-      .eq("class_name", className)
-      .eq("is_active", true)
+      .eq("prompt_assignments.class_name", className)
+      .eq("prompt_assignments.is_visible", true)
       .order("created_at", { ascending: false });
 
     if (error) {

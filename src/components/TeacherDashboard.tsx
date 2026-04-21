@@ -4,11 +4,12 @@ import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
 import TeacherClassDetail from "./teacher/TeacherClassDetail";
 import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
-import { ClassVideoSettingRow, DraftState, DraftsById, ProjectVideoSubmissionRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
+import { ClassVideoSettingRow, DraftState, DraftsById, ProjectVideoSubmissionRow, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 
 const SUBMISSION_SELECT =
   "id, student_name, prompt_text, audio_path, audio_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 const PROJECT_VIDEO_SUBMISSION_SELECT = "id, student_name, student_code, class_name, video_path, video_url, created_at";
+const PROMPT_SELECT = "id, prompt_text, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
 
 const styles = {
   page: {
@@ -549,7 +550,7 @@ export default function TeacherDashboard() {
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
   const [promptError, setPromptError] = useState("");
   const [promptSuccess, setPromptSuccess] = useState("");
-  const [promptAssignmentDrafts, setPromptAssignmentDrafts] = useState<Record<string, string>>({});
+  const [promptAssignmentDrafts, setPromptAssignmentDrafts] = useState<Record<string, string[]>>({});
   const [savingPromptAssignmentById, setSavingPromptAssignmentById] = useState<Record<string, boolean>>({});
   const [savingPromptVisibilityById, setSavingPromptVisibilityById] = useState<Record<string, boolean>>({});
   const [deletingPromptById, setDeletingPromptById] = useState<Record<string, boolean>>({});
@@ -588,6 +589,14 @@ export default function TeacherDashboard() {
       const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
       return bTime - aTime;
     });
+  }, [prompts]);
+
+  const promptAssignmentsByPromptId = useMemo(() => {
+    const map = new Map<string, PromptAssignmentRow[]>();
+    prompts.forEach((prompt) => {
+      map.set(prompt.id, prompt.prompt_assignments ?? []);
+    });
+    return map;
   }, [prompts]);
 
   const studentClassByCode = useMemo(() => {
@@ -643,8 +652,8 @@ export default function TeacherDashboard() {
     prompts.forEach((prompt) => {
       const promptText = prompt.prompt_text?.trim() ?? "";
       if (!promptText) return;
-      const promptClass = prompt.class_name?.trim() ?? "";
-      if (!selectedClassName || promptClass === selectedClassName) {
+      const promptClasses = (prompt.prompt_assignments ?? []).map((row) => row.class_name.trim());
+      if (!selectedClassName || promptClasses.includes(selectedClassName)) {
         promptSet.add(promptText);
       }
     });
@@ -699,11 +708,11 @@ export default function TeacherDashboard() {
   }, [submissions, selectedClassName, getSubmissionClassName]);
 
   const classScopedPrompts = useMemo(() => {
-    return sortedPrompts.filter((prompt) => (prompt.class_name?.trim() ?? "") === selectedClassName);
+    return sortedPrompts.filter((prompt) => (prompt.prompt_assignments ?? []).some((row) => row.class_name.trim() === selectedClassName));
   }, [sortedPrompts, selectedClassName]);
 
   const unassignedPrompts = useMemo(() => {
-    return sortedPrompts.filter((prompt) => !(prompt.class_name?.trim() || ""));
+    return sortedPrompts.filter((prompt) => !(prompt.prompt_assignments?.length));
   }, [sortedPrompts]);
 
   const classNameOptions = useMemo(() => {
@@ -723,9 +732,11 @@ export default function TeacherDashboard() {
 
     const promptCounts = new Map<string, number>();
     prompts.forEach((prompt) => {
-      const className = prompt.class_name?.trim() ?? "";
-      if (!className) return;
-      promptCounts.set(className, (promptCounts.get(className) ?? 0) + 1);
+      (prompt.prompt_assignments ?? []).forEach((assignment) => {
+        const className = assignment.class_name?.trim() ?? "";
+        if (!className) return;
+        promptCounts.set(className, (promptCounts.get(className) ?? 0) + 1);
+      });
     });
 
     const needsReviewCounts = new Map<string, number>();
@@ -755,9 +766,9 @@ export default function TeacherDashboard() {
 
     prompts.forEach((prompt) => {
       const promptText = prompt.prompt_text?.trim() ?? "";
-      const promptClass = prompt.class_name?.trim() ?? "";
+      const promptClasses = (prompt.prompt_assignments ?? []).map((row) => row.class_name.trim());
       if (!promptText) return;
-      if (promptClass === selectedClassName) {
+      if (promptClasses.includes(selectedClassName)) {
         promptSet.add(promptText);
       }
     });
@@ -914,13 +925,27 @@ export default function TeacherDashboard() {
     setPromptError("");
     const { data, error } = await supabase
       .from("prompts")
-      .select("id, prompt_text, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at")
+      .select(PROMPT_SELECT)
       .order("created_at", { ascending: false });
     if (error) {
       setPromptError(error.message);
       return;
     }
-    const rows = (data ?? []) as PromptRow[];
+    const rows = ((data ?? []) as PromptRow[]).map((prompt) => {
+      if (prompt.prompt_assignments?.length) return prompt;
+      const fallbackClass = prompt.class_name?.trim();
+      if (!fallbackClass) return { ...prompt, prompt_assignments: [] };
+      return {
+        ...prompt,
+        prompt_assignments: [{
+          id: `legacy-${prompt.id}-${fallbackClass}`,
+          prompt_id: prompt.id,
+          class_name: fallbackClass,
+          is_visible: Boolean(prompt.is_active),
+          created_at: prompt.created_at ?? null,
+        }],
+      };
+    });
     setPrompts(rows);
   }, []);
 
@@ -1027,21 +1052,37 @@ export default function TeacherDashboard() {
       promptImageUrl = publicUrl;
     }
 
-    const { error } = await supabase.from("prompts").insert({
-      prompt_text: text,
-      class_name: className || null,
-      suggested_time: newSuggestedTime.trim() || null,
-      prompt_image_path: promptImagePath,
-      prompt_image_url: promptImageUrl,
-      is_active: false,
-    });
-    if (error) {
-      setPromptError(error.message);
+    const { data: insertedPrompt, error } = await supabase
+      .from("prompts")
+      .insert({
+        prompt_text: text,
+        class_name: className || null,
+        suggested_time: newSuggestedTime.trim() || null,
+        prompt_image_path: promptImagePath,
+        prompt_image_url: promptImageUrl,
+        is_active: false,
+      })
+      .select("id")
+      .single();
+    if (error || !insertedPrompt?.id) {
+      setPromptError(error?.message || "Could not save prompt.");
       if (promptImagePath) {
         await supabase.storage.from(PROMPT_IMAGES_BUCKET).remove([promptImagePath]);
       }
       setIsSavingPrompt(false);
       return;
+    }
+    if (className) {
+      const { error: assignmentError } = await supabase.from("prompt_assignments").upsert({
+        prompt_id: insertedPrompt.id,
+        class_name: className,
+        is_visible: false,
+      }, { onConflict: "prompt_id,class_name" });
+      if (assignmentError) {
+        setPromptError(assignmentError.message);
+        setIsSavingPrompt(false);
+        return;
+      }
     }
     setNewPrompt("");
     setNewSuggestedTime("");
@@ -1056,19 +1097,31 @@ export default function TeacherDashboard() {
     await fetchPrompts();
   }
 
-  async function handleTogglePromptVisibility(prompt: PromptRow) {
-    setPromptError("");
-    setPromptSuccess("");
-    setSavingPromptVisibilityById((prev) => ({ ...prev, [prompt.id]: true }));
-    const nextVisible = !Boolean(prompt.is_active);
-    const { error } = await supabase.from("prompts").update({ is_active: nextVisible }).eq("id", prompt.id);
-    if (error) {
-      setPromptError(error.message);
-      setSavingPromptVisibilityById((prev) => ({ ...prev, [prompt.id]: false }));
+  async function handleTogglePromptVisibility(prompt: PromptRow, className: string) {
+    const normalizedClassName = className.trim();
+    if (!normalizedClassName) return;
+    const assignment = (prompt.prompt_assignments ?? []).find((row) => row.class_name.trim() === normalizedClassName);
+    if (!assignment) {
+      setPromptError(`This prompt is not assigned to ${normalizedClassName}.`);
       return;
     }
-    setPromptSuccess(`Prompt is now ${nextVisible ? "visible" : "hidden"} for students.`);
-    setSavingPromptVisibilityById((prev) => ({ ...prev, [prompt.id]: false }));
+    setPromptError("");
+    setPromptSuccess("");
+    const savingKey = `${prompt.id}:${normalizedClassName}`;
+    setSavingPromptVisibilityById((prev) => ({ ...prev, [savingKey]: true }));
+    const nextVisible = !Boolean(assignment.is_visible);
+    const { error } = await supabase
+      .from("prompt_assignments")
+      .update({ is_visible: nextVisible })
+      .eq("prompt_id", prompt.id)
+      .eq("class_name", normalizedClassName);
+    if (error) {
+      setPromptError(error.message);
+      setSavingPromptVisibilityById((prev) => ({ ...prev, [savingKey]: false }));
+      return;
+    }
+    setPromptSuccess(`Prompt is now ${nextVisible ? "visible" : "hidden"} for students in ${normalizedClassName}.`);
+    setSavingPromptVisibilityById((prev) => ({ ...prev, [savingKey]: false }));
     await fetchPrompts();
   }
 
@@ -1080,7 +1133,7 @@ export default function TeacherDashboard() {
     }
     setPromptError("");
     setPromptSuccess("");
-    const { error } = await supabase.from("prompts").update({ is_active: false }).eq("class_name", className);
+    const { error } = await supabase.from("prompt_assignments").update({ is_visible: false }).eq("class_name", className);
     if (error) {
       setPromptError(error.message);
       return;
@@ -1090,20 +1143,44 @@ export default function TeacherDashboard() {
   }
 
   async function handleSavePromptAssignment(promptId: string) {
-    const className = (promptAssignmentDrafts[promptId] ?? "").trim();
+    const nextClasses = (promptAssignmentDrafts[promptId] ?? []).map((row) => row.trim()).filter(Boolean);
+    const currentAssignments = promptAssignmentsByPromptId.get(promptId) ?? [];
+    const currentClasses = currentAssignments.map((row) => row.class_name.trim()).filter(Boolean);
+    const classesToAdd = nextClasses.filter((row) => !currentClasses.includes(row));
+    const classesToRemove = currentClasses.filter((row) => !nextClasses.includes(row));
     setPromptError("");
     setPromptSuccess("");
     setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: true }));
-    const { error } = await supabase
-      .from("prompts")
-      .update({ class_name: className || null })
-      .eq("id", promptId);
+
+    if (classesToAdd.length) {
+      const { error: addError } = await supabase.from("prompt_assignments").upsert(
+        classesToAdd.map((class_name) => ({ prompt_id: promptId, class_name, is_visible: false })),
+        { onConflict: "prompt_id,class_name" }
+      );
+      if (addError) {
+        setPromptError(addError.message);
+        setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
+        return;
+      }
+    }
+
+    if (classesToRemove.length) {
+      const { error: removeError } = await supabase.from("prompt_assignments").delete().eq("prompt_id", promptId).in("class_name", classesToRemove);
+      if (removeError) {
+        setPromptError(removeError.message);
+        setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
+        return;
+      }
+    }
+
+    const primaryClass = nextClasses[0] ?? null;
+    const { error } = await supabase.from("prompts").update({ class_name: primaryClass }).eq("id", promptId);
     if (error) {
       setPromptError(error.message);
       setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
       return;
     }
-    const assignmentLabel = className || "Not assigned";
+    const assignmentLabel = nextClasses.length ? nextClasses.join(", ") : "Not assigned";
     setPromptSuccess(`Prompt assignment saved: ${assignmentLabel}`);
     setSavingPromptAssignmentById((prev) => ({ ...prev, [promptId]: false }));
     await fetchPrompts();
@@ -1253,6 +1330,9 @@ export default function TeacherDashboard() {
     setRosterSuccess("");
 
     try {
+      const { error: assignmentError } = await supabase.from("prompt_assignments").delete().eq("class_name", className);
+      if (assignmentError) throw assignmentError;
+
       const { error: promptError } = await supabase.from("prompts").update({ class_name: null }).eq("class_name", className);
       if (promptError) throw promptError;
 
@@ -1280,9 +1360,9 @@ export default function TeacherDashboard() {
 
   useEffect(() => {
     setPromptAssignmentDrafts((prev) => {
-      const next: Record<string, string> = {};
+      const next: Record<string, string[]> = {};
       prompts.forEach((prompt) => {
-        const normalized = prompt.class_name?.trim() || "";
+        const normalized = (prompt.prompt_assignments ?? []).map((row) => row.class_name.trim()).filter(Boolean);
         next[prompt.id] = Object.prototype.hasOwnProperty.call(prev, prompt.id) ? prev[prompt.id] : normalized;
       });
       return next;
@@ -1653,7 +1733,7 @@ export default function TeacherDashboard() {
               promptAssignmentDrafts={promptAssignmentDrafts}
               setPromptAssignmentDrafts={setPromptAssignmentDrafts}
               onSavePromptAssignment={(id: string) => void handleSavePromptAssignment(id)}
-              onTogglePromptVisibility={(prompt: PromptRow) => void handleTogglePromptVisibility(prompt)}
+              onTogglePromptVisibility={(prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className)}
               onDeletePrompt={(prompt: PromptRow) => void handleDeletePrompt(prompt)}
               savingPromptAssignmentById={savingPromptAssignmentById}
               savingPromptVisibilityById={savingPromptVisibilityById}
@@ -1672,7 +1752,7 @@ export default function TeacherDashboard() {
             selectedClassName={selectedClassName}
             selectedClassStudents={selectedClassStudents}
             needsReviewCount={classNeedsReviewCount}
-            assignedPromptCount={sortedPrompts.filter((prompt) => (prompt.class_name?.trim() || "") === selectedClassName).length}
+            assignedPromptCount={sortedPrompts.filter((prompt) => (prompt.prompt_assignments ?? []).some((row) => row.class_name.trim() === selectedClassName)).length}
             rosterPanelProps={{
               selectedClassName,
               selectedClassVideoEnabled,
@@ -1721,7 +1801,7 @@ export default function TeacherDashboard() {
               promptAssignmentDrafts,
               setPromptAssignmentDrafts,
               onSavePromptAssignment: (id: string) => void handleSavePromptAssignment(id),
-              onTogglePromptVisibility: (prompt: PromptRow) => void handleTogglePromptVisibility(prompt),
+              onTogglePromptVisibility: (prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className),
               onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
               savingPromptAssignmentById,
               savingPromptVisibilityById,
@@ -1792,7 +1872,7 @@ export default function TeacherDashboard() {
               promptAssignmentDrafts,
               setPromptAssignmentDrafts,
               onSavePromptAssignment: (id: string) => void handleSavePromptAssignment(id),
-              onTogglePromptVisibility: (prompt: PromptRow) => void handleTogglePromptVisibility(prompt),
+              onTogglePromptVisibility: (prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className),
               onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
               savingPromptAssignmentById,
               savingPromptVisibilityById,
