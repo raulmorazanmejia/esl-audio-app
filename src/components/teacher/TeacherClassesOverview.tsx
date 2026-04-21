@@ -39,7 +39,7 @@ export default function TeacherClassesOverview({ classSummaries, newClassName, o
     <section style={shellCard}>
       <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.14em", color: "#64748b", marginBottom: 10 }}>Teacher workspace</div>
       <div style={{ fontSize: 30, fontWeight: 900, color: "#0f172a", marginBottom: 6, lineHeight: 1.15 }}>Classes</div>
-      <div style={{ fontSize: 14, color: "#64748b", marginBottom: 16 }}>Start with a class to manage prompts, roster, and submissions in one place.</div>
+      <div style={{ fontSize: 14, color: "#64748b", marginBottom: 16 }}>Start with a class to manage assignments, roster, and submissions in one place.</div>
 
       <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, background: "#f8fafc", padding: 12, marginBottom: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
@@ -65,7 +65,7 @@ export default function TeacherClassesOverview({ classSummaries, newClassName, o
             <div style={{ display: "grid", gap: 4, fontSize: 13, color: "#64748b" }}>
               <div>{row.studentCount} student{row.studentCount === 1 ? "" : "s"}</div>
               <div>{row.needsReviewCount} needing review</div>
-              <div>{row.promptCount} assigned prompt{row.promptCount === 1 ? "" : "s"}</div>
+              <div>{row.promptCount} assigned assignment{row.promptCount === 1 ? "" : "s"}</div>
             </div>
           </button>
         ))}

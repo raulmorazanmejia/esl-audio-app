@@ -7,7 +7,7 @@ import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
 import { AssignmentActivityType, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 
 const SUBMISSION_SELECT =
-  "id, prompt_id, response_mode, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
+  "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code, prompt:prompts(assignment_type)";
 const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, response_mode, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
 
 const styles = {
@@ -534,6 +534,7 @@ function buildAudioLabel(url?: string | null) {
 function deriveAssignmentType(prompt: Pick<PromptRow, "assignment_type" | "response_mode">): AssignmentActivityType {
   if (prompt.assignment_type) return prompt.assignment_type;
   if (prompt.response_mode === "video") return "video_response";
+  if (prompt.response_mode === "text") return "text_response";
   return "audio_response";
 }
 
@@ -1022,7 +1023,7 @@ export default function TeacherDashboard() {
         prompt_text: text,
         assignment_type: newAssignmentType,
         external_url: newAssignmentType === "external_link" ? externalUrl : null,
-        response_mode: newAssignmentType === "video_response" ? "video" : "audio",
+        response_mode: newAssignmentType === "video_response" ? "video" : newAssignmentType === "text_response" || newAssignmentType === "external_link" ? "text" : "audio",
         class_name: null,
         suggested_time: newSuggestedTime.trim() || null,
         prompt_image_path: promptImagePath,

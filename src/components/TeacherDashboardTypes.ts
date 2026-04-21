@@ -29,6 +29,11 @@ export type SubmissionRow = {
   id: string;
   prompt_id: string | null;
   response_mode: AssignmentResponseMode | null;
+  text_response: string | null;
+  completion_marked_at: string | null;
+  prompt?: {
+    assignment_type: AssignmentActivityType | null;
+  } | null;
   student_name: string | null;
   prompt_text: string | null;
   audio_path: string | null;

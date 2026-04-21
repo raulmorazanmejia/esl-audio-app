@@ -25,6 +25,8 @@ type SubmissionRow = {
   id: string;
   prompt_id: string | null;
   response_mode: "audio" | "video" | "text" | "multiple_choice" | "guided_speaking" | null;
+  text_response: string | null;
+  completion_marked_at: string | null;
   student_name: string | null;
   prompt_text: string | null;
   audio_path: string | null;
@@ -64,7 +66,7 @@ type AnalyzeResponse = {
 
 const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, response_mode, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments!inner(class_name, is_visible)";
 const SUBMISSION_SELECT =
-  "id, prompt_id, response_mode, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
+  "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 
 const styles = {
   page: {
@@ -278,6 +280,18 @@ const styles = {
     cursor: "pointer",
     padding: "0 18px",
   },
+  textArea: {
+    width: "100%",
+    minHeight: "140px",
+    borderRadius: "16px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    padding: "12px 14px",
+    boxSizing: "border-box" as const,
+    fontSize: "16px",
+    color: "#334155",
+    resize: "vertical" as const,
+  },
   message: {
     textAlign: "center" as const,
     fontSize: "18px",
@@ -391,7 +405,15 @@ function getAssignmentType(prompt?: PromptRow | null) {
   if (!prompt) return "audio_response" as const;
   if (prompt.assignment_type) return prompt.assignment_type;
   if (prompt.response_mode === "video") return "video_response" as const;
+  if (prompt.response_mode === "text") return "text_response" as const;
   return "audio_response" as const;
+}
+
+function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
+  if (type === "video_response") return "Video response";
+  if (type === "text_response") return "Text response";
+  if (type === "external_link") return "External activity";
+  return "Audio response";
 }
 
 export default function StudentView() {
@@ -427,6 +449,7 @@ export default function StudentView() {
   const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState("");
   const [videoMimeType, setVideoMimeType] = useState("");
+  const [textResponse, setTextResponse] = useState("");
 
   const activePrompt = useMemo(() => {
     if (!selectedPromptId) return null;
@@ -437,6 +460,7 @@ export default function StudentView() {
   const activeAssignmentType = getAssignmentType(activePrompt);
   const isVideoAssignment = activeAssignmentType === "video_response";
   const isExternalAssignment = activeAssignmentType === "external_link";
+  const isTextAssignment = activeAssignmentType === "text_response";
 
   const stopTracks = useCallback(() => {
     if (streamRef.current) {
@@ -698,6 +722,14 @@ export default function StudentView() {
     void findSubmissionForActivePrompt(code, promptId, promptText);
   }, [studentCode, activePrompt?.id, activePrompt?.prompt_text, findSubmissionForActivePrompt]);
 
+  useEffect(() => {
+    if (submissionForActivePrompt?.response_mode === "text" && submissionForActivePrompt.text_response) {
+      setTextResponse(submissionForActivePrompt.text_response);
+      return;
+    }
+    setTextResponse("");
+  }, [submissionForActivePrompt?.id, submissionForActivePrompt?.response_mode, submissionForActivePrompt?.text_response]);
+
   async function startRecording() {
     setErrorMessage("");
     setStatusMessage("");
@@ -832,7 +864,7 @@ export default function StudentView() {
     }
 
     if (!promptText) {
-      setErrorMessage("No active prompt found.");
+      setErrorMessage("No active assignment found.");
       return;
     }
 
@@ -852,7 +884,7 @@ export default function StudentView() {
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
       setRecordedAudioUrl("");
       setStatusMessage("");
-      setErrorMessage("You already submitted this task. You can view your feedback below.");
+      setErrorMessage("You already submitted this assignment. You can view your feedback below.");
       return;
     }
 
@@ -1028,7 +1060,7 @@ export default function StudentView() {
     }
 
     if (hasSubmittedActivePrompt) {
-      setVideoErrorMessage("You already submitted this task.");
+      setVideoErrorMessage("You already submitted this assignment.");
       return;
     }
 
@@ -1072,6 +1104,104 @@ export default function StudentView() {
     } catch (error: any) {
       setVideoErrorMessage(error?.message || "Video upload failed.");
       setVideoStatusMessage("");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function submitTextResponse() {
+    const code = studentCode.trim();
+    const name = rosterStudent?.student_name?.trim() || "";
+    const promptText = activePrompt?.prompt_text?.trim() || "";
+    const writtenResponse = textResponse.trim();
+    if (!code || !name) {
+      setErrorMessage("Enter a valid code first.");
+      return;
+    }
+    if (!activePrompt?.id || !promptText) {
+      setErrorMessage("Select an assignment first.");
+      return;
+    }
+    if (!writtenResponse) {
+      setErrorMessage("Write your response before submitting.");
+      return;
+    }
+    if (hasSubmittedActivePrompt) {
+      setErrorMessage("You already submitted this assignment.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage("");
+    setStatusMessage("Submitting...");
+    try {
+      const { data, error } = await supabase
+        .from("student_submissions")
+        .insert({
+          student_name: name,
+          student_code: code,
+          prompt_id: activePrompt.id,
+          response_mode: "text",
+          prompt_text: promptText,
+          text_response: writtenResponse,
+          transcript: writtenResponse,
+          status: "submitted",
+        })
+        .select(SUBMISSION_SELECT)
+        .single();
+      if (error) throw error;
+      setSubmissionForActivePrompt((data as SubmissionRow) || null);
+      await fetchCompletedPromptKeys(code);
+      setStatusMessage("Text response submitted ✅");
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Could not submit text response.");
+      setStatusMessage("");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function markExternalActivityCompleted() {
+    const code = studentCode.trim();
+    const name = rosterStudent?.student_name?.trim() || "";
+    const promptText = activePrompt?.prompt_text?.trim() || "";
+    if (!code || !name) {
+      setErrorMessage("Enter a valid code first.");
+      return;
+    }
+    if (!activePrompt?.id || !promptText) {
+      setErrorMessage("Select an assignment first.");
+      return;
+    }
+    if (hasSubmittedActivePrompt) {
+      setStatusMessage("Already marked as completed.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage("");
+    setStatusMessage("Marking completed...");
+    try {
+      const { data, error } = await supabase
+        .from("student_submissions")
+        .insert({
+          student_name: name,
+          student_code: code,
+          prompt_id: activePrompt.id,
+          response_mode: "text",
+          prompt_text: promptText,
+          status: "completed",
+          completion_marked_at: new Date().toISOString(),
+        })
+        .select(SUBMISSION_SELECT)
+        .single();
+      if (error) throw error;
+      setSubmissionForActivePrompt((data as SubmissionRow) || null);
+      await fetchCompletedPromptKeys(code);
+      setStatusMessage("Marked completed ✅");
+    } catch (error: any) {
+      setErrorMessage(error?.message || "Could not mark completion.");
+      setStatusMessage("");
     } finally {
       setIsSubmitting(false);
     }
@@ -1145,9 +1275,7 @@ export default function StudentView() {
                       {prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Task thumbnail" style={styles.taskThumb} /> : null}
                       <div style={{ display: "grid", gap: "4px", flex: 1 }}>
                         <div style={styles.taskTitle}>{prompt.prompt_text || "Untitled assignment"}</div>
-                        <div style={styles.taskMeta}>
-                          {assignmentType === "external_link" ? "External activity" : assignmentType === "video_response" ? "Video response" : "Audio response"}
-                        </div>
+                        <div style={styles.taskMeta}>{assignmentTypeLabel(assignmentType)}</div>
                         {prompt.suggested_time ? <div style={styles.taskMeta}>Suggested time: {prompt.suggested_time}</div> : null}
                         <div style={styles.taskMeta}>{assignmentType === "external_link" ? "↗ Opens in new tab" : (isCompleted ? "✅ Completed" : "⏳ Not submitted yet")}</div>
                       </div>
@@ -1163,7 +1291,7 @@ export default function StudentView() {
 
         <div style={styles.sectionTitle}>Activity</div>
 
-        {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Speaking task image prompt" style={styles.promptImage} /> : null}
+        {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
         <div style={styles.promptCard}>
           “{activePrompt?.prompt_text || "Select an assignment above"}”
         </div>
@@ -1179,20 +1307,49 @@ export default function StudentView() {
         {isExternalAssignment ? (
           <div style={{ ...styles.card, border: "1px solid #93c5fd", background: "#eff6ff" }}>
             <div style={{ ...styles.infoText, marginBottom: "10px" }}>This activity opens in a separate tab (Google Forms or another external tool).</div>
+            <div style={{ display: "grid", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = activePrompt?.external_url?.trim();
+                  if (!url) {
+                    setErrorMessage("This external assignment is missing a URL. Please ask your teacher.");
+                    return;
+                  }
+                  window.open(url, "_blank", "noopener,noreferrer");
+                }}
+                disabled={!activePrompt?.external_url}
+                style={{ ...styles.primaryButton, minHeight: "56px", width: "100%" }}
+              >
+                Open activity
+              </button>
+              <button
+                type="button"
+                onClick={() => void markExternalActivityCompleted()}
+                disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
+                style={{ ...styles.secondaryButton, minHeight: "50px", width: "100%" }}
+              >
+                {hasSubmittedActivePrompt ? "Completed" : isSubmitting ? "Saving..." : "Mark as completed"}
+              </button>
+            </div>
+          </div>
+        ) : isTextAssignment ? (
+          <div style={{ ...styles.card, border: "1px solid #dbeafe", background: "#f8fafc" }}>
+            <div style={{ ...styles.cardTitle, color: "#1d4ed8", marginBottom: "8px" }}>Your text response</div>
+            <textarea
+              value={textResponse}
+              onChange={(e) => setTextResponse(e.target.value)}
+              placeholder="Write your response here..."
+              disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
+              style={styles.textArea}
+            />
             <button
               type="button"
-              onClick={() => {
-                const url = activePrompt?.external_url?.trim();
-                if (!url) {
-                  setErrorMessage("This external assignment is missing a URL. Please ask your teacher.");
-                  return;
-                }
-                window.open(url, "_blank", "noopener,noreferrer");
-              }}
-              disabled={!activePrompt?.external_url}
-              style={{ ...styles.primaryButton, minHeight: "56px", width: "100%" }}
+              onClick={() => void submitTextResponse()}
+              disabled={!textResponse.trim() || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
+              style={{ ...styles.primaryButton, minHeight: "50px", marginTop: "12px", width: "100%" }}
             >
-              Open activity
+              {isSubmitting ? "Submitting..." : "Submit response"}
             </button>
           </div>
         ) : isVideoAssignment ? (
@@ -1252,7 +1409,7 @@ export default function StudentView() {
           </div>
         ) : null}
 
-        {!isVideoAssignment && !isExternalAssignment && recordedAudioUrl ? (
+        {!isVideoAssignment && !isExternalAssignment && !isTextAssignment && recordedAudioUrl ? (
           <div style={{ ...styles.card, border: "2px solid #a5b4fc", background: "#eef2ff" }}>
             <div style={{ ...styles.cardTitle, color: "#3730a3", marginBottom: "10px" }}>Preview your recording</div>
             <ReliableAudioPlayer src={recordedAudioUrl} style={{ width: "100%" }} />
@@ -1282,12 +1439,12 @@ export default function StudentView() {
         {hasSubmittedActivePrompt ? (
           <div style={{ ...styles.recordingAlert, borderColor: "#4f46e5", background: "#eef2ff", color: "#312e81" }}>
             <div style={{ ...styles.recordingAlertHeader, fontSize: "22px" }}>
-              You already submitted this task. You can view your feedback below.
+              You already submitted this assignment. You can view your feedback below.
             </div>
           </div>
         ) : null}
 
-        {!isVideoAssignment && !isExternalAssignment ? <button
+        {!isVideoAssignment && !isExternalAssignment && !isTextAssignment ? <button
           type="button"
           onClick={() => void submitRecording()}
           disabled={!recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
@@ -1302,9 +1459,9 @@ export default function StudentView() {
         </button> : null}
         {!rosterStudent ? <div style={styles.helperText}>Enter your assigned code to start.</div> : null}
         {rosterStudent && !activePrompt ? <div style={styles.helperText}>Select an assignment above to get started.</div> : null}
-        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent && activePrompt && !isVideoAssignment && !isExternalAssignment ? <div style={styles.helperText}>Record your answer first.</div> : null}
+        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent && activePrompt && !isVideoAssignment && !isExternalAssignment && !isTextAssignment ? <div style={styles.helperText}>Record your answer first.</div> : null}
 
-        {statusMessage && !isVideoAssignment && !isExternalAssignment ? (
+        {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
         ) : null}
 
@@ -1319,9 +1476,15 @@ export default function StudentView() {
           <div style={styles.cardTitle}>Your latest feedback</div>
           {submissionForActivePrompt ? (
             <>
-              <div style={styles.infoText}>
-                <span style={styles.strong}>Transcript:</span> {submissionForActivePrompt.transcript || "—"}
-              </div>
+              {isExternalAssignment ? (
+                <div style={styles.infoText}>
+                  <span style={styles.strong}>Completion:</span> {submissionForActivePrompt.completion_marked_at ? `Marked complete on ${formatDate(submissionForActivePrompt.completion_marked_at)}` : "Completed"}
+                </div>
+              ) : (
+                <div style={styles.infoText}>
+                  <span style={styles.strong}>{isTextAssignment ? "Response:" : "Transcript:"}</span> {submissionForActivePrompt.text_response || submissionForActivePrompt.transcript || "—"}
+                </div>
+              )}
               <div style={styles.infoText}>
                 <span style={styles.strong}>Score:</span> {primaryFeedbackScore ?? "—"}
               </div>
