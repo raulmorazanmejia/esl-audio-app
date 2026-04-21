@@ -3,11 +3,8 @@ import { StudentRow } from "../TeacherDashboardTypes";
 
 type Props = {
   selectedClassName: string;
-  selectedClassVideoEnabled: boolean;
-  isSavingClassVideoSetting: boolean;
   isDeletingClass: boolean;
   onBack: () => void;
-  onToggleProjectVideo: () => void;
   onDeleteClass: () => void;
   newStudentName: string;
   newStudentCode: string;
@@ -38,7 +35,7 @@ const inputStyle: React.CSSProperties = {
 
 export default function TeacherRosterPanel(props: Props) {
   const {
-    selectedClassName, selectedClassVideoEnabled, isSavingClassVideoSetting, isDeletingClass, onBack, onToggleProjectVideo, onDeleteClass,
+    selectedClassName, isDeletingClass, onBack, onDeleteClass,
     newStudentName, newStudentCode, setNewStudentName, setNewStudentCode, onAddStudent, onRefreshStudents, isSavingStudent, rosterSuccess, rosterError,
     selectedClassStudents, filteredStudents, selectedStudentCode, onSelectStudent, updateStudentDraft, onSaveStudent, onDeleteStudent, newStudentNameInputRef,
   } = props;
@@ -47,12 +44,9 @@ export default function TeacherRosterPanel(props: Props) {
     <button type="button" onClick={onBack} style={{ minHeight: 36, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700, marginBottom: 10, color: "#334155", padding: "0 12px" }}>← Back to Classes</button>
 
     <div style={{ fontWeight: 900, fontSize: 23, lineHeight: 1.2 }}>{selectedClassName}</div>
-    <div style={{ fontSize: 13, color: "#64748b", marginBottom: 10 }}>{selectedClassStudents.length} students • Project videos {selectedClassVideoEnabled ? "enabled" : "disabled"}</div>
+    <div style={{ fontSize: 13, color: "#64748b", marginBottom: 10 }}>{selectedClassStudents.length} students</div>
 
     <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-      <button type="button" onClick={onToggleProjectVideo} disabled={isSavingClassVideoSetting} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 10px" }}>
-        {isSavingClassVideoSetting ? "Saving..." : selectedClassVideoEnabled ? "Disable project video" : "Enable project video"}
-      </button>
       <button type="button" onClick={onDeleteClass} disabled={isDeletingClass} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontWeight: 700, padding: "0 10px" }}>
         {isDeletingClass ? "Deleting..." : "Delete class"}
       </button>

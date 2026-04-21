@@ -1,5 +1,5 @@
 import React from "react";
-import { PromptRow } from "../TeacherDashboardTypes";
+import { AssignmentResponseMode, PromptRow } from "../TeacherDashboardTypes";
 
 type Props = {
   mode?: "library" | "class";
@@ -8,8 +8,10 @@ type Props = {
   createPromptLabel?: string;
   newPrompt: string;
   newSuggestedTime: string;
+  newResponseMode: AssignmentResponseMode;
   setNewPrompt: (v: string) => void;
   setNewSuggestedTime: (v: string) => void;
+  setNewResponseMode: (value: AssignmentResponseMode) => void;
   newPromptImagePreviewUrl: string;
   onPromptImageChange: (file: File | null) => void;
   onClearPromptImage: () => void;
@@ -77,6 +79,10 @@ export default function TeacherPromptPanel(props: Props) {
     {showCreateForm ? <div style={{ display: "grid", gap: 8, margin: "10px 0 12px", border: "1px solid #e2e8f0", borderRadius: 12, background: "#f8fafc", padding: 10 }}>
       <input value={p.newPrompt} onChange={(e) => p.setNewPrompt(e.target.value)} placeholder="Prompt title or text" style={inputStyle} />
       <input value={p.newSuggestedTime} onChange={(e) => p.setNewSuggestedTime(e.target.value)} placeholder="Suggested speaking time" style={inputStyle} />
+      <select value={p.newResponseMode} onChange={(e) => p.setNewResponseMode(e.target.value as AssignmentResponseMode)} style={inputStyle}>
+        <option value="audio">Audio response</option>
+        <option value="video">Video response</option>
+      </select>
       <input type="file" accept="image/*" onChange={(e) => p.onPromptImageChange(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
       {p.newPromptImagePreviewUrl ? (
         <div style={{ display: "grid", gap: 6 }}>
@@ -157,6 +163,7 @@ export default function TeacherPromptPanel(props: Props) {
             )) : <span style={{ fontSize: 12, color: "#64748b" }}>Unassigned</span>}
           </div> : null}
           {prompt.suggested_time ? <div style={{ fontSize: 12, color: "#64748b" }}>Suggested time: {prompt.suggested_time}</div> : null}
+          <div style={{ fontSize: 12, color: "#64748b" }}>Response mode: {prompt.response_mode === "video" ? "Video response" : "Audio response"}</div>
           {prompt.example_text ? <div style={{ fontSize: 12, color: "#64748b" }}>Example: {prompt.example_text}</div> : null}
           {prompt.created_at ? <div style={{ fontSize: 12, color: "#94a3b8" }}>Created: {new Date(prompt.created_at).toLocaleString()}</div> : null}
           {p.selectedClassName && p.selectedClassName !== "Assignment Library" ? (
