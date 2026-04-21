@@ -1,5 +1,5 @@
 import React from "react";
-import { AssignmentResponseMode, PromptRow } from "../TeacherDashboardTypes";
+import { AssignmentActivityType, PromptRow } from "../TeacherDashboardTypes";
 
 type Props = {
   mode?: "library" | "class";
@@ -8,10 +8,14 @@ type Props = {
   createPromptLabel?: string;
   newPrompt: string;
   newSuggestedTime: string;
-  newResponseMode: AssignmentResponseMode;
+  newAssignmentType: AssignmentActivityType;
+  newInstructions: string;
+  newExternalUrl: string;
   setNewPrompt: (v: string) => void;
   setNewSuggestedTime: (v: string) => void;
-  setNewResponseMode: (value: AssignmentResponseMode) => void;
+  setNewAssignmentType: (value: AssignmentActivityType) => void;
+  setNewInstructions: (v: string) => void;
+  setNewExternalUrl: (v: string) => void;
   newPromptImagePreviewUrl: string;
   onPromptImageChange: (file: File | null) => void;
   onClearPromptImage: () => void;
@@ -50,8 +54,8 @@ export default function TeacherPromptPanel(props: Props) {
   const p = props;
   const [activePromptView, setActivePromptView] = React.useState<"assigned" | "library">("assigned");
   const [expandedImagePromptId, setExpandedImagePromptId] = React.useState<string | null>(null);
-  const title = p.title ?? "Prompt library";
-  const createPromptLabel = p.createPromptLabel ?? `Create a prompt for ${p.selectedClassName}`;
+  const title = p.title ?? "Assignment library";
+  const createPromptLabel = p.createPromptLabel ?? `Create an assignment for ${p.selectedClassName}`;
   const isAssignmentEditable = p.isAssignmentEditable !== false;
   const showCreateForm = p.showCreateForm !== false;
   const showBulkHideButton = p.showBulkHideButton !== false;
@@ -67,9 +71,9 @@ export default function TeacherPromptPanel(props: Props) {
 
   const emptyStateText = showPromptLibraryTabs
     ? activePromptView === "assigned"
-      ? p.emptyAssignedStateText ?? `No prompts are currently assigned to ${p.selectedClassName}.`
-      : p.emptyLibraryStateText ?? "No prompts found in the full library."
-    : p.emptyStateText ?? `No prompts yet for this class.`;
+      ? p.emptyAssignedStateText ?? `No assignments are currently assigned to ${p.selectedClassName}.`
+      : p.emptyLibraryStateText ?? "No assignments found in the full library."
+    : p.emptyStateText ?? `No assignments yet for this class.`;
 
   return <section>
     <div style={{ fontWeight: 900, fontSize: 22 }}>{title}</div>
@@ -77,20 +81,26 @@ export default function TeacherPromptPanel(props: Props) {
     {p.onHeaderAction && p.headerActionLabel ? <button type="button" onClick={p.onHeaderAction} style={{ marginTop: 8, minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", padding: "0 10px", fontWeight: 700 }}>{p.headerActionLabel}</button> : null}
 
     {showCreateForm ? <div style={{ display: "grid", gap: 8, margin: "10px 0 12px", border: "1px solid #e2e8f0", borderRadius: 12, background: "#f8fafc", padding: 10 }}>
-      <input value={p.newPrompt} onChange={(e) => p.setNewPrompt(e.target.value)} placeholder="Prompt title or text" style={inputStyle} />
+      <input value={p.newPrompt} onChange={(e) => p.setNewPrompt(e.target.value)} placeholder="Assignment title" style={inputStyle} />
+      <input value={p.newInstructions} onChange={(e) => p.setNewInstructions(e.target.value)} placeholder="Instructions (optional)" style={inputStyle} />
       <input value={p.newSuggestedTime} onChange={(e) => p.setNewSuggestedTime(e.target.value)} placeholder="Suggested speaking time" style={inputStyle} />
-      <select value={p.newResponseMode} onChange={(e) => p.setNewResponseMode(e.target.value as AssignmentResponseMode)} style={inputStyle}>
-        <option value="audio">Audio response</option>
-        <option value="video">Video response</option>
+      <select value={p.newAssignmentType} onChange={(e) => p.setNewAssignmentType(e.target.value as AssignmentActivityType)} style={inputStyle}>
+        <option value="audio_response">Audio response</option>
+        <option value="video_response">Video response</option>
+        <option value="external_link">External activity link</option>
       </select>
-      <input type="file" accept="image/*" onChange={(e) => p.onPromptImageChange(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
-      {p.newPromptImagePreviewUrl ? (
+      {p.newAssignmentType === "external_link" ? (
+        <input value={p.newExternalUrl} onChange={(e) => p.setNewExternalUrl(e.target.value)} placeholder="External URL (Google Form link, etc.)" style={inputStyle} />
+      ) : (
+        <input type="file" accept="image/*" onChange={(e) => p.onPromptImageChange(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
+      )}
+      {p.newPromptImagePreviewUrl && p.newAssignmentType !== "external_link" ? (
         <div style={{ display: "grid", gap: 6 }}>
           <img src={p.newPromptImagePreviewUrl} alt="Prompt preview" style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 10, border: "1px solid #ddd" }} />
           <button type="button" onClick={p.onClearPromptImage} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700 }}>Remove image</button>
         </div>
       ) : null}
-      <button type="button" onClick={p.onSavePrompt} disabled={p.isSavingPrompt} style={{ minHeight: 38, borderRadius: 10, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800 }}>{p.isSavingPrompt ? "Saving..." : "Save prompt"}</button>
+      <button type="button" onClick={p.onSavePrompt} disabled={p.isSavingPrompt} style={{ minHeight: 38, borderRadius: 10, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800 }}>{p.isSavingPrompt ? "Saving..." : "Save assignment"}</button>
     </div> : null}
 
     {p.promptSuccess ? <div style={{ fontSize: 13, color: "#166534", marginBottom: 8 }}>{p.promptSuccess}</div> : null}
@@ -118,7 +128,7 @@ export default function TeacherPromptPanel(props: Props) {
           onClick={() => setActivePromptView("library")}
           style={{ minHeight: 34, border: "none", borderLeft: "1px solid #cbd5e1", background: activePromptView === "library" ? "#0f172a" : "#fff", color: activePromptView === "library" ? "#fff" : "#334155", padding: "0 12px", fontWeight: 700 }}
         >
-          All prompts library ({allLibraryPrompts.length})
+          All assignments library ({allLibraryPrompts.length})
         </button>
       </div>
     ) : null}
@@ -163,8 +173,9 @@ export default function TeacherPromptPanel(props: Props) {
             )) : <span style={{ fontSize: 12, color: "#64748b" }}>Unassigned</span>}
           </div> : null}
           {prompt.suggested_time ? <div style={{ fontSize: 12, color: "#64748b" }}>Suggested time: {prompt.suggested_time}</div> : null}
-          <div style={{ fontSize: 12, color: "#64748b" }}>Response mode: {prompt.response_mode === "video" ? "Video response" : "Audio response"}</div>
-          {prompt.example_text ? <div style={{ fontSize: 12, color: "#64748b" }}>Example: {prompt.example_text}</div> : null}
+          <div style={{ fontSize: 12, color: "#64748b" }}>Type: {prompt.assignment_type === "external_link" ? "External activity" : prompt.assignment_type === "video_response" ? "Video response" : "Audio response"}</div>
+          {prompt.external_url ? <div style={{ fontSize: 12, color: "#64748b" }}>External URL: {prompt.external_url}</div> : null}
+          {prompt.example_text ? <div style={{ fontSize: 12, color: "#64748b" }}>Instructions: {prompt.example_text}</div> : null}
           {prompt.created_at ? <div style={{ fontSize: 12, color: "#94a3b8" }}>Created: {new Date(prompt.created_at).toLocaleString()}</div> : null}
           {p.selectedClassName && p.selectedClassName !== "Assignment Library" ? (
             <div style={{ fontSize: 12, color: selectedClassVisible ? "#0f766e" : "#64748b", marginBottom: 8 }}>

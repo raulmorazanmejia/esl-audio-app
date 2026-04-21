@@ -1,6 +1,8 @@
 export type PromptRow = {
   id: string;
   prompt_text: string | null;
+  assignment_type: AssignmentActivityType | null;
+  external_url: string | null;
   response_mode: AssignmentResponseMode | null;
   class_name: string | null;
   suggested_time: string | null;
@@ -13,6 +15,7 @@ export type PromptRow = {
 };
 
 export type AssignmentResponseMode = "audio" | "video" | "text" | "multiple_choice" | "guided_speaking";
+export type AssignmentActivityType = "audio_response" | "video_response" | "text_response" | "external_link" | "guided_speaking" | "multiple_choice";
 
 export type PromptAssignmentRow = {
   id: string;
