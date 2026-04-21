@@ -18,6 +18,9 @@ export default function TeacherAssignmentLibrary({ totalPromptCount, classNameOp
         <div style={{ marginTop: 8, color: "#64748b", fontSize: 14 }}>
           {totalPromptCount} prompts total • {unassignedPromptCount} unassigned • {classNameOptions.length} classes available for assignment
         </div>
+        <div style={{ marginTop: 6, color: "#475569", fontSize: 13 }}>
+          New class assignments are visible to students by default. Use class-level Hide/Show controls only when needed.
+        </div>
         <button
           type="button"
           onClick={onGoToClasses}
