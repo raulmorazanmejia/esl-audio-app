@@ -53,7 +53,7 @@ export default function TeacherClassesOverview({ classSummaries, newClassName, o
 
       <div style={{ border: "1px dashed #cbd5e1", borderRadius: 14, padding: 10, marginBottom: 14, background: "#fff" }}>
         <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", fontWeight: 700, marginBottom: 6 }}>Admin / cleanup</div>
-        <button type="button" onClick={onManageUnassignedPrompts} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#334155", fontWeight: 700, padding: "0 12px" }}>
+        <button type="button" onClick={onManageUnassignedPrompts} disabled={unassignedPromptCount === 0} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#334155", fontWeight: 700, padding: "0 12px", opacity: unassignedPromptCount === 0 ? 0.55 : 1, cursor: unassignedPromptCount === 0 ? "not-allowed" : "pointer" }}>
           Unassigned prompts ({unassignedPromptCount})
         </button>
       </div>
