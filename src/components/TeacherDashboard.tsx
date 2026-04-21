@@ -1137,7 +1137,7 @@ export default function TeacherDashboard() {
       ? supabase.from("prompt_assignments").upsert({
         prompt_id: prompt.id,
         class_name: trimmedClassName,
-        is_visible: false,
+        is_visible: true,
       }, { onConflict: "prompt_id,class_name" })
       : supabase.from("prompt_assignments").delete().eq("prompt_id", prompt.id).eq("class_name", trimmedClassName);
     const { error } = await query;
@@ -1145,7 +1145,11 @@ export default function TeacherDashboard() {
       setPromptError(error.message);
       return;
     }
-    setPromptSuccess(`${shouldAssign ? "Assigned" : "Removed"} "${prompt.prompt_text ?? "Prompt"}" ${shouldAssign ? "to" : "from"} ${trimmedClassName}.`);
+    setPromptSuccess(
+      shouldAssign
+        ? `Assigned "${prompt.prompt_text ?? "Prompt"}" to ${trimmedClassName}. It is now visible to students by default.`
+        : `Removed "${prompt.prompt_text ?? "Prompt"}" from ${trimmedClassName}.`,
+    );
     await fetchPrompts();
   }
 

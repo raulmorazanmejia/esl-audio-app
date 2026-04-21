@@ -120,7 +120,12 @@ export default function TeacherPromptPanel(props: Props) {
     <div style={{ marginTop: 10 }}>
       {visiblePrompts.map((prompt) => {
         const fallbackClass = prompt.class_name?.trim();
-        const currentAssignments = prompt.prompt_assignments?.map((row) => row.class_name.trim()).filter(Boolean) ?? (fallbackClass ? [fallbackClass] : []);
+        const normalizedAssignments = (prompt.prompt_assignments ?? [])
+          .map((row) => ({ className: row.class_name.trim(), isVisible: Boolean(row.is_visible) }))
+          .filter((row) => Boolean(row.className));
+        const currentAssignments = normalizedAssignments.length
+          ? normalizedAssignments
+          : (fallbackClass ? [{ className: fallbackClass, isVisible: Boolean(prompt.is_active) }] : []);
         const selectedClassAssignment = prompt.prompt_assignments?.find((row) => row.class_name === p.selectedClassName);
         const selectedClassVisible = selectedClassAssignment ? Boolean(selectedClassAssignment.is_visible) : false;
         const isLibraryMode = p.mode === "library";
@@ -133,18 +138,30 @@ export default function TeacherPromptPanel(props: Props) {
           </div> : null}
           <div style={{ fontSize: 16, fontWeight: 800, color: "#0f172a" }}>{prompt.prompt_text}</div>
           {isLibraryMode ? <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6, marginBottom: 4 }}>
-            {currentAssignments.length ? currentAssignments.map((className) => (
-              <span key={`${prompt.id}-assigned-${className}`} style={{ display: "inline-flex", alignItems: "center", border: "1px solid #cbd5e1", borderRadius: 999, padding: "3px 8px", fontSize: 12, color: "#334155", background: "#f8fafc" }}>
-                {className}
+            {currentAssignments.length ? currentAssignments.map((assignment) => (
+              <span
+                key={`${prompt.id}-assigned-${assignment.className}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  border: `1px solid ${assignment.isVisible ? "#99f6e4" : "#cbd5e1"}`,
+                  borderRadius: 999,
+                  padding: "3px 8px",
+                  fontSize: 12,
+                  color: assignment.isVisible ? "#0f766e" : "#475569",
+                  background: assignment.isVisible ? "#f0fdfa" : "#f8fafc",
+                }}
+              >
+                {assignment.className} · {assignment.isVisible ? "Visible" : "Hidden"}
               </span>
             )) : <span style={{ fontSize: 12, color: "#64748b" }}>Unassigned</span>}
           </div> : null}
           {prompt.suggested_time ? <div style={{ fontSize: 12, color: "#64748b" }}>Suggested time: {prompt.suggested_time}</div> : null}
           {prompt.example_text ? <div style={{ fontSize: 12, color: "#64748b" }}>Example: {prompt.example_text}</div> : null}
           {prompt.created_at ? <div style={{ fontSize: 12, color: "#94a3b8" }}>Created: {new Date(prompt.created_at).toLocaleString()}</div> : null}
-          {p.selectedClassName && p.selectedClassName !== "Assignment Library" && p.selectedClassName !== "Unassigned prompts" ? (
+          {p.selectedClassName && p.selectedClassName !== "Assignment Library" ? (
             <div style={{ fontSize: 12, color: selectedClassVisible ? "#0f766e" : "#64748b", marginBottom: 8 }}>
-              Visibility in {p.selectedClassName}: {selectedClassVisible ? "Shown to students" : "Hidden from students"}
+              Status: Assigned to {p.selectedClassName} · {selectedClassVisible ? "Visible to students" : "Hidden from students"}
             </div>
           ) : null}
 
@@ -152,7 +169,7 @@ export default function TeacherPromptPanel(props: Props) {
             <div style={{ display: "grid", gap: 6, marginBottom: 8, paddingTop: 8, borderTop: "1px dashed #e2e8f0" }}>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {p.classNameOptions.map((className) => {
-                  const checked = currentAssignments.includes(className);
+                  const checked = currentAssignments.some((assignment) => assignment.className === className);
                   return (
                     <label key={`${prompt.id}-${className}`} style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 12, border: "1px solid #cbd5e1", borderRadius: 999, padding: "4px 8px" }}>
                       <input
@@ -169,9 +186,9 @@ export default function TeacherPromptPanel(props: Props) {
           ) : null}
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {!isLibraryMode && p.selectedClassName && p.selectedClassName !== "Assignment Library" && p.selectedClassName !== "Unassigned prompts" && selectedClassAssignment ? (
+            {!isLibraryMode && p.selectedClassName && p.selectedClassName !== "Assignment Library" && selectedClassAssignment ? (
               <button type="button" onClick={() => p.onTogglePromptVisibility(prompt, p.selectedClassName)} disabled={Boolean(p.savingPromptVisibilityById[`${prompt.id}:${p.selectedClassName}`])} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>
-                {selectedClassVisible ? "Hide" : "Show"} for students in {p.selectedClassName}
+                {selectedClassVisible ? "Hide from students" : "Show to students"}
               </button>
             ) : null}
             {!isLibraryMode && selectedClassAssignment ? (
