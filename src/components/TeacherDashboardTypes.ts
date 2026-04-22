@@ -3,7 +3,6 @@ export type PromptRow = {
   prompt_text: string | null;
   assignment_type: AssignmentActivityType | null;
   external_url: string | null;
-  response_mode: AssignmentResponseMode | null;
   class_name: string | null;
   suggested_time: string | null;
   prompt_image_path: string | null;

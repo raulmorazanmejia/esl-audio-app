@@ -7,7 +7,6 @@ type PromptRow = {
   prompt_text: string | null;
   assignment_type: "audio_response" | "video_response" | "text_response" | "external_link" | "guided_speaking" | "multiple_choice" | null;
   external_url: string | null;
-  response_mode: "audio" | "video" | "text" | "multiple_choice" | "guided_speaking" | null;
   class_name: string | null;
   suggested_time: string | null;
   prompt_image_path: string | null;
@@ -64,7 +63,7 @@ type AnalyzeResponse = {
   error?: string;
 };
 
-const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, response_mode, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments!inner(class_name, is_visible)";
+const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments!inner(class_name, is_visible)";
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 
@@ -404,8 +403,6 @@ function currentTeacherAudio(submission?: SubmissionRow | null) {
 function getAssignmentType(prompt?: PromptRow | null) {
   if (!prompt) return "audio_response" as const;
   if (prompt.assignment_type) return prompt.assignment_type;
-  if (prompt.response_mode === "video") return "video_response" as const;
-  if (prompt.response_mode === "text") return "text_response" as const;
   return "audio_response" as const;
 }
 
