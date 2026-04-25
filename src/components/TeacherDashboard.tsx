@@ -1079,12 +1079,13 @@ export default function TeacherDashboard() {
     if (error) {
       setSubmissionsError(error.message);
       setIsLoadingSubmissions(false);
-      return;
+      return false;
     }
     const rows = (data ?? []) as SubmissionRow[];
     setSubmissions(rows);
     hydrateDrafts(rows);
     setIsLoadingSubmissions(false);
+    return true;
   }, [hydrateDrafts]);
 
   const fetchStudents = useCallback(async () => {
@@ -1096,9 +1097,10 @@ export default function TeacherDashboard() {
       .order("student_name", { ascending: true });
     if (error) {
       setRosterError(error.message);
-      return;
+      return false;
     }
     setStudents((data ?? []) as StudentRow[]);
+    return true;
   }, []);
 
   useEffect(() => {
@@ -1315,6 +1317,19 @@ export default function TeacherDashboard() {
     }
   }
 
+  async function handleRefreshStudents() {
+    setRosterError("");
+    setRosterSuccess("");
+    const ok = await fetchStudents();
+    if (ok) setRosterSuccess("Roster refreshed.");
+  }
+
+  async function handleRefreshSubmissions() {
+    setSubmissionsSuccess("");
+    const ok = await fetchSubmissions();
+    if (ok) setSubmissionsSuccess("Submissions refreshed.");
+  }
+
   async function handleAddStudent() {
     if (isSavingStudent) return;
     const className = selectedClass?.trim() ?? "";
@@ -1408,6 +1423,7 @@ export default function TeacherDashboard() {
     }
 
     setRosterError("");
+    setRosterSuccess("");
     const { error } = await supabase
       .from("students")
       .update({
@@ -1423,16 +1439,21 @@ export default function TeacherDashboard() {
     }
 
     updateStudentDraft(student.id, { class_name: className, student_name: studentName, student_code: studentCode });
+    setRosterSuccess(`Saved ${studentName} (${studentCode}).`);
   }
 
   async function handleDeleteStudent(studentId: string) {
+    const student = students.find((row) => row.id === studentId);
     setRosterError("");
+    setRosterSuccess("");
     const { error } = await supabase.from("students").delete().eq("id", studentId);
     if (error) {
       setRosterError(error.message);
       return;
     }
     setStudents((prev) => prev.filter((row) => row.id !== studentId));
+    const removedLabel = student?.student_name?.trim() || student?.student_code?.trim() || "Student";
+    setRosterSuccess(`Deleted ${removedLabel}.`);
     setSelectedStudentFilter((prev) => {
       if (!prev) return prev;
       const stillExists = students.some((row) => row.id !== studentId && row.student_code.trim() === prev.code);
@@ -1878,7 +1899,7 @@ export default function TeacherDashboard() {
               setNewStudentName,
               setNewStudentCode,
               onAddStudent: () => void handleAddStudent(),
-              onRefreshStudents: () => void fetchStudents(),
+              onRefreshStudents: () => void handleRefreshStudents(),
               isSavingStudent,
               rosterSuccess,
               rosterError,
@@ -1912,9 +1933,9 @@ export default function TeacherDashboard() {
               setCreateClassName: () => undefined,
               classNameOptions,
               onSavePrompt: () => void handleSavePrompt(),
-              isSavingPrompt: false,
-              promptSuccess: "",
-              promptError: "",
+              isSavingPrompt,
+              promptSuccess,
+              promptError,
               filteredPrompts: classScopedPrompts,
               onTogglePromptAssignment: (prompt: PromptRow, className: string, shouldAssign: boolean) => void handleTogglePromptAssignment(prompt, className, shouldAssign),
               onTogglePromptVisibility: (prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className),
@@ -1933,7 +1954,7 @@ export default function TeacherDashboard() {
               selectedClassName,
               reviewFilter,
               setReviewFilter,
-              onRefreshSubmissions: () => void fetchSubmissions(),
+              onRefreshSubmissions: () => void handleRefreshSubmissions(),
               isLoadingSubmissions,
               submissionPromptFilter,
               setSubmissionPromptFilter,
@@ -1956,6 +1977,8 @@ export default function TeacherDashboard() {
               setAnalyticsPromptFilter,
               analyticsPromptOptions,
               submissionAnalytics,
+              submissionsSuccess,
+              submissionsError,
             }}
           />
         ) : null}
