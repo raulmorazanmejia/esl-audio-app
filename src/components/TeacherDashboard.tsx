@@ -757,6 +757,39 @@ export default function TeacherDashboard() {
       .sort((a, b) => a.className.localeCompare(b.className));
   }, [students, prompts, submissions, getSubmissionClassName]);
 
+  const submissionsNeedingReview = useMemo(() => {
+    return submissions.filter((submission) => {
+      const savedTeacherAudioUrl = submission.feedback_audio_url || submission.feedback_url;
+      return !submission.teacher_comment && !savedTeacherAudioUrl;
+    }).length;
+  }, [submissions]);
+
+  const recentActivityItems = useMemo(() => {
+    return [...submissions]
+      .sort((a, b) => {
+        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bTime - aTime;
+      })
+      .slice(0, 6)
+      .map((submission) => {
+        const className = getSubmissionClassName(submission) || "Unknown class";
+        const student = submission.student_name || submission.student_code || "Student";
+        const prompt = submission.prompt_text || "Untitled activity";
+        const when = submission.created_at ? formatDate(submission.created_at) : "Unknown time";
+        return {
+          id: submission.id,
+          title: `${student} · ${prompt}`,
+          meta: `${className} · ${when}`,
+        };
+      });
+  }, [submissions, getSubmissionClassName]);
+
+  const studentEntryUrl = useMemo(() => {
+    if (typeof window === "undefined") return "/?mode=student";
+    return `${window.location.origin}/?mode=student`;
+  }, []);
+
   const analyticsPromptOptions = useMemo(() => {
     if (!selectedClassName) return [];
     const promptSet = new Set<string>();
@@ -1591,6 +1624,10 @@ export default function TeacherDashboard() {
         {teacherScreen === "classes" && !selectedClassName ? (
           <TeacherClassesOverview
             classSummaries={classSummaries}
+            totalActivities={sortedPrompts.length}
+            submissionsNeedingReview={submissionsNeedingReview}
+            recentActivityItems={recentActivityItems}
+            studentEntryUrl={studentEntryUrl}
             newClassName={newClassName}
             onNewClassNameChange={setNewClassName}
             onUseNewClass={handleUseNewClass}

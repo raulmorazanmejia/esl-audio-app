@@ -9,6 +9,10 @@ type ClassSummary = {
 
 type Props = {
   classSummaries: ClassSummary[];
+  totalActivities: number;
+  submissionsNeedingReview: number;
+  recentActivityItems: { id: string; title: string; meta: string }[];
+  studentEntryUrl: string;
   newClassName: string;
   onNewClassNameChange: (value: string) => void;
   onUseNewClass: () => void;
@@ -34,12 +38,46 @@ const createInput: React.CSSProperties = {
   padding: "0 12px",
 };
 
-export default function TeacherClassesOverview({ classSummaries, newClassName, onNewClassNameChange, onUseNewClass, onRefreshClasses, onSelectClass, rosterError, onOpenAssignmentLibrary }: Props) {
+export default function TeacherClassesOverview({
+  classSummaries,
+  totalActivities,
+  submissionsNeedingReview,
+  recentActivityItems,
+  studentEntryUrl,
+  newClassName,
+  onNewClassNameChange,
+  onUseNewClass,
+  onRefreshClasses,
+  onSelectClass,
+  rosterError,
+  onOpenAssignmentLibrary,
+}: Props) {
+  const totalStudents = classSummaries.reduce((count, row) => count + row.studentCount, 0);
+  const totalClasses = classSummaries.length;
+
   return (
     <section style={shellCard}>
-      <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.14em", color: "#64748b", marginBottom: 10 }}>Teacher workspace</div>
-      <div style={{ fontSize: 30, fontWeight: 900, color: "#0f172a", marginBottom: 6, lineHeight: 1.15 }}>Classes</div>
-      <div style={{ fontSize: 14, color: "#64748b", marginBottom: 16 }}>Start with a class to manage assignments, roster, and submissions in one place.</div>
+      <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.14em", color: "#64748b", marginBottom: 10 }}>Teacher activity hub</div>
+      <div style={{ fontSize: 30, fontWeight: 900, color: "#0f172a", marginBottom: 6, lineHeight: 1.15 }}>Overview</div>
+      <div style={{ fontSize: 14, color: "#64748b", marginBottom: 16 }}>Quick access to classes, activities, and submissions that need your attention.</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10, marginBottom: 16 }}>
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12 }}>
+          <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Classes</div>
+          <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{totalClasses}</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>{totalStudents} enrolled students</div>
+        </div>
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12 }}>
+          <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Activities</div>
+          <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{totalActivities}</div>
+          <div style={{ fontSize: 13, color: "#64748b" }}>created assignments</div>
+        </div>
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#fef2f2", padding: 12 }}>
+          <div style={{ fontSize: 12, color: "#b91c1c", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Need review</div>
+          <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#7f1d1d" }}>{submissionsNeedingReview}</div>
+          <div style={{ fontSize: 13, color: "#991b1b" }}>submissions awaiting feedback</div>
+        </div>
+      </div>
 
       <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, background: "#f8fafc", padding: 12, marginBottom: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
@@ -50,13 +88,44 @@ export default function TeacherClassesOverview({ classSummaries, newClassName, o
       </div>
 
       <div style={{ border: "1px dashed #cbd5e1", borderRadius: 14, padding: 10, marginBottom: 14, background: "#fff" }}>
-        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", fontWeight: 700, marginBottom: 6 }}>Assignments</div>
-        <button type="button" onClick={onOpenAssignmentLibrary} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#334155", fontWeight: 700, padding: "0 12px" }}>
-          Open Assignment Library
-        </button>
+        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", fontWeight: 700, marginBottom: 8 }}>Activity tools</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <button type="button" onClick={onOpenAssignmentLibrary} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#334155", fontWeight: 700, padding: "0 12px" }}>
+            Create activity
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                void navigator.clipboard.writeText(studentEntryUrl);
+              }
+            }}
+            style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 12px" }}
+          >
+            Copy student link
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: "#64748b", marginTop: 8, wordBreak: "break-all" }}>Student entry: {studentEntryUrl}</div>
+        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>Use this link for sharing or generating a QR code with your preferred tool.</div>
       </div>
 
       {rosterError ? <div style={{ fontSize: 14, color: "#dc2626", fontWeight: 700, marginBottom: 10 }}>{rosterError}</div> : null}
+
+      <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, background: "#fff", padding: 12, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 8 }}>Recent activity</div>
+        {recentActivityItems.length ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            {recentActivityItems.map((item) => (
+              <div key={item.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: "10px 12px", background: "#f8fafc" }}>
+                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{item.title}</div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{item.meta}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: "#64748b" }}>No recent submissions yet.</div>
+        )}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
         {classSummaries.map((row) => (
