@@ -67,6 +67,33 @@ const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_nam
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
 
+const DEFAULT_WELCOME_IMAGE =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e0e7ff" />
+      <stop offset="55%" stop-color="#f8fafc" />
+      <stop offset="100%" stop-color="#dbeafe" />
+    </linearGradient>
+    <linearGradient id="shape" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#0ea5e9" stop-opacity="0.12" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="700" fill="url(#bg)" />
+  <circle cx="210" cy="140" r="180" fill="url(#shape)" />
+  <circle cx="1070" cy="560" r="230" fill="url(#shape)" />
+  <rect x="160" y="180" width="880" height="340" rx="40" fill="#ffffff" fill-opacity="0.85" />
+  <text x="600" y="300" text-anchor="middle" fill="#0f172a" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="52" font-weight="700">Welcome to ESL Activity Hub</text>
+  <text x="600" y="365" text-anchor="middle" fill="#475569" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="32">Enter your class code to begin.</text>
+  <text x="600" y="430" text-anchor="middle" fill="#64748b" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="24">Your teacher will guide you from there.</text>
+</svg>
+`);
+
+const STUDENT_WELCOME_IMAGE_URL = (import.meta.env.VITE_STUDENT_WELCOME_IMAGE_URL?.trim() || DEFAULT_WELCOME_IMAGE) as string;
+
 const styles = {
   page: {
     minHeight: "100vh",
@@ -83,6 +110,29 @@ const styles = {
     border: "1px solid #e2e8f0",
     boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
     padding: "28px",
+  },
+  heroImage: {
+    width: "100%",
+    maxHeight: "240px",
+    borderRadius: "22px",
+    border: "1px solid #dbe3f0",
+    objectFit: "cover" as const,
+    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
+    marginBottom: "16px",
+  },
+  heroTitle: {
+    textAlign: "center" as const,
+    fontSize: "clamp(26px, 6.4vw, 34px)",
+    fontWeight: 900,
+    color: "#0f172a",
+    margin: "0 0 8px",
+    lineHeight: 1.15,
+  },
+  heroSubtitle: {
+    textAlign: "center" as const,
+    fontSize: "15px",
+    color: "#64748b",
+    margin: "0 0 16px",
   },
   field: {
     width: "100%",
@@ -1285,6 +1335,9 @@ export default function StudentView() {
       <div style={styles.shell}>
         {!rosterStudent ? (
           <>
+            <img src={STUDENT_WELCOME_IMAGE_URL} alt="Welcome to ESL activity hub" style={styles.heroImage} />
+            <div style={styles.heroTitle}>Welcome</div>
+            <div style={styles.heroSubtitle}>Enter your class code to open your assignments.</div>
             <input
               value={studentCode}
               onChange={(e) => {
