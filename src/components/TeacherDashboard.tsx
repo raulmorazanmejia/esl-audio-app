@@ -616,6 +616,7 @@ export default function TeacherDashboard() {
   const [promptError, setPromptError] = useState("");
   const [promptSuccess, setPromptSuccess] = useState("");
   const [savingPromptVisibilityById, setSavingPromptVisibilityById] = useState<Record<string, boolean>>({});
+  const [removingPromptFromClassById, setRemovingPromptFromClassById] = useState<Record<string, boolean>>({});
   const [deletingPromptById, setDeletingPromptById] = useState<Record<string, boolean>>({});
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
@@ -1258,7 +1259,37 @@ export default function TeacherDashboard() {
   }
 
   async function handleRemovePromptFromClass(prompt: PromptRow, className: string) {
-    await handleTogglePromptAssignment(prompt, className, false);
+    const normalizedClassName = className.trim();
+    if (!normalizedClassName) {
+      setPromptError("Select a class before removing an assignment.");
+      return;
+    }
+    const assignment = (prompt.prompt_assignments ?? []).find((row) => row.class_name.trim() === normalizedClassName);
+    if (!assignment) {
+      setPromptError(`"${prompt.prompt_text ?? "Prompt"}" is not currently assigned to ${normalizedClassName}.`);
+      return;
+    }
+
+    const removeKey = `${prompt.id}:${normalizedClassName}`;
+    setPromptError("");
+    setPromptSuccess("");
+    setRemovingPromptFromClassById((prev) => ({ ...prev, [removeKey]: true }));
+
+    const { error } = await supabase
+      .from("prompt_assignments")
+      .delete()
+      .eq("prompt_id", prompt.id)
+      .eq("class_name", assignment.class_name);
+
+    if (error) {
+      setPromptError(error.message || `Could not remove assignment from ${normalizedClassName}.`);
+      setRemovingPromptFromClassById((prev) => ({ ...prev, [removeKey]: false }));
+      return;
+    }
+
+    setPromptSuccess(`Removed "${prompt.prompt_text ?? "Prompt"}" from ${normalizedClassName}.`);
+    setRemovingPromptFromClassById((prev) => ({ ...prev, [removeKey]: false }));
+    await fetchPrompts();
   }
 
   function handleNewPromptImageChange(file: File | null) {
@@ -1942,6 +1973,7 @@ export default function TeacherDashboard() {
               onRemovePromptFromClass: (prompt: PromptRow, className: string) => void handleRemovePromptFromClass(prompt, className),
               onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
               savingPromptVisibilityById,
+              removingPromptFromClassById,
               deletingPromptById,
               onClearVisiblePromptsForSelectedClass: () => void handleClearVisiblePromptsForSelectedClass(),
               emptyStateText: `No assignments are currently assigned to ${selectedClassName}. Browse the Assignment Library to assign one.`,
@@ -2019,6 +2051,7 @@ export default function TeacherDashboard() {
               onRemovePromptFromClass: (prompt: PromptRow, className: string) => void handleRemovePromptFromClass(prompt, className),
               onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
               savingPromptVisibilityById,
+              removingPromptFromClassById,
               deletingPromptById,
               onClearVisiblePromptsForSelectedClass: () => setPromptError("Use the prompt-level visibility controls in Assignment Library."),
               classNameOptions,
