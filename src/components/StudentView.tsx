@@ -180,6 +180,28 @@ const styles = {
     fontSize: "13px",
     color: "#64748b",
   },
+  taskStatus: {
+    display: "inline-flex",
+    width: "fit-content",
+    padding: "4px 10px",
+    borderRadius: "999px",
+    border: "1px solid #cbd5e1",
+    background: "#f1f5f9",
+    color: "#475569",
+    fontSize: "12px",
+    fontWeight: 800,
+  },
+  backButton: {
+    minHeight: "38px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#334155",
+    fontSize: "14px",
+    fontWeight: 700,
+    padding: "0 12px",
+    cursor: "pointer",
+  },
   taskThumb: {
     width: "64px",
     height: "64px",
@@ -409,6 +431,7 @@ function getAssignmentType(prompt?: PromptRow | null) {
 function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
   if (type === "video_response") return "Video response";
   if (type === "text_response") return "Text response";
+  if (type === "multiple_choice") return "Quiz";
   if (type === "external_link") return "External activity";
   return "Audio response";
 }
@@ -428,6 +451,7 @@ export default function StudentView() {
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [submissionForActivePrompt, setSubmissionForActivePrompt] = useState<SubmissionRow | null>(null);
   const [completedPromptKeys, setCompletedPromptKeys] = useState<string[]>([]);
+  const [submissionStatusIndex, setSubmissionStatusIndex] = useState<Record<string, { hasSubmission: boolean; hasFeedback: boolean }>>({});
 
   const [isFinding, setIsFinding] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -597,8 +621,7 @@ export default function StudentView() {
     }));
 
     setAssignedPrompts(rows);
-    const preferredPrompt = rows[0] || null;
-    setSelectedPromptId(preferredPrompt?.id ?? null);
+    setSelectedPromptId(null);
     return rows;
   }
 
@@ -629,6 +652,39 @@ export default function StudentView() {
       }))
     );
     setCompletedPromptKeys(completed);
+  }
+
+  async function fetchSubmissionStatuses(codeValue: string) {
+    const code = codeValue.trim();
+    if (!code) {
+      setSubmissionStatusIndex({});
+      return;
+    }
+    const { data, error } = await supabase
+      .from("student_submissions")
+      .select("prompt_id, prompt_text, feedback_audio_url, feedback_url, teacher_comment, teacher_score")
+      .eq("student_code", code)
+      .order("created_at", { ascending: false });
+    if (error) {
+      setSubmissionStatusIndex({});
+      return;
+    }
+    const index: Record<string, { hasSubmission: boolean; hasFeedback: boolean }> = {};
+    for (const row of (data ?? []) as Array<{
+      prompt_id: string | null;
+      prompt_text: string | null;
+      feedback_audio_url: string | null;
+      feedback_url: string | null;
+      teacher_comment: string | null;
+      teacher_score: number | null;
+    }>) {
+      const hasFeedback = Boolean(row.feedback_audio_url || row.feedback_url || row.teacher_comment || row.teacher_score !== null);
+      const promptId = row.prompt_id?.trim();
+      const promptText = row.prompt_text?.trim();
+      if (promptId && !index[promptId]) index[promptId] = { hasSubmission: true, hasFeedback };
+      if (promptText && !index[`text:${promptText}`]) index[`text:${promptText}`] = { hasSubmission: true, hasFeedback };
+    }
+    setSubmissionStatusIndex(index);
   }
 
   async function lookupStudent() {
@@ -662,6 +718,7 @@ export default function StudentView() {
       setAssignedPrompts([]);
       setSelectedPromptId(null);
       setCompletedPromptKeys([]);
+      setSubmissionStatusIndex({});
       setSubmissionForActivePrompt(null);
       setErrorMessage("Code not found. Please check your code or ask your teacher.");
       return;
@@ -671,6 +728,7 @@ export default function StudentView() {
     setRosterStudent(rosterRow);
     setStatusMessage(`Welcome, ${rosterRow.student_name}`);
     await fetchCompletedPromptKeys(code);
+    await fetchSubmissionStatuses(code);
     await fetchAssignedPrompts(rosterRow.class_name?.trim() || "");
   }
 
@@ -936,6 +994,7 @@ export default function StudentView() {
 
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
       await fetchCompletedPromptKeys(code);
+      await fetchSubmissionStatuses(code);
       setStatusMessage("Done ✅");
       setRecordedBlob(null);
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
@@ -1096,6 +1155,7 @@ export default function StudentView() {
 
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
       await fetchCompletedPromptKeys(code);
+      await fetchSubmissionStatuses(code);
       clearUnsubmittedVideo();
       setVideoStatusMessage("Video submitted ✅");
     } catch (error: any) {
@@ -1149,6 +1209,7 @@ export default function StudentView() {
       if (error) throw error;
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
       await fetchCompletedPromptKeys(code);
+      await fetchSubmissionStatuses(code);
       setStatusMessage("Text response submitted ✅");
     } catch (error: any) {
       setErrorMessage(error?.message || "Could not submit text response.");
@@ -1195,6 +1256,7 @@ export default function StudentView() {
       if (error) throw error;
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
       await fetchCompletedPromptKeys(code);
+      await fetchSubmissionStatuses(code);
       setStatusMessage("Marked completed ✅");
     } catch (error: any) {
       setErrorMessage(error?.message || "Could not mark completion.");
@@ -1221,42 +1283,48 @@ export default function StudentView() {
   return (
     <div style={styles.page}>
       <div style={styles.shell}>
-        <input
-          value={studentCode}
-          onChange={(e) => {
-            setStudentCode(e.target.value.toUpperCase());
-            setRosterStudent(null);
-            setAssignedPrompts([]);
-            setSelectedPromptId(null);
-            setCompletedPromptKeys([]);
-            setSubmissionForActivePrompt(null);
-            setVideoStatusMessage("");
-            setVideoErrorMessage("");
-          }}
-          placeholder="Enter your code (ex: R10)"
-          style={styles.field}
-        />
+        {!rosterStudent ? (
+          <>
+            <input
+              value={studentCode}
+              onChange={(e) => {
+                setStudentCode(e.target.value.toUpperCase());
+                setRosterStudent(null);
+                setAssignedPrompts([]);
+                setSelectedPromptId(null);
+                setCompletedPromptKeys([]);
+                setSubmissionStatusIndex({});
+                setSubmissionForActivePrompt(null);
+                setVideoStatusMessage("");
+                setVideoErrorMessage("");
+              }}
+              placeholder="Enter your code (ex: R10)"
+              style={styles.field}
+            />
 
-        <div style={styles.helperText}>Use the code your teacher gave you.</div>
+            <div style={styles.helperText}>Use the code your teacher gave you.</div>
 
-        <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }}>
-          {isFinding ? "Checking..." : "Continue"}
-        </button>
-
-        {rosterStudent ? (
-          <div style={{ ...styles.message, color: "#0f766e", fontWeight: 800 }}>Welcome, {rosterStudent.student_name}</div>
+            <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }}>
+              {isFinding ? "Checking..." : "Continue"}
+            </button>
+            {errorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{errorMessage}</div> : null}
+          </>
         ) : null}
 
-        <div style={styles.sectionTitle}>Your Assignments</div>
+        {rosterStudent && !selectedPromptId ? (
+          <div style={{ ...styles.message, color: "#0f766e", fontWeight: 800 }}>Welcome, {rosterStudent.student_name}.</div>
+        ) : null}
 
-        {rosterStudent ? (
+        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px" }}>Your Assignments</div> : null}
+
+        {rosterStudent && !selectedPromptId ? (
           hasVisiblePrompts ? (
             <div style={styles.taskList}>
               {assignedPrompts.map((prompt) => {
                 const promptText = prompt.prompt_text?.trim() || "";
                 const assignmentType = getAssignmentType(prompt);
-                const isCompleted = completedPromptKeys.includes(prompt.id) || (promptText ? completedPromptKeys.includes(`text:${promptText}`) : false);
-                const isSelected = selectedPromptId === prompt.id;
+                const statusInfo = submissionStatusIndex[prompt.id] || (promptText ? submissionStatusIndex[`text:${promptText}`] : undefined);
+                const cardStatus = statusInfo?.hasFeedback ? "Feedback ready" : statusInfo?.hasSubmission ? "Submitted" : "Not submitted yet";
                 return (
                   <button
                     key={prompt.id}
@@ -1264,8 +1332,9 @@ export default function StudentView() {
                     onClick={() => setSelectedPromptId(prompt.id)}
                     style={{
                       ...styles.taskButton,
-                      background: isSelected ? "#eef2ff" : "#f8fafc",
-                      borderColor: isSelected ? "#818cf8" : "#dbe3f0",
+                      background: "#f8fafc",
+                      borderColor: "#dbe3f0",
+                      boxShadow: "0 6px 16px rgba(15, 23, 42, 0.05)",
                     }}
                   >
                     <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -1274,7 +1343,7 @@ export default function StudentView() {
                         <div style={styles.taskTitle}>{prompt.prompt_text || "Untitled assignment"}</div>
                         <div style={styles.taskMeta}>{assignmentTypeLabel(assignmentType)}</div>
                         {prompt.suggested_time ? <div style={styles.taskMeta}>Suggested time: {prompt.suggested_time}</div> : null}
-                        <div style={styles.taskMeta}>{assignmentType === "external_link" ? "↗ Opens in new tab" : (isCompleted ? "✅ Completed" : "⏳ Not submitted yet")}</div>
+                        <div style={styles.taskStatus}>{cardStatus}</div>
                       </div>
                     </div>
                   </button>
@@ -1286,7 +1355,15 @@ export default function StudentView() {
           )
         ) : null}
 
-        <div style={styles.sectionTitle}>Activity</div>
+        {rosterStudent && selectedPromptId ? (
+          <>
+        <div style={{ marginTop: "8px" }}>
+          <button type="button" onClick={() => setSelectedPromptId(null)} style={styles.backButton}>
+            ← Back
+          </button>
+        </div>
+
+        <div style={{ ...styles.sectionTitle, fontSize: "28px", marginTop: "10px" }}>Activity</div>
 
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
         <div style={styles.promptCard}>
@@ -1441,7 +1518,7 @@ export default function StudentView() {
           </div>
         ) : null}
 
-        {!isVideoAssignment && !isExternalAssignment && !isTextAssignment ? <button
+        {!isVideoAssignment && !isExternalAssignment && !isTextAssignment && recordedBlob ? <button
           type="button"
           onClick={() => void submitRecording()}
           disabled={!recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
@@ -1504,6 +1581,8 @@ export default function StudentView() {
             <div style={styles.infoText}>No submission yet.</div>
           )}
         </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
