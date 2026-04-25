@@ -105,6 +105,46 @@ const styles = {
     padding: "0 18px",
     cursor: "pointer",
   },
+  settingsPanel: {
+    background: "#ffffff",
+    borderRadius: "18px",
+    border: "1px solid #dbe3f0",
+    padding: "16px",
+    marginBottom: "14px",
+  },
+  settingsLabel: {
+    fontSize: "12px",
+    fontWeight: 900,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.12em",
+    color: "#64748b",
+    marginBottom: "6px",
+  },
+  settingsTitle: {
+    margin: "0 0 6px",
+    fontSize: "20px",
+    fontWeight: 900,
+    color: "#0f172a",
+  },
+  settingsDescription: {
+    margin: "0 0 10px",
+    fontSize: "13px",
+    color: "#64748b",
+  },
+  settingsPreview: {
+    width: "100%",
+    maxHeight: "180px",
+    objectFit: "cover" as const,
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
+    marginBottom: "10px",
+  },
+  settingsActionRow: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "8px",
+    alignItems: "center",
+  },
   promptCard: {
     borderRadius: "20px",
     border: "1px solid #e2e8f0",
@@ -537,6 +577,25 @@ function deriveAssignmentType(prompt: Pick<PromptRow, "assignment_type">): Assig
 }
 
 const PROMPT_IMAGES_BUCKET = "prompt-images";
+const APP_ASSETS_BUCKET = "app-assets";
+const STUDENT_WELCOME_IMAGE_SETTING_KEY = "student_welcome_image_url";
+const MAX_WELCOME_IMAGE_FILE_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_WELCOME_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+function getFileExtensionFromMimeType(mimeType: string): string {
+  if (mimeType.includes("png")) return "png";
+  if (mimeType.includes("jpeg") || mimeType.includes("jpg")) return "jpg";
+  if (mimeType.includes("webp")) return "webp";
+  if (mimeType.includes("gif")) return "gif";
+  return "jpg";
+}
+
+function extractStoragePathFromPublicUrl(publicUrl: string, bucket: string): string {
+  const marker = `/${bucket}/`;
+  const markerIndex = publicUrl.indexOf(marker);
+  if (markerIndex < 0) return "";
+  return publicUrl.slice(markerIndex + marker.length).split("?")[0];
+}
 
 export default function TeacherDashboard() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -568,6 +627,13 @@ export default function TeacherDashboard() {
   const [rosterError, setRosterError] = useState("");
   const [rosterSuccess, setRosterSuccess] = useState("");
   const [isDeletingClass, setIsDeletingClass] = useState(false);
+  const [studentWelcomeImageUrl, setStudentWelcomeImageUrl] = useState<string | null>(null);
+  const [studentWelcomeImageFile, setStudentWelcomeImageFile] = useState<File | null>(null);
+  const [studentWelcomeImagePreviewUrl, setStudentWelcomeImagePreviewUrl] = useState("");
+  const [isLoadingStudentWelcomeImage, setIsLoadingStudentWelcomeImage] = useState(false);
+  const [isSavingStudentWelcomeImage, setIsSavingStudentWelcomeImage] = useState(false);
+  const [studentWelcomeImageError, setStudentWelcomeImageError] = useState("");
+  const [studentWelcomeImageSuccess, setStudentWelcomeImageSuccess] = useState("");
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
@@ -643,6 +709,36 @@ export default function TeacherDashboard() {
   );
 
   const selectedClassName = selectedClass?.trim() ?? "";
+  const studentWelcomeImageDisplayUrl = studentWelcomeImagePreviewUrl || studentWelcomeImageUrl || "";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchStudentWelcomeImage = async () => {
+      setIsLoadingStudentWelcomeImage(true);
+      const { data, error } = await supabase.from("app_settings").select("value").eq("key", STUDENT_WELCOME_IMAGE_SETTING_KEY).maybeSingle();
+      if (!isMounted) return;
+      if (error) {
+        setStudentWelcomeImageError(error.message || "Could not load student welcome image setting.");
+        setIsLoadingStudentWelcomeImage(false);
+        return;
+      }
+      const value = (data as { value?: string | null } | null)?.value?.trim() ?? "";
+      setStudentWelcomeImageUrl(value || null);
+      setIsLoadingStudentWelcomeImage(false);
+    };
+
+    void fetchStudentWelcomeImage();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (studentWelcomeImagePreviewUrl) URL.revokeObjectURL(studentWelcomeImagePreviewUrl);
+    };
+  }, [studentWelcomeImagePreviewUrl]);
 
   const submissionPromptOptions = useMemo(() => {
     const promptSet = new Set<string>();
@@ -1578,6 +1674,100 @@ export default function TeacherDashboard() {
     }
   }
 
+  function handleStudentWelcomeImageFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    setStudentWelcomeImageError("");
+    setStudentWelcomeImageSuccess("");
+    if (!file) {
+      setStudentWelcomeImageFile(null);
+      setStudentWelcomeImagePreviewUrl("");
+      return;
+    }
+    if (!ACCEPTED_WELCOME_IMAGE_TYPES.has(file.type)) {
+      setStudentWelcomeImageFile(null);
+      setStudentWelcomeImagePreviewUrl("");
+      setStudentWelcomeImageError("Use JPG, PNG, WEBP, or GIF.");
+      return;
+    }
+    if (file.size > MAX_WELCOME_IMAGE_FILE_BYTES) {
+      setStudentWelcomeImageFile(null);
+      setStudentWelcomeImagePreviewUrl("");
+      setStudentWelcomeImageError("Image must be 2MB or smaller.");
+      return;
+    }
+    setStudentWelcomeImageFile(file);
+    setStudentWelcomeImagePreviewUrl(URL.createObjectURL(file));
+  }
+
+  async function handleSaveStudentWelcomeImage() {
+    if (!studentWelcomeImageFile) {
+      setStudentWelcomeImageError("Choose an image first.");
+      return;
+    }
+    setIsSavingStudentWelcomeImage(true);
+    setStudentWelcomeImageError("");
+    setStudentWelcomeImageSuccess("");
+
+    const extension = getFileExtensionFromMimeType(studentWelcomeImageFile.type || "");
+    const filePath = `student-welcome/hero-${Date.now()}.${extension}`;
+
+    try {
+      const { error: uploadError } = await supabase.storage.from(APP_ASSETS_BUCKET).upload(filePath, studentWelcomeImageFile, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: studentWelcomeImageFile.type || undefined,
+      });
+      if (uploadError) throw uploadError;
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(APP_ASSETS_BUCKET).getPublicUrl(filePath);
+
+      const { error: saveSettingError } = await supabase
+        .from("app_settings")
+        .upsert({ key: STUDENT_WELCOME_IMAGE_SETTING_KEY, value: publicUrl }, { onConflict: "key" });
+      if (saveSettingError) throw saveSettingError;
+
+      const previousPath = studentWelcomeImageUrl ? extractStoragePathFromPublicUrl(studentWelcomeImageUrl, APP_ASSETS_BUCKET) : "";
+      if (previousPath && previousPath !== filePath) {
+        await supabase.storage.from(APP_ASSETS_BUCKET).remove([previousPath]);
+      }
+
+      if (studentWelcomeImagePreviewUrl) URL.revokeObjectURL(studentWelcomeImagePreviewUrl);
+      setStudentWelcomeImageUrl(publicUrl);
+      setStudentWelcomeImageFile(null);
+      setStudentWelcomeImagePreviewUrl("");
+      setStudentWelcomeImageSuccess("Student welcome image saved.");
+    } catch (error: any) {
+      setStudentWelcomeImageError(error?.message || "Could not save student welcome image.");
+    } finally {
+      setIsSavingStudentWelcomeImage(false);
+    }
+  }
+
+  async function handleResetStudentWelcomeImage() {
+    setIsSavingStudentWelcomeImage(true);
+    setStudentWelcomeImageError("");
+    setStudentWelcomeImageSuccess("");
+    try {
+      const { error } = await supabase.from("app_settings").upsert({ key: STUDENT_WELCOME_IMAGE_SETTING_KEY, value: null }, { onConflict: "key" });
+      if (error) throw error;
+      const previousPath = studentWelcomeImageUrl ? extractStoragePathFromPublicUrl(studentWelcomeImageUrl, APP_ASSETS_BUCKET) : "";
+      if (previousPath) {
+        await supabase.storage.from(APP_ASSETS_BUCKET).remove([previousPath]);
+      }
+      if (studentWelcomeImagePreviewUrl) URL.revokeObjectURL(studentWelcomeImagePreviewUrl);
+      setStudentWelcomeImageUrl(null);
+      setStudentWelcomeImageFile(null);
+      setStudentWelcomeImagePreviewUrl("");
+      setStudentWelcomeImageSuccess("Student welcome image reset to default.");
+    } catch (error: any) {
+      setStudentWelcomeImageError(error?.message || "Could not reset student welcome image.");
+    } finally {
+      setIsSavingStudentWelcomeImage(false);
+    }
+  }
+
   return (
     <div style={styles.page}>
       <style>{`
@@ -1619,6 +1809,40 @@ export default function TeacherDashboard() {
           >
             Assignment Library
           </button>
+        </section>
+        <section style={styles.settingsPanel}>
+          <div style={styles.settingsLabel}>App settings</div>
+          <h2 style={styles.settingsTitle}>Student welcome image</h2>
+          <p style={styles.settingsDescription}>This controls the hero image on the student code-entry screen.</p>
+          {studentWelcomeImageDisplayUrl ? <img src={studentWelcomeImageDisplayUrl} alt="Student welcome preview" style={styles.settingsPreview} /> : null}
+          <div style={styles.settingsActionRow}>
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={handleStudentWelcomeImageFileChange}
+              disabled={isSavingStudentWelcomeImage}
+            />
+            <button
+              type="button"
+              onClick={() => void handleSaveStudentWelcomeImage()}
+              style={clampButton(isSavingStudentWelcomeImage || !studentWelcomeImageFile, styles.secondaryButton)}
+              disabled={isSavingStudentWelcomeImage || !studentWelcomeImageFile}
+            >
+              {isSavingStudentWelcomeImage ? "Saving..." : "Save image"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleResetStudentWelcomeImage()}
+              style={clampButton(isSavingStudentWelcomeImage, { ...styles.secondaryButton, borderColor: "#fecaca", color: "#b91c1c" })}
+              disabled={isSavingStudentWelcomeImage}
+            >
+              Reset to default
+            </button>
+          </div>
+          {isLoadingStudentWelcomeImage ? <div style={{ marginTop: 8, fontSize: 13, color: "#64748b" }}>Loading current image...</div> : null}
+          {studentWelcomeImageError ? <div style={{ marginTop: 8, fontSize: 13, color: "#b91c1c" }}>{studentWelcomeImageError}</div> : null}
+          {studentWelcomeImageSuccess ? <div style={{ marginTop: 8, fontSize: 13, color: "#065f46" }}>{studentWelcomeImageSuccess}</div> : null}
+          <div style={{ marginTop: 8, fontSize: 12, color: "#94a3b8" }}>Allowed: JPG, PNG, WEBP, GIF · Max file size: 2MB.</div>
         </section>
 
         {teacherScreen === "classes" && !selectedClassName ? (

@@ -92,7 +92,8 @@ const DEFAULT_WELCOME_IMAGE =
 </svg>
 `);
 
-const STUDENT_WELCOME_IMAGE_URL = (import.meta.env.VITE_STUDENT_WELCOME_IMAGE_URL?.trim() || DEFAULT_WELCOME_IMAGE) as string;
+const ENV_STUDENT_WELCOME_IMAGE_URL = (import.meta.env.VITE_STUDENT_WELCOME_IMAGE_URL?.trim() || "") as string;
+const STUDENT_WELCOME_IMAGE_SETTING_KEY = "student_welcome_image_url";
 
 const styles = {
   page: {
@@ -521,6 +522,7 @@ export default function StudentView() {
   const [recordedVideoUrl, setRecordedVideoUrl] = useState("");
   const [videoMimeType, setVideoMimeType] = useState("");
   const [textResponse, setTextResponse] = useState("");
+  const [studentWelcomeImageUrl, setStudentWelcomeImageUrl] = useState<string | null>(null);
 
   const activePrompt = useMemo(() => {
     if (!selectedPromptId) return null;
@@ -532,6 +534,9 @@ export default function StudentView() {
   const isVideoAssignment = activeAssignmentType === "video_response";
   const isExternalAssignment = activeAssignmentType === "external_link";
   const isTextAssignment = activeAssignmentType === "text_response";
+  const welcomeHeroImageUrl = useMemo(() => {
+    return studentWelcomeImageUrl?.trim() || ENV_STUDENT_WELCOME_IMAGE_URL || DEFAULT_WELCOME_IMAGE;
+  }, [studentWelcomeImageUrl]);
 
   const stopTracks = useCallback(() => {
     if (streamRef.current) {
@@ -597,6 +602,20 @@ export default function StudentView() {
       return null;
     }
   }, [stopVideoTracks]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadWelcomeImageSetting = async () => {
+      const { data, error } = await supabase.from("app_settings").select("value").eq("key", STUDENT_WELCOME_IMAGE_SETTING_KEY).maybeSingle();
+      if (error || !isMounted) return;
+      const value = (data as { value?: string | null } | null)?.value?.trim() ?? "";
+      setStudentWelcomeImageUrl(value || null);
+    };
+    void loadWelcomeImageSetting();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1335,7 +1354,7 @@ export default function StudentView() {
       <div style={styles.shell}>
         {!rosterStudent ? (
           <>
-            <img src={STUDENT_WELCOME_IMAGE_URL} alt="Welcome to ESL activity hub" style={styles.heroImage} />
+            <img src={welcomeHeroImageUrl} alt="Welcome to ESL activity hub" style={styles.heroImage} />
             <div style={styles.heroTitle}>Welcome</div>
             <div style={styles.heroSubtitle}>Enter your class code to open your assignments.</div>
             <input
