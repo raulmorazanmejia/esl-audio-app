@@ -30,6 +30,8 @@ type Props = {
   setAnalyticsPromptFilter: (value: string) => void;
   analyticsPromptOptions: string[];
   submissionAnalytics: any;
+  submissionsSuccess: string;
+  submissionsError: string;
 };
 
 export default function TeacherSubmissionsPanel(p: Props) {
@@ -56,6 +58,9 @@ export default function TeacherSubmissionsPanel(p: Props) {
         <button type="button" onClick={p.onClearStudentFilter} style={{ minHeight: 30, borderRadius: 8, border: "1px solid #bae6fd", background: "#fff", color: "#0c4a6e", fontWeight: 700, padding: "0 8px" }}>Clear</button>
       </div>
     ) : null}
+
+    {p.submissionsSuccess ? <div style={{ fontSize: 13, color: "#166534", marginBottom: 8 }}>{p.submissionsSuccess}</div> : null}
+    {p.submissionsError ? <div style={{ fontSize: 13, color: "#b91c1c", marginBottom: 8 }}>{p.submissionsError}</div> : null}
 
     <TeacherAnalyticsPanel
       selectedClassName={p.selectedClassName}
