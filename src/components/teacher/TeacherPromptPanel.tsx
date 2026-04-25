@@ -29,6 +29,7 @@ type Props = {
   onRemovePromptFromClass: (prompt: PromptRow, className: string) => void;
   onDeletePrompt: (prompt: PromptRow) => void;
   savingPromptVisibilityById: Record<string, boolean>;
+  removingPromptFromClassById: Record<string, boolean>;
   deletingPromptById: Record<string, boolean>;
   onClearVisiblePromptsForSelectedClass: () => void;
   classNameOptions: string[];
@@ -143,9 +144,11 @@ export default function TeacherPromptPanel(props: Props) {
         const currentAssignments = normalizedAssignments.length
           ? normalizedAssignments
           : (fallbackClass ? [{ className: fallbackClass, isVisible: Boolean(prompt.is_active) }] : []);
-        const selectedClassAssignment = prompt.prompt_assignments?.find((row) => row.class_name === p.selectedClassName);
+        const selectedClassAssignment = prompt.prompt_assignments?.find((row) => row.class_name.trim() === p.selectedClassName.trim());
         const selectedClassVisible = selectedClassAssignment ? Boolean(selectedClassAssignment.is_visible) : false;
         const isLibraryMode = p.mode === "library";
+        const removePromptKey = `${prompt.id}:${p.selectedClassName}`;
+        const isRemovingFromClass = Boolean(p.removingPromptFromClassById[removePromptKey]);
         return <div key={prompt.id} style={{ border: "1px solid #e2e8f0", padding: 10, borderRadius: 12, marginBottom: 8, background: "#fff" }}>
           {prompt.prompt_image_url ? <div style={{ marginBottom: 8 }}>
             <img src={prompt.prompt_image_url} alt="Prompt" style={{ width: "100%", maxHeight: expandedImagePromptId === prompt.id ? 420 : 160, objectFit: "cover", borderRadius: 8, marginBottom: 6 }} />
@@ -211,8 +214,8 @@ export default function TeacherPromptPanel(props: Props) {
               </button>
             ) : null}
             {!isLibraryMode && selectedClassAssignment ? (
-              <button type="button" onClick={() => p.onRemovePromptFromClass(prompt, p.selectedClassName)} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>
-                Remove from {p.selectedClassName}
+              <button type="button" onClick={() => p.onRemovePromptFromClass(prompt, p.selectedClassName)} disabled={isRemovingFromClass} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontSize: 13, fontWeight: 700, padding: "0 10px", opacity: isRemovingFromClass ? 0.6 : 1 }}>
+                {isRemovingFromClass ? "Removing..." : `Remove from ${p.selectedClassName}`}
               </button>
             ) : null}
             {isLibraryMode ? <button type="button" onClick={() => p.onDeletePrompt(prompt)} disabled={Boolean(p.deletingPromptById[prompt.id])} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>Delete permanently</button> : null}
