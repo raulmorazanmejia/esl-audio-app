@@ -131,33 +131,33 @@ const styles = {
     overflow: "hidden" as const,
     border: "1px solid #e2e8f0",
     boxShadow: "0 14px 30px rgba(15, 23, 42, 0.12)",
-    marginBottom: "18px",
+    marginBottom: "14px",
   },
   heroImage: {
     width: "100%",
     maxHeight: "250px",
     objectFit: "cover" as const,
     display: "block",
-    filter: "brightness(0.94) saturate(1.03)",
+    filter: "brightness(0.9) contrast(1.04) saturate(1.02)",
   },
   heroImageOverlay: {
     position: "absolute" as const,
     inset: 0,
-    background: "linear-gradient(180deg, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.24) 100%)",
+    background: "linear-gradient(180deg, rgba(15, 23, 42, 0) 8%, rgba(15, 23, 42, 0.3) 100%)",
   },
   heroTitle: {
     textAlign: "center" as const,
     fontSize: "clamp(28px, 6vw, 36px)",
     fontWeight: 800,
     color: "#0f172a",
-    margin: "0 0 8px",
+    margin: "0 0 6px",
     lineHeight: 1.15,
   },
   heroSubtitle: {
     textAlign: "center" as const,
     fontSize: "16px",
     color: "#64748b",
-    margin: "0 0 18px",
+    margin: "0 0 14px",
   },
   field: {
     width: "100%",
@@ -416,7 +416,7 @@ const styles = {
     marginTop: "8px",
   },
   installHelpRow: {
-    marginTop: "12px",
+    marginTop: "16px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -425,7 +425,7 @@ const styles = {
   },
   installHelpText: {
     fontSize: "14px",
-    color: "#6366f1",
+    color: "#5b21b6",
     textAlign: "center" as const,
     lineHeight: 1.4,
     display: "inline-flex",
@@ -434,14 +434,17 @@ const styles = {
     fontWeight: 600,
   },
   installHelpLink: {
-    border: "none",
-    background: "transparent",
-    color: "#5b21b6",
+    border: "1px solid #d8b4fe",
+    borderRadius: "999px",
+    background: "#faf5ff",
+    color: "#6d28d9",
     fontSize: "14px",
     fontWeight: 700,
-    textDecoration: "underline",
     cursor: "pointer",
-    padding: 0,
+    padding: "5px 10px",
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
   },
   card: {
     marginTop: "28px",
@@ -1558,16 +1561,16 @@ export default function StudentView() {
   }
 
   return (
-    <div style={styles.page}>
-      <div style={styles.shell} className="student-fade-in">
+    <div style={styles.page} className="student-entry-page">
+      <div style={styles.shell} className="student-fade-in student-entry-shell">
         {!rosterStudent ? (
           <>
-            <div style={styles.heroMediaFrame}>
+            <div style={styles.heroMediaFrame} className="student-entry-hero">
               <img src={welcomeHeroImageUrl} alt="Welcome to ESL activity hub" style={styles.heroImage} />
               <div style={styles.heroImageOverlay} />
             </div>
-            <div style={styles.heroTitle}>Join your activity</div>
-            <div style={styles.heroSubtitle}>Enter your class code to see your assignments.</div>
+            <div style={styles.heroTitle} className="student-entry-title">Join your activity</div>
+            <div style={styles.heroSubtitle} className="student-entry-subtitle">Enter your class code to see your assignments.</div>
             <input
               value={studentCode}
               onChange={(e) => {
@@ -1593,9 +1596,10 @@ export default function StudentView() {
                 boxShadow: isCodeFieldFocused ? "0 0 0 4px rgba(79, 70, 229, 0.16)" : "none",
               }}
               autoCapitalize="characters"
+              className="student-entry-input"
             />
 
-            <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }} className="student-primary-btn">
+            <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "14px" }} className="student-primary-btn student-entry-continue">
               {isFinding ? "Checking..." : "Continue"}
             </button>
             <div style={styles.installHelpRow}>
@@ -1604,7 +1608,8 @@ export default function StudentView() {
                 <span>Want faster access? Add ESL Hub to your phone.</span>
               </div>
               <button type="button" onClick={() => void showInstallHelp()} style={styles.installHelpLink}>
-                How to install
+                <span aria-hidden="true">📲</span>
+                <span>Get the app</span>
               </button>
             </div>
             {errorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{errorMessage}</div> : null}
