@@ -1,0 +1,18 @@
+{
+  "name": "ESL Audio App",
+  "short_name": "ESL Audio",
+  "description": "ESL assignments and audio responses for students and teachers.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

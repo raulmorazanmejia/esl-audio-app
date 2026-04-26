@@ -375,6 +375,27 @@ const styles = {
     color: "#64748b",
     marginTop: "8px",
   },
+  installHelpCard: {
+    marginTop: "14px",
+    borderRadius: "16px",
+    border: "1px solid #c7d2fe",
+    background: "#eef2ff",
+    padding: "14px",
+    display: "grid",
+    gap: "8px",
+  },
+  installHelpTitle: {
+    fontSize: "14px",
+    fontWeight: 800,
+    color: "#312e81",
+    textAlign: "center" as const,
+  },
+  installHelpText: {
+    fontSize: "13px",
+    color: "#4338ca",
+    textAlign: "center" as const,
+    lineHeight: 1.4,
+  },
   card: {
     marginTop: "28px",
     borderRadius: "24px",
@@ -523,6 +544,12 @@ export default function StudentView() {
   const [videoMimeType, setVideoMimeType] = useState("");
   const [textResponse, setTextResponse] = useState("");
   const [studentWelcomeImageUrl, setStudentWelcomeImageUrl] = useState<string | null>(null);
+  const [installPromptReady, setInstallPromptReady] = useState(false);
+  const deferredInstallPromptRef = useRef<any>(null);
+  const isIosDevice = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    return /iphone|ipad|ipod/i.test(navigator.userAgent);
+  }, []);
 
   const activePrompt = useMemo(() => {
     if (!selectedPromptId) return null;
@@ -615,6 +642,26 @@ export default function StudentView() {
     return () => {
       isMounted = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      deferredInstallPromptRef.current = event as any;
+      setInstallPromptReady(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    };
+  }, []);
+
+  const triggerInstall = useCallback(async () => {
+    if (!deferredInstallPromptRef.current) return;
+    await deferredInstallPromptRef.current.prompt();
+    deferredInstallPromptRef.current = null;
+    setInstallPromptReady(false);
   }, []);
 
   useEffect(() => {
@@ -1375,6 +1422,21 @@ export default function StudentView() {
             />
 
             <div style={styles.helperText}>Use the code your teacher gave you.</div>
+
+            <div style={styles.installHelpCard}>
+              <div style={styles.installHelpTitle}>Install on your phone for easier access</div>
+              {installPromptReady ? (
+                <button type="button" onClick={() => void triggerInstall()} style={styles.primaryButton}>
+                  Install ESL Audio App
+                </button>
+              ) : (
+                <div style={styles.installHelpText}>
+                  {isIosDevice
+                    ? "On iPhone/iPad: tap Share, then Add to Home Screen."
+                    : "If your browser supports it, the install button will appear here automatically."}
+                </div>
+              )}
+            </div>
 
             <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }}>
               {isFinding ? "Checking..." : "Continue"}
