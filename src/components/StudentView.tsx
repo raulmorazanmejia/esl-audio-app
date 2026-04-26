@@ -125,11 +125,12 @@ const styles = {
     maxHeight: "250px",
     objectFit: "cover" as const,
     display: "block",
+    filter: "brightness(0.94) saturate(1.03)",
   },
   heroImageOverlay: {
     position: "absolute" as const,
     inset: 0,
-    background: "linear-gradient(180deg, rgba(15, 23, 42, 0.08) 0%, rgba(15, 23, 42, 0.45) 100%)",
+    background: "linear-gradient(180deg, rgba(15, 23, 42, 0.06) 0%, rgba(15, 23, 42, 0.24) 100%)",
   },
   heroTitle: {
     textAlign: "center" as const,
@@ -175,22 +176,22 @@ const styles = {
     color: "#0f172a",
     outline: "none",
     textAlign: "center" as const,
-    letterSpacing: "0.08em",
+    letterSpacing: "0.04em",
     fontWeight: 700,
     textTransform: "uppercase" as const,
     transition: "border-color 120ms ease, box-shadow 120ms ease",
   },
   actionButton: {
     width: "100%",
-    minHeight: "76px",
-    borderRadius: "22px",
+    minHeight: "70px",
+    borderRadius: "20px",
     border: "1px solid #4f46e5",
     background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
     color: "#ffffff",
     fontSize: "22px",
     fontWeight: 800,
     cursor: "pointer",
-    boxShadow: "0 12px 24px rgba(79, 70, 229, 0.28)",
+    boxShadow: "0 10px 20px rgba(79, 70, 229, 0.24)",
     letterSpacing: "0.01em",
     transition: "transform 120ms ease, box-shadow 120ms ease",
   },
@@ -245,10 +246,10 @@ const styles = {
   },
   taskButton: {
     width: "100%",
-    borderRadius: "16px",
+    borderRadius: "18px",
     border: "1px solid #dbe3f0",
-    background: "#f8fafc",
-    padding: "12px",
+    background: "#ffffff",
+    padding: "14px",
     textAlign: "left" as const,
     cursor: "pointer",
     display: "grid",
@@ -273,6 +274,17 @@ const styles = {
     color: "#475569",
     fontSize: "12px",
     fontWeight: 800,
+  },
+  taskTypeBadge: {
+    display: "inline-flex",
+    width: "fit-content",
+    padding: "4px 10px",
+    borderRadius: "999px",
+    border: "1px solid #cbd5e1",
+    background: "#f8fafc",
+    color: "#475569",
+    fontSize: "12px",
+    fontWeight: 700,
   },
   backButton: {
     minHeight: "38px",
@@ -412,13 +424,13 @@ const styles = {
     borderRadius: "14px",
     border: "1px solid #e2e8f0",
     background: "#f8fafc",
-    padding: "12px",
+    padding: "10px",
     display: "grid",
     gap: "6px",
   },
   installHelpTitle: {
-    fontSize: "13px",
-    fontWeight: 700,
+    fontSize: "12px",
+    fontWeight: 600,
     color: "#334155",
     textAlign: "center" as const,
   },
@@ -427,6 +439,19 @@ const styles = {
     color: "#64748b",
     textAlign: "center" as const,
     lineHeight: 1.4,
+  },
+  installHelpAction: {
+    ...({
+      minHeight: "38px",
+      borderRadius: "12px",
+      border: "1px solid #dbe3f0",
+      background: "#ffffff",
+      color: "#475569",
+      fontSize: "13px",
+      fontWeight: 700,
+      width: "100%",
+      cursor: "pointer",
+    } as const),
   },
   card: {
     marginTop: "28px",
@@ -533,11 +558,11 @@ function getAssignmentType(prompt?: PromptRow | null) {
 }
 
 function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
-  if (type === "video_response") return "Video response";
-  if (type === "text_response") return "Text response";
+  if (type === "video_response") return "Video";
+  if (type === "text_response") return "Text";
   if (type === "multiple_choice") return "Quiz";
-  if (type === "external_link") return "External activity";
-  return "Audio response";
+  if (type === "external_link") return "External";
+  return "Audio";
 }
 
 export default function StudentView() {
@@ -1431,7 +1456,7 @@ export default function StudentView() {
 
   return (
     <div style={styles.page}>
-      <div style={styles.shell}>
+      <div style={styles.shell} className="student-fade-in">
         {!rosterStudent ? (
           <>
             <div style={styles.heroMediaFrame}>
@@ -1463,7 +1488,7 @@ export default function StudentView() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") void lookupStudent();
               }}
-              placeholder="Enter your code (ex: R10)"
+              placeholder="Enter your code (e.g. R10)"
               style={{
                 ...styles.field,
                 borderColor: isCodeFieldFocused ? "#4f46e5" : styles.field.border,
@@ -1475,19 +1500,14 @@ export default function StudentView() {
             <div style={styles.helperText}>Use the code your teacher gave you.</div>
 
             <div style={styles.installHelpCard}>
-              <div style={styles.installHelpTitle}>Install on your phone for easier access</div>
+              <div style={styles.installHelpTitle}>Install on your phone for faster access</div>
               {installPromptReady ? (
                 <button
                   type="button"
                   onClick={() => void triggerInstall()}
-                  style={{
-                    ...styles.secondaryButton,
-                    minHeight: "42px",
-                    width: "100%",
-                    fontSize: "14px",
-                  }}
+                  style={styles.installHelpAction}
                 >
-                  Install ESL Audio App
+                  Install app
                 </button>
               ) : (
                 <div style={styles.installHelpText}>
@@ -1496,9 +1516,10 @@ export default function StudentView() {
                     : "If your browser supports it, the install button will appear here automatically."}
                 </div>
               )}
+              <div style={{ ...styles.installHelpText, textDecoration: "underline" }}>How to install</div>
             </div>
 
-            <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }}>
+            <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }} className="student-primary-btn">
               {isFinding ? "Checking..." : "Continue"}
             </button>
             {errorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{errorMessage}</div> : null}
@@ -1509,7 +1530,7 @@ export default function StudentView() {
           <div style={{ ...styles.message, color: "#0f766e", fontWeight: 800 }}>Welcome, {rosterStudent.student_name}.</div>
         ) : null}
 
-        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px" }}>Your Assignments</div> : null}
+        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px", fontSize: "30px", letterSpacing: "0.01em" }}>Choose an assignment</div> : null}
 
         {rosterStudent && !selectedPromptId ? (
           hasVisiblePrompts ? (
@@ -1518,26 +1539,28 @@ export default function StudentView() {
                 const promptText = prompt.prompt_text?.trim() || "";
                 const assignmentType = getAssignmentType(prompt);
                 const statusInfo = submissionStatusIndex[prompt.id] || (promptText ? submissionStatusIndex[`text:${promptText}`] : undefined);
-                const cardStatus = statusInfo?.hasFeedback ? "Feedback ready" : statusInfo?.hasSubmission ? "Submitted" : "Not submitted yet";
+                const cardStatus = statusInfo?.hasFeedback ? "Feedback ready" : statusInfo?.hasSubmission ? "Submitted" : "Not submitted";
                 return (
                   <button
                     key={prompt.id}
                     type="button"
                     onClick={() => setSelectedPromptId(prompt.id)}
+                    className="student-assignment-card"
                     style={{
                       ...styles.taskButton,
-                      background: "#f8fafc",
                       borderColor: "#dbe3f0",
-                      boxShadow: "0 6px 16px rgba(15, 23, 42, 0.05)",
+                      boxShadow: "0 8px 18px rgba(15, 23, 42, 0.06)",
                     }}
                   >
                     <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                       {prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Task thumbnail" style={styles.taskThumb} /> : null}
                       <div style={{ display: "grid", gap: "4px", flex: 1 }}>
                         <div style={styles.taskTitle}>{prompt.prompt_text || "Untitled assignment"}</div>
-                        <div style={styles.taskMeta}>{assignmentTypeLabel(assignmentType)}</div>
+                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                          <div style={styles.taskTypeBadge}>{assignmentTypeLabel(assignmentType)}</div>
+                          <div style={styles.taskStatus}>{cardStatus}</div>
+                        </div>
                         {prompt.suggested_time ? <div style={styles.taskMeta}>Suggested time: {prompt.suggested_time}</div> : null}
-                        <div style={styles.taskStatus}>{cardStatus}</div>
                       </div>
                     </div>
                   </button>
@@ -1557,15 +1580,12 @@ export default function StudentView() {
           </button>
         </div>
 
-        <div style={{ ...styles.sectionTitle, fontSize: "28px", marginTop: "10px" }}>Activity</div>
+        <div style={{ ...styles.sectionTitle, fontSize: "28px", marginTop: "10px", letterSpacing: "0.01em" }}>{activePrompt?.prompt_text || "Activity"}</div>
 
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
         <div style={styles.promptCard}>
-          “{activePrompt?.prompt_text || "Select an assignment above"}”
+          {activePrompt?.example_text || activePrompt?.prompt_text || "Select an assignment above"}
         </div>
-        {activePrompt?.example_text ? (
-          <div style={{ ...styles.helperText, marginTop: "10px" }}>{activePrompt.example_text}</div>
-        ) : null}
         {activePrompt?.suggested_time ? (
           <div style={{ textAlign: "center" }}>
             <div style={styles.suggestedTimeBadge}>Suggested time: {activePrompt.suggested_time}</div>
@@ -1588,6 +1608,7 @@ export default function StudentView() {
                 }}
                 disabled={!activePrompt?.external_url}
                 style={{ ...styles.primaryButton, minHeight: "56px", width: "100%" }}
+                className="student-primary-btn"
               >
                 Open activity
               </button>
@@ -1616,6 +1637,7 @@ export default function StudentView() {
               onClick={() => void submitTextResponse()}
               disabled={!textResponse.trim() || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
               style={{ ...styles.primaryButton, minHeight: "50px", marginTop: "12px", width: "100%" }}
+              className="student-primary-btn"
             >
               {isSubmitting ? "Submitting..." : "Submit response"}
             </button>
@@ -1633,7 +1655,7 @@ export default function StudentView() {
               )}
             </div>
             <div style={{ display: "grid", gap: "10px", marginTop: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
-              <button type="button" onClick={() => void startVideoRecording()} disabled={isRecordingVideo || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt} style={{ ...styles.primaryButton, minHeight: "50px" }}>
+              <button type="button" onClick={() => void startVideoRecording()} disabled={isRecordingVideo || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt} style={{ ...styles.primaryButton, minHeight: "50px" }} className="student-primary-btn">
                 Start recording
               </button>
               <button type="button" onClick={stopVideoRecording} disabled={!isRecordingVideo || isSubmitting} style={{ ...styles.submitButton, minHeight: "50px", background: "#dc2626", boxShadow: "none" }}>
@@ -1642,7 +1664,7 @@ export default function StudentView() {
               <button type="button" onClick={clearUnsubmittedVideo} disabled={isRecordingVideo || isSubmitting} style={{ ...styles.secondaryButton, minHeight: "50px" }}>
                 Re-record / Clear
               </button>
-              <button type="button" onClick={() => void submitVideoResponse()} disabled={!recordedVideoUrl || isRecordingVideo || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt} style={{ ...styles.primaryButton, minHeight: "50px" }}>
+              <button type="button" onClick={() => void submitVideoResponse()} disabled={!recordedVideoUrl || isRecordingVideo || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt} style={{ ...styles.primaryButton, minHeight: "50px" }} className="student-primary-btn">
                 {isSubmitting ? "Submitting..." : "Submit video"}
               </button>
             </div>
@@ -1722,6 +1744,7 @@ export default function StudentView() {
             cursor: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? "not-allowed" : "pointer",
             marginTop: "22px",
           }}
+          className="student-primary-btn"
         >
           {isSubmitting ? "Submitting..." : "Submit"}
         </button> : null}

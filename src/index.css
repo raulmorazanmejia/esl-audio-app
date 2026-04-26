@@ -98,3 +98,45 @@ button, input { font: inherit; }
 .code { font-family: ui-monospace, SFMono-Regular, monospace; background: #f1f5f9; padding: 2px 6px; border-radius: 6px; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+@keyframes studentCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.student-fade-in {
+  animation: studentCardIn 260ms ease-out;
+}
+
+.student-primary-btn {
+  transition: transform 140ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.student-primary-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+}
+
+.student-primary-btn:active {
+  transform: translateY(1px) scale(0.995);
+}
+
+.student-assignment-card {
+  transition: transform 130ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.student-assignment-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.1) !important;
+  border-color: #cbd5e1 !important;
+}
+
+.student-assignment-card:active {
+  transform: translateY(0) scale(0.995);
+}
