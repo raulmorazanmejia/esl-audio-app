@@ -335,11 +335,12 @@ const styles = {
     width: "100%",
     margin: "-8px 0 14px",
     borderRadius: "18px",
-    border: "2px solid #ef4444",
-    background: "#fee2e2",
-    color: "#991b1b",
+    border: "1px solid #c7d2fe",
+    background: "#eef2ff",
+    color: "#3730a3",
     padding: "14px 16px",
     boxSizing: "border-box" as const,
+    boxShadow: "0 8px 16px rgba(79, 70, 229, 0.08)",
   },
   recordingAlertHeader: {
     display: "flex",
@@ -353,7 +354,7 @@ const styles = {
     width: "10px",
     height: "10px",
     borderRadius: "999px",
-    background: "#dc2626",
+    background: "#6366f1",
     display: "inline-block",
   },
   recordingHelper: {
@@ -459,6 +460,67 @@ const styles = {
     border: "1px solid #dbe3f0",
     background: "#f8fafc",
     padding: "22px",
+  },
+  feedbackCard: {
+    marginTop: "28px",
+    borderRadius: "24px",
+    border: "1px solid #dbeafe",
+    background: "linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%)",
+    padding: "20px",
+    boxShadow: "0 10px 28px rgba(15, 23, 42, 0.07)",
+    display: "grid",
+    gap: "14px",
+  },
+  feedbackHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "10px",
+    flexWrap: "wrap" as const,
+  },
+  feedbackTitle: {
+    fontSize: "20px",
+    fontWeight: 800,
+    color: "#0f172a",
+  },
+  scoreBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "999px",
+    border: "1px solid #bfdbfe",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    fontSize: "13px",
+    fontWeight: 800,
+    padding: "6px 12px",
+  },
+  feedbackPanel: {
+    border: "1px solid #e2e8f0",
+    background: "#ffffff",
+    borderRadius: "16px",
+    padding: "12px 14px",
+    display: "grid",
+    gap: "8px",
+  },
+  feedbackPanelLabel: {
+    fontSize: "12px",
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.08em",
+    fontWeight: 800,
+    color: "#64748b",
+  },
+  feedbackPanelText: {
+    fontSize: "16px",
+    lineHeight: 1.5,
+    color: "#1e293b",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "break-word" as const,
+  },
+  feedbackHighlight: {
+    border: "1px solid #dbeafe",
+    background: "#eff6ff",
+    borderRadius: "14px",
+    padding: "12px",
   },
   cardTitle: {
     fontSize: "13px",
@@ -596,6 +658,7 @@ export default function StudentView() {
   const [recordingMimeType, setRecordingMimeType] = useState("");
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pulseVisible, setPulseVisible] = useState(true);
+  const [showFullTranscript, setShowFullTranscript] = useState(false);
   const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState("");
   const [videoMimeType, setVideoMimeType] = useState("");
@@ -959,6 +1022,10 @@ export default function StudentView() {
     setTextResponse("");
   }, [submissionForActivePrompt?.id, submissionForActivePrompt?.response_mode, submissionForActivePrompt?.text_response]);
 
+  useEffect(() => {
+    setShowFullTranscript(false);
+  }, [submissionForActivePrompt?.id]);
+
   async function startRecording() {
     setErrorMessage("");
     setStatusMessage("");
@@ -1025,7 +1092,7 @@ export default function StudentView() {
         const localUrl = URL.createObjectURL(blob);
         setRecordedBlob(blob);
         setRecordedAudioUrl(localUrl);
-        setStatusMessage("Recording ready ✅");
+        setStatusMessage("Ready to submit");
         setErrorMessage("");
         stopTracks();
       };
@@ -1440,9 +1507,12 @@ export default function StudentView() {
     }
   }
 
-  const micLabel = isRecording ? "Recording..." : "Start recording";
+  const micLabel = isRecording ? "Stop" : "Start recording";
   const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
+  const latestTranscript = submissionForActivePrompt?.text_response || submissionForActivePrompt?.transcript || "";
+  const shouldClampTranscript = latestTranscript.length > 280;
+  const visibleTranscript = showFullTranscript || !shouldClampTranscript ? latestTranscript : `${latestTranscript.slice(0, 280)}...`;
   const hasVisiblePrompts = assignedPrompts.length > 0;
 
   function discardUnsubmittedRecording() {
@@ -1679,12 +1749,12 @@ export default function StudentView() {
               opacity: isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? 0.55 : 1,
               cursor: isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? "not-allowed" : "pointer",
               boxShadow: isRecording
-                ? `0 0 0 10px rgba(239, 68, 68, ${pulseVisible ? 0.14 : 0.06}), 0 18px 36px rgba(99, 102, 241, 0.24)`
+                ? `0 0 0 10px rgba(99, 102, 241, ${pulseVisible ? 0.22 : 0.08}), 0 0 0 18px rgba(59, 130, 246, ${pulseVisible ? 0.12 : 0.05}), 0 18px 36px rgba(99, 102, 241, 0.24)`
                 : styles.micButton.boxShadow,
               transition: "box-shadow 300ms ease, transform 120ms ease",
             }}
           >
-            {!isRecording ? <span style={styles.micEmoji}>🎤</span> : null}
+            <span style={styles.micEmoji}>{isRecording ? "⏹" : "🎤"}</span>
             <span style={styles.micButtonLabel}>{micLabel}</span>
           </button>
         )}
@@ -1693,9 +1763,9 @@ export default function StudentView() {
           <div style={styles.recordingAlert}>
             <div style={styles.recordingAlertHeader}>
               <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.3 }} />
-              <span>Recording now • {recordingSeconds}s</span>
+              <span>Recording... {recordingSeconds}s</span>
             </div>
-            <div style={styles.recordingHelper}>Tap stop when you finish</div>
+            <div style={styles.recordingHelper}>Tap the button again to stop</div>
           </div>
         ) : null}
 
@@ -1734,6 +1804,12 @@ export default function StudentView() {
           </div>
         ) : null}
 
+        {!hasSubmittedActivePrompt && !isRecording && !isVideoAssignment && !isExternalAssignment && !isTextAssignment && recordedBlob ? (
+          <div style={{ ...styles.recordingAlert, marginTop: "8px" }}>
+            <div style={{ ...styles.recordingAlertHeader, fontSize: "20px" }}>Ready to submit</div>
+          </div>
+        ) : null}
+
         {!isVideoAssignment && !isExternalAssignment && !isTextAssignment && recordedBlob ? <button
           type="button"
           onClick={() => void submitRecording()}
@@ -1763,39 +1839,72 @@ export default function StudentView() {
         {videoStatusMessage ? <div style={{ ...styles.message, color: "#4338ca", marginTop: "10px" }}>{videoStatusMessage}</div> : null}
         {videoErrorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{videoErrorMessage}</div> : null}
 
-        <div style={styles.card}>
-          <div style={styles.cardTitle}>Your latest feedback</div>
+        <div style={styles.feedbackCard}>
           {submissionForActivePrompt ? (
             <>
+              <div style={styles.feedbackHeader}>
+                <div style={styles.feedbackTitle}>Your feedback</div>
+                {primaryFeedbackScore !== null && primaryFeedbackScore !== undefined ? (
+                  <div style={styles.scoreBadge}>Score: {primaryFeedbackScore}/5</div>
+                ) : null}
+              </div>
+
               {isExternalAssignment ? (
-                <div style={styles.infoText}>
-                  <span style={styles.strong}>Completion:</span> {submissionForActivePrompt.completion_marked_at ? `Marked complete on ${formatDate(submissionForActivePrompt.completion_marked_at)}` : "Completed"}
+                <div style={styles.feedbackPanel}>
+                  <div style={styles.feedbackPanelLabel}>Completion</div>
+                  <div style={styles.feedbackPanelText}>
+                    {submissionForActivePrompt.completion_marked_at
+                      ? `Marked complete on ${formatDate(submissionForActivePrompt.completion_marked_at)}`
+                      : "Completed"}
+                  </div>
                 </div>
               ) : (
-                <div style={styles.infoText}>
-                  <span style={styles.strong}>{isTextAssignment ? "Response:" : "Transcript:"}</span> {submissionForActivePrompt.text_response || submissionForActivePrompt.transcript || "—"}
+                <div style={styles.feedbackPanel}>
+                  <div style={styles.feedbackPanelLabel}>Transcript</div>
+                  <div style={styles.feedbackPanelText}>{visibleTranscript || "—"}</div>
+                  {shouldClampTranscript ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowFullTranscript((current) => !current)}
+                      style={{ ...styles.secondaryButton, minHeight: "40px", width: "fit-content", fontSize: "14px" }}
+                    >
+                      {showFullTranscript ? "Show less" : "Show more"}
+                    </button>
+                  ) : null}
                 </div>
               )}
-              <div style={styles.infoText}>
-                <span style={styles.strong}>Score:</span> {primaryFeedbackScore ?? "—"}
+
+              <div style={styles.feedbackPanel}>
+                <div style={styles.feedbackPanelLabel}>Feedback</div>
+                <div style={styles.feedbackHighlight}>
+                  <div style={styles.feedbackPanelText}>{primaryFeedbackComment || "No written feedback yet."}</div>
+                </div>
               </div>
-              <div style={styles.infoText}>
-                <span style={styles.strong}>Comment:</span> {primaryFeedbackComment || "—"}
+
+              <div style={styles.feedbackPanel}>
+                <div style={styles.feedbackPanelLabel}>Teacher audio feedback</div>
+                {teacherAudioUrl ? (
+                  <ReliableAudioPlayer src={teacherAudioUrl} style={{ width: "100%" }} />
+                ) : (
+                  <div style={{ ...styles.feedbackPanelText, color: "#64748b" }}>No teacher audio feedback yet</div>
+                )}
               </div>
-              <div style={{ ...styles.cardTitle, marginTop: "16px" }}>Teacher audio feedback</div>
-              {teacherAudioUrl ? (
-                <ReliableAudioPlayer src={teacherAudioUrl} style={{ width: "100%" }} />
-              ) : (
-                <div style={styles.infoText}>No teacher audio yet</div>
-              )}
+
               {submissionForActivePrompt.created_at ? (
-                <div style={{ ...styles.infoText, color: "#64748b", marginTop: "12px" }}>
+                <div style={{ fontSize: "13px", color: "#94a3b8" }}>
                   {formatDate(submissionForActivePrompt.created_at)}
                 </div>
               ) : null}
             </>
           ) : (
-            <div style={styles.infoText}>No submission yet.</div>
+            <>
+              <div style={styles.feedbackHeader}>
+                <div style={styles.feedbackTitle}>Your feedback</div>
+              </div>
+              <div style={{ ...styles.feedbackPanelText, color: "#64748b" }}>
+                No submission yet. Record your answer to get feedback.
+              </div>
+            </>
           )}
         </div>
           </>
