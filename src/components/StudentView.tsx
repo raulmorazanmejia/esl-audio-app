@@ -60,8 +60,21 @@ type AnalyzeResponse = {
   transcript?: string | null;
   score?: number | null;
   comment?: string | null;
+  flagged?: boolean;
   error?: string;
 };
+
+const MAX_AUDIO_RECORDING_SECONDS = 5 * 60;
+
+function formatRecordingTime(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = Math.max(0, totalSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
 
 const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments!inner(class_name, is_visible)";
 const SUBMISSION_SELECT =
@@ -657,6 +670,7 @@ export default function StudentView() {
   const [recordedAudioUrl, setRecordedAudioUrl] = useState("");
   const [recordingMimeType, setRecordingMimeType] = useState("");
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordedDurationSeconds, setRecordedDurationSeconds] = useState(0);
   const [pulseVisible, setPulseVisible] = useState(true);
   const [showFullTranscript, setShowFullTranscript] = useState(false);
   const [recordedVideoBlob, setRecordedVideoBlob] = useState<Blob | null>(null);
@@ -667,6 +681,8 @@ export default function StudentView() {
   const [installPromptReady, setInstallPromptReady] = useState(false);
   const [isCodeFieldFocused, setIsCodeFieldFocused] = useState(false);
   const deferredInstallPromptRef = useRef<any>(null);
+  const recordingSecondsRef = useRef(0);
+  const autoStoppedAtLimitRef = useRef(false);
   const isIosDevice = useMemo(() => {
     if (typeof navigator === "undefined") return false;
     return /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -812,6 +828,10 @@ export default function StudentView() {
   }, [rosterStudent, isVideoAssignment, hasSubmittedActivePrompt, stopVideoTracks]);
 
   useEffect(() => {
+    recordingSecondsRef.current = recordingSeconds;
+  }, [recordingSeconds]);
+
+  useEffect(() => {
     if (!isRecording) {
       setRecordingSeconds(0);
       setPulseVisible(true);
@@ -831,6 +851,12 @@ export default function StudentView() {
       window.clearInterval(pulse);
     };
   }, [isRecording]);
+
+  useEffect(() => {
+    if (!isRecording || recordingSeconds < MAX_AUDIO_RECORDING_SECONDS) return;
+    autoStoppedAtLimitRef.current = true;
+    stopRecording();
+  }, [isRecording, recordingSeconds]);
 
   async function fetchAssignedPrompts(classNameValue: string) {
     const className = classNameValue.trim();
@@ -1066,6 +1092,8 @@ export default function StudentView() {
 
       recorder.onstop = () => {
         const finalType = recorder.mimeType || mimeType || "audio/mp4";
+        const finalDurationSeconds = Math.min(recordingSecondsRef.current, MAX_AUDIO_RECORDING_SECONDS);
+        setRecordedDurationSeconds(finalDurationSeconds);
 
         if (!chunksRef.current.length) {
           setRecordedBlob(null);
@@ -1092,12 +1120,19 @@ export default function StudentView() {
         const localUrl = URL.createObjectURL(blob);
         setRecordedBlob(blob);
         setRecordedAudioUrl(localUrl);
-        setStatusMessage("Ready to submit");
+        if (autoStoppedAtLimitRef.current) {
+          setStatusMessage("Recording stopped at the 5-minute limit.");
+        } else {
+          setStatusMessage("Ready to submit");
+        }
+        autoStoppedAtLimitRef.current = false;
         setErrorMessage("");
         stopTracks();
       };
 
       recorder.start();
+      autoStoppedAtLimitRef.current = false;
+      setRecordedDurationSeconds(0);
       setRecordedBlob(null);
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
       setRecordedAudioUrl("");
@@ -1174,6 +1209,11 @@ export default function StudentView() {
       return;
     }
 
+    if (recordedDurationSeconds > MAX_AUDIO_RECORDING_SECONDS) {
+      setErrorMessage("Recordings must be 5 minutes or shorter. Please record again.");
+      return;
+    }
+
     const existingSubmission = await findSubmissionForActivePrompt(code, activePrompt?.id ?? "", promptText);
     if (existingSubmission) {
       setRecordedBlob(null);
@@ -1219,7 +1259,7 @@ export default function StudentView() {
         prompt_text: promptText,
         audio_path: filePath,
         audio_url: publicUrl,
-        status: "submitted",
+        status: ai.flagged ? "needs_review" : "submitted",
         transcript: ai.transcript ?? null,
         ai_score: ai.score ?? null,
         ai_comment: ai.comment ?? null,
@@ -1520,8 +1560,14 @@ export default function StudentView() {
     if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
     setRecordedAudioUrl("");
     setRecordingMimeType("");
-    setStatusMessage("Recording discarded. You can record again.");
+    setRecordedDurationSeconds(0);
+    setStatusMessage("");
     setErrorMessage("");
+  }
+
+  async function recordAgain() {
+    discardUnsubmittedRecording();
+    await startRecording();
   }
 
   return (
@@ -1763,7 +1809,9 @@ export default function StudentView() {
           <div style={styles.recordingAlert}>
             <div style={styles.recordingAlertHeader}>
               <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.3 }} />
-              <span>Recording... {recordingSeconds}s</span>
+              <span>
+                Recording... {formatRecordingTime(recordingSeconds)} / {formatRecordingTime(MAX_AUDIO_RECORDING_SECONDS)}
+              </span>
             </div>
             <div style={styles.recordingHelper}>Tap the button again to stop</div>
           </div>
@@ -1776,7 +1824,7 @@ export default function StudentView() {
             <div style={{ ...styles.helperText, color: "#4338ca", marginTop: "12px" }}>Sounds good? Submit when ready.</div>
             <button
               type="button"
-              onClick={discardUnsubmittedRecording}
+              onClick={() => void recordAgain()}
               disabled={isRecording || isSubmitting || hasSubmittedActivePrompt || !activePrompt}
               style={{
                 ...styles.submitButton,

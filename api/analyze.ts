@@ -1,5 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+const SAFE_INAPPROPRIATE_MESSAGE =
+  "This response could not be accepted because it contains inappropriate language. Please record again using classroom-appropriate English.";
+const TEACHER_FLAG_MARKER = "Flagged for inappropriate language.";
+
 function guessAudioMetaFromUrl(audioUrl: string) {
   const lower = audioUrl.toLowerCase();
 
@@ -20,6 +24,28 @@ function guessAudioMetaFromUrl(audioUrl: string) {
   }
 
   return { mimeType: "audio/webm", fileName: "student-audio.webm" };
+}
+
+function isClearlyInappropriate(moderationResult: any): boolean {
+  const categories = moderationResult?.categories || {};
+  const categoryScores = moderationResult?.category_scores || {};
+
+  const severeCategoryKeys = [
+    "hate",
+    "hate/threatening",
+    "harassment",
+    "harassment/threatening",
+    "sexual",
+    "sexual/minors",
+    "violence",
+    "violence/graphic",
+  ];
+
+  return severeCategoryKeys.some((key) => {
+    const flagged = categories[key] === true;
+    const score = typeof categoryScores[key] === "number" ? categoryScores[key] : 0;
+    return flagged && score >= 0.5;
+  });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -106,6 +132,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    let isFlagged = false;
+    try {
+      const moderationRes = await fetch("https://api.openai.com/v1/moderations", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "omni-moderation-latest",
+          input: transcript,
+        }),
+      });
+      const moderationJson = await moderationRes.json();
+
+      if (!moderationRes.ok) {
+        console.error("MODERATION PROVIDER ERROR:", {
+          status: moderationRes.status,
+          statusText: moderationRes.statusText,
+        });
+      } else {
+        const moderationResult = moderationJson?.results?.[0];
+        isFlagged = isClearlyInappropriate(moderationResult);
+      }
+    } catch (moderationErr) {
+      console.error("MODERATION ERROR:", moderationErr);
+    }
+
+    if (isFlagged) {
+      return res.status(200).json({
+        transcript,
+        score: 0,
+        comment: `${TEACHER_FLAG_MARKER} ${SAFE_INAPPROPRIATE_MESSAGE}`,
+        flagged: true,
+      });
+    }
+
     const userContent = finalPromptImageUrl
       ? [
           {
@@ -174,6 +237,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       transcript,
       score,
       comment,
+      flagged: false,
     });
   } catch (err) {
     console.error("ANALYZE ERROR:", err);
