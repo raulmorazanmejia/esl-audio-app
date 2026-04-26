@@ -1250,6 +1250,15 @@ export default function TeacherDashboard() {
       setPromptError(error.message);
       return;
     }
+    if (!shouldAssign) {
+      setPrompts((prev) => prev.map((row) => {
+        if (row.id !== prompt.id) return row;
+        return {
+          ...row,
+          prompt_assignments: (row.prompt_assignments ?? []).filter((assignment) => assignment.class_name.trim() !== trimmedClassName),
+        };
+      }));
+    }
     setPromptSuccess(
       shouldAssign
         ? `Assigned "${prompt.prompt_text ?? "Prompt"}" to ${trimmedClassName}. It is now visible to students by default.`
@@ -1287,6 +1296,15 @@ export default function TeacherDashboard() {
       return;
     }
 
+    setPrompts((prev) => prev.map((row) => {
+      if (row.id !== prompt.id) return row;
+      return {
+        ...row,
+        prompt_assignments: (row.prompt_assignments ?? []).filter((existingAssignment) => (
+          existingAssignment.class_name.trim() !== normalizedClassName
+        )),
+      };
+    }));
     setPromptSuccess(`Removed "${prompt.prompt_text ?? "Prompt"}" from ${normalizedClassName}.`);
     setRemovingPromptFromClassById((prev) => ({ ...prev, [removeKey]: false }));
     await fetchPrompts();
