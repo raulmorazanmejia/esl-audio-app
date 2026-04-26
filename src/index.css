@@ -140,3 +140,39 @@ button, input { font: inherit; }
 .student-assignment-card:active {
   transform: translateY(0) scale(0.995);
 }
+
+@media (max-width: 640px) {
+  .student-entry-page {
+    padding: 12px !important;
+  }
+
+  .student-entry-shell {
+    padding: 16px !important;
+    border-radius: 24px !important;
+  }
+
+  .student-entry-hero {
+    margin-bottom: 10px !important;
+  }
+
+  .student-entry-title {
+    margin-bottom: 4px !important;
+    font-size: clamp(24px, 8vw, 30px) !important;
+  }
+
+  .student-entry-subtitle {
+    margin-bottom: 10px !important;
+    font-size: 15px !important;
+  }
+
+  .student-entry-input {
+    min-height: 60px !important;
+    font-size: clamp(18px, 5.5vw, 22px) !important;
+  }
+
+  .student-entry-continue {
+    margin-top: 10px !important;
+    min-height: 62px !important;
+    font-size: 20px !important;
+  }
+}
