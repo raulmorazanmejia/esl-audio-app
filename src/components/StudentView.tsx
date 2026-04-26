@@ -104,49 +104,81 @@ const styles = {
   },
   shell: {
     width: "100%",
-    maxWidth: "760px",
+    maxWidth: "700px",
     margin: "0 auto",
     background: "#ffffff",
-    borderRadius: "34px",
+    borderRadius: "30px",
     border: "1px solid #e2e8f0",
-    boxShadow: "0 18px 42px rgba(15, 23, 42, 0.08)",
-    padding: "28px",
+    boxShadow: "0 24px 56px rgba(15, 23, 42, 0.1)",
+    padding: "24px",
+  },
+  heroMediaFrame: {
+    position: "relative" as const,
+    borderRadius: "24px",
+    overflow: "hidden" as const,
+    border: "1px solid #e2e8f0",
+    boxShadow: "0 14px 30px rgba(15, 23, 42, 0.12)",
+    marginBottom: "18px",
   },
   heroImage: {
     width: "100%",
-    maxHeight: "240px",
-    borderRadius: "22px",
-    border: "1px solid #dbe3f0",
+    maxHeight: "250px",
     objectFit: "cover" as const,
-    boxShadow: "0 10px 24px rgba(15, 23, 42, 0.08)",
-    marginBottom: "16px",
+    display: "block",
+  },
+  heroImageOverlay: {
+    position: "absolute" as const,
+    inset: 0,
+    background: "linear-gradient(180deg, rgba(15, 23, 42, 0.08) 0%, rgba(15, 23, 42, 0.45) 100%)",
   },
   heroTitle: {
     textAlign: "center" as const,
-    fontSize: "clamp(26px, 6.4vw, 34px)",
-    fontWeight: 900,
+    fontSize: "clamp(28px, 6vw, 36px)",
+    fontWeight: 800,
     color: "#0f172a",
     margin: "0 0 8px",
     lineHeight: 1.15,
   },
   heroSubtitle: {
     textAlign: "center" as const,
-    fontSize: "15px",
+    fontSize: "16px",
     color: "#64748b",
-    margin: "0 0 16px",
+    margin: "0 0 18px",
+  },
+  chipRow: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: "8px",
+    justifyContent: "center",
+    margin: "0 0 18px",
+  },
+  trustChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: "999px",
+    border: "1px solid #dbe3f0",
+    background: "#f8fafc",
+    padding: "6px 12px",
+    color: "#475569",
+    fontSize: "13px",
+    fontWeight: 700,
   },
   field: {
     width: "100%",
-    minHeight: "74px",
-    borderRadius: "22px",
-    border: "1px solid #dbe3f0",
-    background: "#f8fafc",
+    minHeight: "68px",
+    borderRadius: "18px",
+    border: "1px solid #cfd8e3",
+    background: "#ffffff",
     padding: "0 16px",
     boxSizing: "border-box" as const,
-    fontSize: "clamp(16px, 4.2vw, 20px)",
-    color: "#334155",
+    fontSize: "clamp(18px, 4.8vw, 24px)",
+    color: "#0f172a",
     outline: "none",
     textAlign: "center" as const,
+    letterSpacing: "0.08em",
+    fontWeight: 700,
+    textTransform: "uppercase" as const,
+    transition: "border-color 120ms ease, box-shadow 120ms ease",
   },
   actionButton: {
     width: "100%",
@@ -377,22 +409,22 @@ const styles = {
   },
   installHelpCard: {
     marginTop: "14px",
-    borderRadius: "16px",
-    border: "1px solid #c7d2fe",
-    background: "#eef2ff",
-    padding: "14px",
+    borderRadius: "14px",
+    border: "1px solid #e2e8f0",
+    background: "#f8fafc",
+    padding: "12px",
     display: "grid",
-    gap: "8px",
+    gap: "6px",
   },
   installHelpTitle: {
-    fontSize: "14px",
-    fontWeight: 800,
-    color: "#312e81",
+    fontSize: "13px",
+    fontWeight: 700,
+    color: "#334155",
     textAlign: "center" as const,
   },
   installHelpText: {
-    fontSize: "13px",
-    color: "#4338ca",
+    fontSize: "12px",
+    color: "#64748b",
     textAlign: "center" as const,
     lineHeight: 1.4,
   },
@@ -545,6 +577,7 @@ export default function StudentView() {
   const [textResponse, setTextResponse] = useState("");
   const [studentWelcomeImageUrl, setStudentWelcomeImageUrl] = useState<string | null>(null);
   const [installPromptReady, setInstallPromptReady] = useState(false);
+  const [isCodeFieldFocused, setIsCodeFieldFocused] = useState(false);
   const deferredInstallPromptRef = useRef<any>(null);
   const isIosDevice = useMemo(() => {
     if (typeof navigator === "undefined") return false;
@@ -1401,9 +1434,17 @@ export default function StudentView() {
       <div style={styles.shell}>
         {!rosterStudent ? (
           <>
-            <img src={welcomeHeroImageUrl} alt="Welcome to ESL activity hub" style={styles.heroImage} />
-            <div style={styles.heroTitle}>Welcome</div>
-            <div style={styles.heroSubtitle}>Enter your class code to open your assignments.</div>
+            <div style={styles.heroMediaFrame}>
+              <img src={welcomeHeroImageUrl} alt="Welcome to ESL activity hub" style={styles.heroImage} />
+              <div style={styles.heroImageOverlay} />
+            </div>
+            <div style={styles.heroTitle}>Join your activity</div>
+            <div style={styles.heroSubtitle}>Enter your class code to see your assignments.</div>
+            <div style={styles.chipRow}>
+              <div style={styles.trustChip}>No password</div>
+              <div style={styles.trustChip}>Works on phone</div>
+              <div style={styles.trustChip}>Teacher feedback</div>
+            </div>
             <input
               value={studentCode}
               onChange={(e) => {
@@ -1417,8 +1458,18 @@ export default function StudentView() {
                 setVideoStatusMessage("");
                 setVideoErrorMessage("");
               }}
+              onFocus={() => setIsCodeFieldFocused(true)}
+              onBlur={() => setIsCodeFieldFocused(false)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void lookupStudent();
+              }}
               placeholder="Enter your code (ex: R10)"
-              style={styles.field}
+              style={{
+                ...styles.field,
+                borderColor: isCodeFieldFocused ? "#4f46e5" : styles.field.border,
+                boxShadow: isCodeFieldFocused ? "0 0 0 4px rgba(79, 70, 229, 0.16)" : "none",
+              }}
+              autoCapitalize="characters"
             />
 
             <div style={styles.helperText}>Use the code your teacher gave you.</div>
@@ -1426,7 +1477,16 @@ export default function StudentView() {
             <div style={styles.installHelpCard}>
               <div style={styles.installHelpTitle}>Install on your phone for easier access</div>
               {installPromptReady ? (
-                <button type="button" onClick={() => void triggerInstall()} style={styles.primaryButton}>
+                <button
+                  type="button"
+                  onClick={() => void triggerInstall()}
+                  style={{
+                    ...styles.secondaryButton,
+                    minHeight: "42px",
+                    width: "100%",
+                    fontSize: "14px",
+                  }}
+                >
                   Install ESL Audio App
                 </button>
               ) : (
