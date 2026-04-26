@@ -159,24 +159,6 @@ const styles = {
     color: "#64748b",
     margin: "0 0 18px",
   },
-  chipRow: {
-    display: "flex",
-    flexWrap: "wrap" as const,
-    gap: "8px",
-    justifyContent: "center",
-    margin: "0 0 18px",
-  },
-  trustChip: {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: "999px",
-    border: "1px solid #dbe3f0",
-    background: "#f8fafc",
-    padding: "6px 12px",
-    color: "#475569",
-    fontSize: "13px",
-    fontWeight: 700,
-  },
   field: {
     width: "100%",
     minHeight: "68px",
@@ -189,9 +171,9 @@ const styles = {
     color: "#0f172a",
     outline: "none",
     textAlign: "center" as const,
-    letterSpacing: "0.04em",
+    letterSpacing: "0.01em",
     fontWeight: 700,
-    textTransform: "uppercase" as const,
+    textTransform: "none" as const,
     transition: "border-color 120ms ease, box-shadow 120ms ease",
   },
   actionButton: {
@@ -433,39 +415,33 @@ const styles = {
     color: "#64748b",
     marginTop: "8px",
   },
-  installHelpCard: {
-    marginTop: "14px",
-    borderRadius: "14px",
-    border: "1px solid #e2e8f0",
-    background: "#f8fafc",
-    padding: "10px",
-    display: "grid",
-    gap: "6px",
-  },
-  installHelpTitle: {
-    fontSize: "12px",
-    fontWeight: 600,
-    color: "#334155",
-    textAlign: "center" as const,
+  installHelpRow: {
+    marginTop: "12px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    flexWrap: "wrap" as const,
   },
   installHelpText: {
-    fontSize: "12px",
-    color: "#64748b",
+    fontSize: "14px",
+    color: "#6366f1",
     textAlign: "center" as const,
     lineHeight: 1.4,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    fontWeight: 600,
   },
-  installHelpAction: {
-    ...({
-      minHeight: "38px",
-      borderRadius: "12px",
-      border: "1px solid #dbe3f0",
-      background: "#ffffff",
-      color: "#475569",
-      fontSize: "13px",
-      fontWeight: 700,
-      width: "100%",
-      cursor: "pointer",
-    } as const),
+  installHelpLink: {
+    border: "none",
+    background: "transparent",
+    color: "#5b21b6",
+    fontSize: "14px",
+    fontWeight: 700,
+    textDecoration: "underline",
+    cursor: "pointer",
+    padding: 0,
   },
   card: {
     marginTop: "28px",
@@ -800,6 +776,17 @@ export default function StudentView() {
     deferredInstallPromptRef.current = null;
     setInstallPromptReady(false);
   }, []);
+
+  const showInstallHelp = useCallback(async () => {
+    if (installPromptReady) {
+      await triggerInstall();
+      return;
+    }
+    const installMessage = isIosDevice
+      ? "On iPhone/iPad: tap Share, then Add to Home Screen."
+      : "Open your browser menu and choose Install app or Add to Home Screen.";
+    setStatusMessage(installMessage);
+  }, [installPromptReady, isIosDevice, triggerInstall]);
 
   useEffect(() => {
     return () => {
@@ -1581,11 +1568,6 @@ export default function StudentView() {
             </div>
             <div style={styles.heroTitle}>Join your activity</div>
             <div style={styles.heroSubtitle}>Enter your class code to see your assignments.</div>
-            <div style={styles.chipRow}>
-              <div style={styles.trustChip}>No password</div>
-              <div style={styles.trustChip}>Works on phone</div>
-              <div style={styles.trustChip}>Teacher feedback</div>
-            </div>
             <input
               value={studentCode}
               onChange={(e) => {
@@ -1613,31 +1595,18 @@ export default function StudentView() {
               autoCapitalize="characters"
             />
 
-            <div style={styles.helperText}>Use the code your teacher gave you.</div>
-
-            <div style={styles.installHelpCard}>
-              <div style={styles.installHelpTitle}>Install on your phone for faster access</div>
-              {installPromptReady ? (
-                <button
-                  type="button"
-                  onClick={() => void triggerInstall()}
-                  style={styles.installHelpAction}
-                >
-                  Install app
-                </button>
-              ) : (
-                <div style={styles.installHelpText}>
-                  {isIosDevice
-                    ? "On iPhone/iPad: tap Share, then Add to Home Screen."
-                    : "If your browser supports it, the install button will appear here automatically."}
-                </div>
-              )}
-              <div style={{ ...styles.installHelpText, textDecoration: "underline" }}>How to install</div>
-            </div>
-
             <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "18px" }} className="student-primary-btn">
               {isFinding ? "Checking..." : "Continue"}
             </button>
+            <div style={styles.installHelpRow}>
+              <div style={styles.installHelpText}>
+                <span aria-hidden="true">✨</span>
+                <span>Want faster access? Add ESL Hub to your phone.</span>
+              </div>
+              <button type="button" onClick={() => void showInstallHelp()} style={styles.installHelpLink}>
+                How to install
+              </button>
+            </div>
             {errorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{errorMessage}</div> : null}
           </>
         ) : null}
