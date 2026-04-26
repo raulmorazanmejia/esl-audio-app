@@ -446,6 +446,24 @@ const styles = {
     alignItems: "center",
     gap: "6px",
   },
+  iosInstallPanel: {
+    marginTop: "10px",
+    border: "1px solid #d8b4fe",
+    borderRadius: "14px",
+    background: "#faf5ff",
+    padding: "10px 12px",
+    color: "#581c87",
+    fontSize: "13px",
+    lineHeight: 1.5,
+    maxWidth: "420px",
+    marginLeft: "auto",
+    marginRight: "auto",
+  },
+  iosInstallPanelTitle: {
+    fontSize: "13px",
+    fontWeight: 800,
+    marginBottom: "4px",
+  },
   card: {
     marginTop: "28px",
     borderRadius: "24px",
@@ -658,6 +676,8 @@ export default function StudentView() {
   const [textResponse, setTextResponse] = useState("");
   const [studentWelcomeImageUrl, setStudentWelcomeImageUrl] = useState<string | null>(null);
   const [installPromptReady, setInstallPromptReady] = useState(false);
+  const [isStandaloneMode, setIsStandaloneMode] = useState(false);
+  const [showIosInstallPanel, setShowIosInstallPanel] = useState(false);
   const [isCodeFieldFocused, setIsCodeFieldFocused] = useState(false);
   const deferredInstallPromptRef = useRef<any>(null);
   const recordingSecondsRef = useRef(0);
@@ -666,6 +686,7 @@ export default function StudentView() {
     if (typeof navigator === "undefined") return false;
     return /iphone|ipad|ipod/i.test(navigator.userAgent);
   }, []);
+  const isAppInstalled = isStandaloneMode;
 
   const activePrompt = useMemo(() => {
     if (!selectedPromptId) return null;
@@ -767,9 +788,28 @@ export default function StudentView() {
       setInstallPromptReady(true);
     };
 
+    const syncStandaloneMode = () => {
+      const standaloneByNavigator = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+      const standaloneByDisplayMode = window.matchMedia("(display-mode: standalone)").matches;
+      setIsStandaloneMode(standaloneByNavigator || standaloneByDisplayMode);
+    };
+
+    const onAppInstalled = () => {
+      setInstallPromptReady(false);
+      setShowIosInstallPanel(false);
+      syncStandaloneMode();
+    };
+
+    syncStandaloneMode();
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onAppInstalled);
+    const standaloneMedia = window.matchMedia("(display-mode: standalone)");
+    standaloneMedia.addEventListener("change", syncStandaloneMode);
+
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onAppInstalled);
+      standaloneMedia.removeEventListener("change", syncStandaloneMode);
     };
   }, []);
 
@@ -781,15 +821,18 @@ export default function StudentView() {
   }, []);
 
   const showInstallHelp = useCallback(async () => {
+    if (isAppInstalled) return;
+    if (isIosDevice) {
+      setShowIosInstallPanel(true);
+      return;
+    }
     if (installPromptReady) {
       await triggerInstall();
       return;
     }
-    const installMessage = isIosDevice
-      ? "On iPhone/iPad: tap Share, then Add to Home Screen."
-      : "Open your browser menu and choose Install app or Add to Home Screen.";
+    const installMessage = "Open your browser menu and choose Install app or Add to Home Screen.";
     setStatusMessage(installMessage);
-  }, [installPromptReady, isIosDevice, triggerInstall]);
+  }, [installPromptReady, isAppInstalled, isIosDevice, triggerInstall]);
 
   useEffect(() => {
     return () => {
@@ -1602,16 +1645,28 @@ export default function StudentView() {
             <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "14px" }} className="student-primary-btn student-entry-continue">
               {isFinding ? "Checking..." : "Continue"}
             </button>
-            <div style={styles.installHelpRow}>
-              <div style={styles.installHelpText}>
-                <span aria-hidden="true">✨</span>
-                <span>Want faster access? Add ESL Hub to your phone.</span>
-              </div>
-              <button type="button" onClick={() => void showInstallHelp()} style={styles.installHelpLink}>
-                <span aria-hidden="true">📲</span>
-                <span>Get the app</span>
-              </button>
-            </div>
+            {!isAppInstalled ? (
+              <>
+                <div style={styles.installHelpRow}>
+                  <div style={styles.installHelpText}>
+                    <span aria-hidden="true">✨</span>
+                    <span>Want faster access? Add ESL Hub to your phone.</span>
+                  </div>
+                  <button type="button" onClick={() => void showInstallHelp()} style={styles.installHelpLink}>
+                    <span aria-hidden="true">{isIosDevice ? "⬆️" : "📲"}</span>
+                    <span>Get the app</span>
+                  </button>
+                </div>
+                {isIosDevice && showIosInstallPanel ? (
+                  <div style={styles.iosInstallPanel}>
+                    <div style={styles.iosInstallPanelTitle}>Install on iPhone</div>
+                    <div>1. Tap the Share button (square with arrow).</div>
+                    <div>2. Scroll down.</div>
+                    <div>3. Tap &quot;Add to Home Screen&quot;.</div>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
             {errorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{errorMessage}</div> : null}
           </>
         ) : null}
