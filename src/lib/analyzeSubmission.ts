@@ -1,3 +1,5 @@
+// Security: AI calls must remain server-only via /api/analyze.
+// Never call OpenAI directly from client code or use VITE_OPENAI_API_KEY.
 export async function analyzeSubmission(
   audioUrl: string,
   promptText: string,

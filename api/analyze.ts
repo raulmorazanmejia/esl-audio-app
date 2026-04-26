@@ -23,6 +23,17 @@ function guessAudioMetaFromUrl(audioUrl: string) {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // Security note: OPENAI_API_KEY must stay server-only in Vercel env vars.
+  // Never expose this key to browser bundles, React components, or client env vars (e.g. VITE_*).
+  const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
+
+  if (!openAiApiKey) {
+    console.error("ANALYZE CONFIG ERROR: Missing OPENAI_API_KEY");
+    return res.status(500).json({
+      error: "AI analysis is temporarily unavailable: server is missing OPENAI_API_KEY.",
+    });
+  }
+
   try {
     const {
       audioUrl,
@@ -67,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const transcriptionRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${openAiApiKey}`,
       },
       body: formData,
     });
@@ -76,9 +87,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log("TRANSCRIPTION JSON:", JSON.stringify(transcriptionJson, null, 2));
 
     if (!transcriptionRes.ok) {
-      return res.status(500).json({
-        error: "Transcription request failed",
-        details: transcriptionJson,
+      console.error("TRANSCRIPTION PROVIDER ERROR:", {
+        status: transcriptionRes.status,
+        statusText: transcriptionRes.statusText,
+      });
+      return res.status(502).json({
+        error: "AI transcription failed. Please try again in a moment.",
       });
     }
 
@@ -110,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const gradingRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${openAiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -135,9 +149,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log("GRADING JSON:", JSON.stringify(gradingJson, null, 2));
 
     if (!gradingRes.ok) {
-      return res.status(500).json({
-        error: "Grading request failed",
-        details: gradingJson,
+      console.error("GRADING PROVIDER ERROR:", {
+        status: gradingRes.status,
+        statusText: gradingRes.statusText,
+      });
+      return res.status(502).json({
+        error: "AI grading failed. Please try again in a moment.",
       });
     }
 
@@ -160,6 +177,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err) {
     console.error("ANALYZE ERROR:", err);
-    return res.status(500).json({ error: "failed" });
+    return res.status(500).json({
+      error: "AI analysis failed due to a server error.",
+    });
   }
 }
