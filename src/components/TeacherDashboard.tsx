@@ -1296,10 +1296,42 @@ export default function TeacherDashboard() {
       return;
     }
 
+    const { data: remainingAssignments, error: verifyError } = await supabase
+      .from("prompt_assignments")
+      .select("id")
+      .eq("prompt_id", prompt.id)
+      .eq("class_name", assignment.class_name);
+
+    if (verifyError) {
+      setPromptError(verifyError.message || `Could not verify removal from ${normalizedClassName}.`);
+      setRemovingPromptFromClassById((prev) => ({ ...prev, [removeKey]: false }));
+      return;
+    }
+    if ((remainingAssignments ?? []).length > 0) {
+      setPromptError(`Could not remove "${prompt.prompt_text ?? "Prompt"}" from ${normalizedClassName}. Please try again.`);
+      setRemovingPromptFromClassById((prev) => ({ ...prev, [removeKey]: false }));
+      return;
+    }
+
+    const hadLegacyClassMatch = (prompt.class_name?.trim() ?? "") === normalizedClassName;
+    if (hadLegacyClassMatch) {
+      const { error: clearLegacyClassError } = await supabase
+        .from("prompts")
+        .update({ class_name: null })
+        .eq("id", prompt.id)
+        .eq("class_name", assignment.class_name);
+      if (clearLegacyClassError) {
+        setPromptError(clearLegacyClassError.message || `Removed assignment row, but could not clear legacy class mapping for ${normalizedClassName}.`);
+        setRemovingPromptFromClassById((prev) => ({ ...prev, [removeKey]: false }));
+        return;
+      }
+    }
+
     setPrompts((prev) => prev.map((row) => {
       if (row.id !== prompt.id) return row;
       return {
         ...row,
+        class_name: (row.class_name?.trim() ?? "") === normalizedClassName ? null : row.class_name,
         prompt_assignments: (row.prompt_assignments ?? []).filter((existingAssignment) => (
           existingAssignment.class_name.trim() !== normalizedClassName
         )),
