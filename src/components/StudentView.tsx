@@ -433,6 +433,31 @@ const styles = {
     gap: "6px",
     fontWeight: 600,
   },
+  activityProgressWrap: {
+    marginTop: "10px",
+    marginBottom: "12px",
+  },
+  activityProgressLabel: {
+    fontSize: "12px",
+    fontWeight: 700,
+    color: "#4f46e5",
+    letterSpacing: "0.03em",
+    textTransform: "uppercase" as const,
+    marginBottom: "6px",
+  },
+  activityProgressTrack: {
+    width: "100%",
+    height: "6px",
+    borderRadius: "999px",
+    background: "#e0e7ff",
+    overflow: "hidden" as const,
+  },
+  activityProgressFill: {
+    width: "100%",
+    height: "100%",
+    borderRadius: "999px",
+    background: "linear-gradient(90deg, #6366f1 0%, #7c3aed 100%)",
+  },
   installHelpLink: {
     border: "1px solid #d8b4fe",
     borderRadius: "999px",
@@ -1726,6 +1751,12 @@ export default function StudentView() {
         </div>
 
         <div style={{ ...styles.sectionTitle, fontSize: "28px", marginTop: "10px", letterSpacing: "0.01em" }}>{activePrompt?.prompt_text || "Activity"}</div>
+        <div style={styles.activityProgressWrap}>
+          <div style={styles.activityProgressLabel}>Task 1 of 1</div>
+          <div style={styles.activityProgressTrack}>
+            <div style={styles.activityProgressFill} />
+          </div>
+        </div>
 
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
         <div style={styles.promptCard}>
@@ -1838,7 +1869,7 @@ export default function StudentView() {
           <div style={styles.recordingAlert}>
             <div style={styles.recordingAlertHeader}>
               <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.3 }} />
-              <span>
+              <span style={{ color: MAX_AUDIO_RECORDING_SECONDS - recordingSeconds <= 30 ? "#b45309" : "inherit" }}>
                 Recording... {formatRecordingTime(recordingSeconds)} / {formatRecordingTime(MAX_AUDIO_RECORDING_SECONDS)}
               </span>
             </div>
@@ -1876,14 +1907,17 @@ export default function StudentView() {
         {hasSubmittedActivePrompt ? (
           <div style={{ ...styles.recordingAlert, borderColor: "#4f46e5", background: "#eef2ff", color: "#312e81" }}>
             <div style={{ ...styles.recordingAlertHeader, fontSize: "22px" }}>
-              You already submitted this assignment. You can view your feedback below.
+              <span aria-hidden="true">✓</span>
+              <span>Submission received</span>
             </div>
+            <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#4338ca" }}>You can review your feedback below.</div>
           </div>
         ) : null}
 
         {!hasSubmittedActivePrompt && !isRecording && !isVideoAssignment && !isExternalAssignment && !isTextAssignment && recordedBlob ? (
           <div style={{ ...styles.recordingAlert, marginTop: "8px" }}>
             <div style={{ ...styles.recordingAlertHeader, fontSize: "20px" }}>Ready to submit</div>
+            <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#4f46e5" }}>Listen if you want, then submit.</div>
           </div>
         ) : null}
 
@@ -1925,7 +1959,6 @@ export default function StudentView() {
                   <div style={styles.scoreBadge}>Score: {primaryFeedbackScore}/5</div>
                 ) : null}
               </div>
-
               {isExternalAssignment ? (
                 <div style={styles.feedbackPanel}>
                   <div style={styles.feedbackPanelLabel}>Completion</div>
