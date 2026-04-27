@@ -862,27 +862,6 @@ export default function TeacherDashboard() {
     }).length;
   }, [submissions]);
 
-  const recentActivityItems = useMemo(() => {
-    return [...submissions]
-      .sort((a, b) => {
-        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
-        return bTime - aTime;
-      })
-      .slice(0, 6)
-      .map((submission) => {
-        const className = getSubmissionClassName(submission) || "Unknown class";
-        const student = submission.student_name || submission.student_code || "Student";
-        const prompt = submission.prompt_text || "Untitled activity";
-        const when = submission.created_at ? formatDate(submission.created_at) : "Unknown time";
-        return {
-          id: submission.id,
-          title: `${student} · ${prompt}`,
-          meta: `${className} · ${when}`,
-        };
-      });
-  }, [submissions, getSubmissionClassName]);
-
   const studentEntryUrl = useMemo(() => {
     if (typeof window === "undefined") return "/?mode=student";
     return `${window.location.origin}/?mode=student`;
@@ -1948,15 +1927,6 @@ export default function TeacherDashboard() {
                     </button>
                   </div>
                   <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>Use this link for student login or QR generation: {studentEntryUrl}</div>
-                </div>
-                <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#fff", padding: 12 }}>
-                  <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 8 }}>Recent activity</div>
-                  {recentActivityItems.length ? recentActivityItems.map((item) => (
-                    <div key={item.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: "10px 12px", background: "#f8fafc", marginBottom: 8 }}>
-                      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{item.title}</div>
-                      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{item.meta}</div>
-                    </div>
-                  )) : <div style={{ fontSize: 13, color: "#64748b" }}>No recent submissions yet.</div>}
                 </div>
               </section>
             ) : null}
