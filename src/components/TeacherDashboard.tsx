@@ -1964,9 +1964,6 @@ export default function TeacherDashboard() {
             {teacherScreen === "classes" && !selectedClassName ? (
           <TeacherClassesOverview
             classSummaries={classSummaries}
-            totalActivities={sortedPrompts.length}
-            submissionsNeedingReview={submissionsNeedingReview}
-            recentActivityItems={recentActivityItems}
             studentEntryUrl={studentEntryUrl}
             newClassName={newClassName}
             onNewClassNameChange={setNewClassName}
@@ -2080,49 +2077,37 @@ export default function TeacherDashboard() {
             ) : null}
 
             {teacherScreen === "activities" ? (
-          <TeacherAssignmentLibrary
-            totalPromptCount={sortedPrompts.length}
-            classNameOptions={classNameOptions}
-            unassignedPromptCount={unassignedPrompts.length}
-            onGoToClasses={() => setTeacherScreen("classes")}
-            promptPanelProps={{
-              mode: "library",
-              selectedClassName: "Assignment Library",
-              title: "Assignment library",
-              createPromptLabel: "Create assignments and activities, then assign/reassign to classes.",
-              newPrompt,
-              newSuggestedTime,
-              newAssignmentType,
-              newInstructions,
-              newExternalUrl,
-              setNewPrompt,
-              setNewSuggestedTime,
-              setNewAssignmentType: handleAssignmentTypeChange,
-              setNewInstructions,
-              setNewExternalUrl,
-              createClassName: "",
-              setCreateClassName: () => undefined,
-              newPromptImagePreviewUrl,
-              onPromptImageChange: handleNewPromptImageChange,
-              onClearPromptImage: handleClearNewPromptImage,
-              onSavePrompt: () => void handleSavePrompt(),
-              isSavingPrompt,
-              promptSuccess,
-              promptError,
-              filteredPrompts: sortedPrompts,
-              onTogglePromptAssignment: (prompt: PromptRow, className: string, shouldAssign: boolean) => void handleTogglePromptAssignment(prompt, className, shouldAssign),
-              onTogglePromptVisibility: (prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className),
-              onRemovePromptFromClass: (prompt: PromptRow, className: string) => void handleRemovePromptFromClass(prompt, className),
-              onDeletePrompt: (prompt: PromptRow) => void handleDeletePrompt(prompt),
-              savingPromptVisibilityById,
-              removingPromptFromClassById,
-              deletingPromptById,
-              onClearVisiblePromptsForSelectedClass: () => setPromptError("Use the prompt-level visibility controls in Assignment Library."),
-              classNameOptions,
-              showBulkHideButton: false,
-              emptyStateText: "No assignments exist in the assignment library yet.",
-            }}
-          />
+              <TeacherAssignmentLibrary
+                totalPromptCount={sortedPrompts.length}
+                classNameOptions={classNameOptions}
+                unassignedPromptCount={unassignedPrompts.length}
+                prompts={sortedPrompts}
+                newPrompt={newPrompt}
+                newSuggestedTime={newSuggestedTime}
+                newAssignmentType={newAssignmentType}
+                newInstructions={newInstructions}
+                newExternalUrl={newExternalUrl}
+                newPromptImagePreviewUrl={newPromptImagePreviewUrl}
+                setNewPrompt={setNewPrompt}
+                setNewSuggestedTime={setNewSuggestedTime}
+                setNewAssignmentType={handleAssignmentTypeChange}
+                setNewInstructions={setNewInstructions}
+                setNewExternalUrl={setNewExternalUrl}
+                onPromptImageChange={handleNewPromptImageChange}
+                onClearPromptImage={handleClearNewPromptImage}
+                onSavePrompt={() => void handleSavePrompt()}
+                isSavingPrompt={isSavingPrompt}
+                promptSuccess={promptSuccess}
+                promptError={promptError}
+                onTogglePromptAssignment={(prompt: PromptRow, className: string, shouldAssign: boolean) => void handleTogglePromptAssignment(prompt, className, shouldAssign)}
+                onTogglePromptVisibility={(prompt: PromptRow, className: string) => void handleTogglePromptVisibility(prompt, className)}
+                onRemovePromptFromClass={(prompt: PromptRow, className: string) => void handleRemovePromptFromClass(prompt, className)}
+                onDeletePrompt={(prompt: PromptRow) => void handleDeletePrompt(prompt)}
+                savingPromptVisibilityById={savingPromptVisibilityById}
+                removingPromptFromClassById={removingPromptFromClassById}
+                deletingPromptById={deletingPromptById}
+                onGoToClasses={() => setTeacherScreen("classes")}
+              />
             ) : null}
 
             {teacherScreen === "submissions" ? (
