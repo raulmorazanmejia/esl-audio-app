@@ -599,6 +599,36 @@ function extractStoragePathFromPublicUrl(publicUrl: string, bucket: string): str
   return publicUrl.slice(markerIndex + marker.length).split("?")[0];
 }
 
+async function saveAppSettingViaApi(key: string, value: string | null) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  if (!token) {
+    throw new Error("Teacher session expired. Please sign in again.");
+  }
+
+  const response = await fetch("/api/app-settings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ key, value }),
+  });
+
+  if (!response.ok) {
+    let message = "Could not save settings.";
+    try {
+      const payload = (await response.json()) as { error?: string };
+      if (payload.error) message = payload.error;
+    } catch {
+      // no-op
+    }
+    throw new Error(message);
+  }
+}
+
 export default function TeacherDashboard() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -643,6 +673,8 @@ export default function TeacherDashboard() {
   const [demoConfigError, setDemoConfigError] = useState("");
   const [demoConfigSuccess, setDemoConfigSuccess] = useState("");
   const [hasCopiedDemoLink, setHasCopiedDemoLink] = useState(false);
+  const [activeDemoEditId, setActiveDemoEditId] = useState<string | null>(null);
+  const [demoActivityImageById, setDemoActivityImageById] = useState<Record<string, File | null>>({});
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
@@ -775,10 +807,7 @@ export default function TeacherDashboard() {
     setDemoConfigError("");
     setDemoConfigSuccess("");
     try {
-      const { error } = await supabase
-        .from("app_settings")
-        .upsert({ key: DEMO_CONFIG_SETTING_KEY, value: JSON.stringify(nextConfig) }, { onConflict: "key" });
-      if (error) throw error;
+      await saveAppSettingViaApi(DEMO_CONFIG_SETTING_KEY, JSON.stringify(nextConfig));
       setDemoConfig(nextConfig);
       setDemoConfigSuccess(successMessage);
     } catch (error: any) {
@@ -1851,10 +1880,7 @@ export default function TeacherDashboard() {
         data: { publicUrl },
       } = supabase.storage.from(APP_ASSETS_BUCKET).getPublicUrl(filePath);
 
-      const { error: saveSettingError } = await supabase
-        .from("app_settings")
-        .upsert({ key: STUDENT_WELCOME_IMAGE_SETTING_KEY, value: publicUrl }, { onConflict: "key" });
-      if (saveSettingError) throw saveSettingError;
+      await saveAppSettingViaApi(STUDENT_WELCOME_IMAGE_SETTING_KEY, publicUrl);
 
       const previousPath = studentWelcomeImageUrl ? extractStoragePathFromPublicUrl(studentWelcomeImageUrl, APP_ASSETS_BUCKET) : "";
       if (previousPath && previousPath !== filePath) {
@@ -1878,8 +1904,7 @@ export default function TeacherDashboard() {
     setStudentWelcomeImageError("");
     setStudentWelcomeImageSuccess("");
     try {
-      const { error } = await supabase.from("app_settings").upsert({ key: STUDENT_WELCOME_IMAGE_SETTING_KEY, value: null }, { onConflict: "key" });
-      if (error) throw error;
+      await saveAppSettingViaApi(STUDENT_WELCOME_IMAGE_SETTING_KEY, null);
       const previousPath = studentWelcomeImageUrl ? extractStoragePathFromPublicUrl(studentWelcomeImageUrl, APP_ASSETS_BUCKET) : "";
       if (previousPath) {
         await supabase.storage.from(APP_ASSETS_BUCKET).remove([previousPath]);
@@ -1930,6 +1955,60 @@ export default function TeacherDashboard() {
 
   async function handleResetDemoDefaults() {
     await persistDemoConfig(DEFAULT_DEMO_CONFIG, "Demo settings reset to defaults.");
+  }
+
+  function handleDemoActivityImageFileChange(activityId: string, event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) {
+      setDemoActivityImageById((prev) => ({ ...prev, [activityId]: null }));
+      return;
+    }
+    if (!ACCEPTED_WELCOME_IMAGE_TYPES.has(file.type)) {
+      setDemoConfigError("Use JPG, PNG, WEBP, or GIF for demo images.");
+      return;
+    }
+    if (file.size > MAX_WELCOME_IMAGE_FILE_BYTES) {
+      setDemoConfigError("Demo image must be 2MB or smaller.");
+      return;
+    }
+    setDemoConfigError("");
+    setDemoActivityImageById((prev) => ({ ...prev, [activityId]: file }));
+  }
+
+  async function handleUploadDemoActivityImage(activityId: string) {
+    const file = demoActivityImageById[activityId];
+    if (!file) {
+      setDemoConfigError("Choose an image first.");
+      return;
+    }
+    const extension = getFileExtensionFromMimeType(file.type || "");
+    const filePath = `demo-activities/${activityId}-${Date.now()}.${extension}`;
+
+    setIsSavingDemoConfig(true);
+    setDemoConfigError("");
+    setDemoConfigSuccess("");
+    try {
+      const { error: uploadError } = await supabase.storage.from(APP_ASSETS_BUCKET).upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true,
+        contentType: file.type || undefined,
+      });
+      if (uploadError) throw uploadError;
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from(APP_ASSETS_BUCKET).getPublicUrl(filePath);
+      const prevImage = demoConfig.activities.find((activity) => activity.id === activityId)?.imageUrl || "";
+      await handleDemoActivityChange(activityId, { imageUrl: publicUrl });
+      const previousPath = prevImage ? extractStoragePathFromPublicUrl(prevImage, APP_ASSETS_BUCKET) : "";
+      if (previousPath && previousPath !== filePath) {
+        await supabase.storage.from(APP_ASSETS_BUCKET).remove([previousPath]);
+      }
+      setDemoActivityImageById((prev) => ({ ...prev, [activityId]: null }));
+    } catch (error: any) {
+      setDemoConfigError(error?.message || "Could not upload demo activity image.");
+    } finally {
+      setIsSavingDemoConfig(false);
+    }
   }
 
   return (
@@ -2200,9 +2279,10 @@ export default function TeacherDashboard() {
 
             {teacherScreen === "demo" ? (
               <section style={{ display: "grid", gap: 14 }}>
-                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
+                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 18 }}>
                   <div style={styles.settingsLabel}>Demo status</div>
-                  <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Public demo access</h2>
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 6 }}>Public demo access</h2>
+                  <p style={{ ...styles.settingsDescription, marginBottom: 12 }}>Use this link to let people try ESL Hub without a class code.</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 10 }}>
                     <button type="button" onClick={() => void handleToggleDemoEnabled()} disabled={isSavingDemoConfig || isLoadingDemoConfig} style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}>
                       {demoConfig.enabled ? "Disable demo mode" : "Enable demo mode"}
@@ -2211,45 +2291,82 @@ export default function TeacherDashboard() {
                       {demoConfig.enabled ? "Demo mode enabled" : "Demo mode disabled"}
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, color: "#475569", marginBottom: 8 }}>Public demo link: /?mode=demo</div>
+                  <div style={{ fontSize: 13, color: "#475569", marginBottom: 8 }}>Public demo link: {window.location.origin}/?mode=demo</div>
                   <button type="button" onClick={() => void handleCopyDemoLink()} style={styles.secondaryButton}>
                     {hasCopiedDemoLink ? "Copied" : "Copy demo link"}
                   </button>
-                </div>
-
-                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
-                  <div style={styles.settingsLabel}>Demo activities</div>
-                  <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Configurable cards</h2>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {[...demoConfig.activities].sort((a, b) => a.order - b.order).map((activity) => (
-                      <div key={activity.id} style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, background: "#f8fafc" }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
-                          <input value={activity.title} onChange={(e) => void handleDemoActivityChange(activity.id, { title: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Title" />
-                          <input value={activity.suggestedTime} onChange={(e) => void handleDemoActivityChange(activity.id, { suggestedTime: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Suggested time" />
-                        </div>
-                        <textarea value={activity.prompt} onChange={(e) => void handleDemoActivityChange(activity.id, { prompt: e.target.value })} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, minHeight: 90, padding: 10, marginTop: 8 }} placeholder="Prompt / instructions" />
-                        {activity.type === "external_link" ? (
-                          <input value={activity.externalUrl || ""} onChange={(e) => void handleDemoActivityChange(activity.id, { externalUrl: e.target.value })} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, marginTop: 8 }} placeholder="External URL" />
-                        ) : null}
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-                          <button type="button" onClick={() => void handleDemoActivityChange(activity.id, { visible: !activity.visible })} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>
-                            {activity.visible ? "Hide" : "Show"}
-                          </button>
-                          <button type="button" onClick={() => void handleMoveDemoActivity(activity.id, "up")} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>Move up</button>
-                          <button type="button" onClick={() => void handleMoveDemoActivity(activity.id, "down")} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>Move down</button>
-                          <div style={{ fontSize: 12, color: "#64748b", alignSelf: "center" }}>{activity.type}</div>
-                        </div>
-                      </div>
-                    ))}
+                  <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => void persistDemoConfig({ ...demoConfig, aiFeedbackEnabled: !demoConfig.aiFeedbackEnabled }, `Demo AI feedback ${demoConfig.aiFeedbackEnabled ? "disabled" : "enabled"}.`)}
+                      disabled={isSavingDemoConfig || isLoadingDemoConfig}
+                      style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}
+                    >
+                      {demoConfig.aiFeedbackEnabled ? "Disable demo AI feedback" : "Enable demo AI feedback"}
+                    </button>
+                    <div style={{ fontSize: 13, color: demoConfig.aiFeedbackEnabled ? "#065f46" : "#b45309", fontWeight: 700 }}>
+                      {demoConfig.aiFeedbackEnabled ? "AI feedback enabled with daily limits" : "AI feedback disabled"}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
+                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 18 }}>
                   <div style={styles.settingsLabel}>Demo branding</div>
                   <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Landing copy</h2>
                   <input value={demoConfig.welcomeTitle} onChange={(e) => void handleDemoConfigFieldChange("welcomeTitle", e.target.value)} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, marginBottom: 8 }} placeholder="Welcome title" />
                   <input value={demoConfig.welcomeSubtitle} onChange={(e) => void handleDemoConfigFieldChange("welcomeSubtitle", e.target.value)} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, marginBottom: 8 }} placeholder="Welcome subtitle" />
                   <input value={demoConfig.heroImageUrl || ""} onChange={(e) => void handleDemoConfigFieldChange("heroImageUrl", e.target.value)} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Optional hero image URL" />
+                </div>
+
+                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 18 }}>
+                  <div style={styles.settingsLabel}>Demo activities</div>
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Activity cards</h2>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {[...demoConfig.activities].sort((a, b) => a.order - b.order).map((activity) => (
+                      <div key={activity.id} style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, background: "#f8fafc" }}>
+                        <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap" }}>
+                          <div style={{ display: "grid", gap: 4 }}>
+                            <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 16 }}>{activity.title}</div>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
+                              <span style={{ ...styles.promptBadge, background: "#fff" }}>{activity.type.replace("_", " ")}</span>
+                              <span style={{ color: "#64748b" }}>{activity.suggestedTime || "No time set"}</span>
+                            </div>
+                            <div style={{ color: "#475569", fontSize: 13 }}>{activity.prompt.slice(0, 140) || "No prompt yet."}</div>
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: activity.visible ? "#065f46" : "#b45309" }}>{activity.visible ? "Visible" : "Hidden"}</div>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                          <button type="button" onClick={() => setActiveDemoEditId((prev) => (prev === activity.id ? null : activity.id))} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>
+                            {activeDemoEditId === activity.id ? "Close" : "Edit"}
+                          </button>
+                          <button type="button" onClick={() => void handleDemoActivityChange(activity.id, { visible: !activity.visible })} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>
+                            {activity.visible ? "Hide" : "Show"}
+                          </button>
+                          <button type="button" onClick={() => void handleMoveDemoActivity(activity.id, "up")} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>Move up</button>
+                          <button type="button" onClick={() => void handleMoveDemoActivity(activity.id, "down")} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>Move down</button>
+                        </div>
+                        {activeDemoEditId === activity.id ? (
+                          <div style={{ marginTop: 10, borderTop: "1px solid #dbe3f0", paddingTop: 10, display: "grid", gap: 8 }}>
+                            <input value={activity.title} onChange={(e) => void handleDemoActivityChange(activity.id, { title: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Title" />
+                            <input value={activity.suggestedTime} onChange={(e) => void handleDemoActivityChange(activity.id, { suggestedTime: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Suggested time" />
+                            <textarea value={activity.prompt} onChange={(e) => void handleDemoActivityChange(activity.id, { prompt: e.target.value })} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, minHeight: 90, padding: 10 }} placeholder="Prompt / instructions" />
+                            {activity.type === "external_link" ? (
+                              <input value={activity.externalUrl || ""} onChange={(e) => void handleDemoActivityChange(activity.id, { externalUrl: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="External URL" />
+                            ) : null}
+                            {activity.id.includes("picture") ? (
+                              <div style={{ display: "grid", gap: 6 }}>
+                                {activity.imageUrl ? <img src={activity.imageUrl} alt="Demo activity" style={{ width: "100%", maxHeight: 170, objectFit: "cover", borderRadius: 10, border: "1px solid #cbd5e1" }} /> : null}
+                                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => handleDemoActivityImageFileChange(activity.id, e)} disabled={isSavingDemoConfig} />
+                                <button type="button" onClick={() => void handleUploadDemoActivityImage(activity.id)} disabled={isSavingDemoConfig || !demoActivityImageById[activity.id]} style={clampButton(isSavingDemoConfig || !demoActivityImageById[activity.id], styles.secondaryButton)}>
+                                  Upload picture
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>

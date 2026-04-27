@@ -3,6 +3,20 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 const SAFE_INAPPROPRIATE_MESSAGE =
   "This response could not be accepted because it contains inappropriate language. Please record again using classroom-appropriate English.";
 const TEACHER_FLAG_MARKER = "Flagged for inappropriate language.";
+const DEMO_MAX_ATTEMPTS_PER_DAY = 3;
+const DEMO_MIN_SUBMIT_INTERVAL_MS = 20_000;
+const DEMO_MAX_TRANSCRIPT_CHARS = 700;
+const DEMO_MAX_AUDIO_SECONDS = 90;
+const demoUsageByIp = new Map<string, { date: string; count: number; lastAt: number }>();
+
+function getClientIp(req: VercelRequest): string {
+  const forwarded = String(req.headers["x-forwarded-for"] || "");
+  return forwarded.split(",")[0].trim() || req.socket.remoteAddress || "unknown";
+}
+
+function getTodayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function guessAudioMetaFromUrl(audioUrl: string) {
   const lower = audioUrl.toLowerCase();
@@ -70,15 +84,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       promptImageUrl,
       prompt_image_url,
       promptImage,
+      transcriptText,
+      isDemoMode,
+      demo,
+      audioDurationSeconds,
     } = req.body ?? {};
 
+    const demoMode = Boolean(isDemoMode || demo);
     const finalAudioUrl = audioUrl || audio_url;
     const finalPromptText = promptText || prompt_text || prompt;
     const finalPromptImageUrl = promptImageUrl || prompt_image_url || promptImage || null;
+    const finalTranscriptText = typeof transcriptText === "string" ? transcriptText.trim() : "";
 
-    if (!finalAudioUrl || !finalPromptText) {
+    if (demoMode) {
+      const ip = getClientIp(req);
+      const today = getTodayDate();
+      const now = Date.now();
+      const usage = demoUsageByIp.get(ip);
+      const current = usage && usage.date === today ? usage : { date: today, count: 0, lastAt: 0 };
+      if (current.count >= DEMO_MAX_ATTEMPTS_PER_DAY) {
+        return res.status(429).json({ error: "Demo limit reached for today. Please try again later." });
+      }
+      if (current.lastAt && now - current.lastAt < DEMO_MIN_SUBMIT_INTERVAL_MS) {
+        return res.status(429).json({ error: "Please wait before submitting again." });
+      }
+      demoUsageByIp.set(ip, { date: today, count: current.count + 1, lastAt: now });
+      if (typeof audioDurationSeconds === "number" && audioDurationSeconds > DEMO_MAX_AUDIO_SECONDS) {
+        return res.status(400).json({ error: "Demo recordings are limited to 90 seconds." });
+      }
+      if (finalTranscriptText.length > DEMO_MAX_TRANSCRIPT_CHARS) {
+        return res.status(400).json({ error: "Demo text is too long." });
+      }
+    }
+
+    if ((!finalAudioUrl && !finalTranscriptText) || !finalPromptText) {
       return res.status(400).json({
-        error: "Missing audioUrl or promptText",
+        error: "Missing audioUrl/transcriptText or promptText",
         received: {
           audioUrl: !!audioUrl,
           audio_url: !!audio_url,
@@ -89,40 +130,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const audioRes = await fetch(finalAudioUrl);
-    if (!audioRes.ok) {
-      return res.status(400).json({ error: "Could not download audio file" });
-    }
+    let transcript = finalTranscriptText;
+    if (!transcript) {
+      const audioRes = await fetch(finalAudioUrl);
+      if (!audioRes.ok) {
+        return res.status(400).json({ error: "Could not download audio file" });
+      }
 
-    const audioBuffer = await audioRes.arrayBuffer();
-    const { mimeType, fileName } = guessAudioMetaFromUrl(finalAudioUrl);
+      const audioBuffer = await audioRes.arrayBuffer();
+      const { mimeType, fileName } = guessAudioMetaFromUrl(finalAudioUrl);
 
-    const formData = new FormData();
-    formData.append("file", new Blob([audioBuffer], { type: mimeType }), fileName);
-    formData.append("model", "gpt-4o-mini-transcribe");
+      const formData = new FormData();
+      formData.append("file", new Blob([audioBuffer], { type: mimeType }), fileName);
+      formData.append("model", "gpt-4o-mini-transcribe");
 
-    const transcriptionRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiApiKey}`,
-      },
-      body: formData,
-    });
-
-    const transcriptionJson = await transcriptionRes.json();
-    console.log("TRANSCRIPTION JSON:", JSON.stringify(transcriptionJson, null, 2));
-
-    if (!transcriptionRes.ok) {
-      console.error("TRANSCRIPTION PROVIDER ERROR:", {
-        status: transcriptionRes.status,
-        statusText: transcriptionRes.statusText,
+      const transcriptionRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiApiKey}`,
+        },
+        body: formData,
       });
-      return res.status(502).json({
-        error: "AI transcription failed. Please try again in a moment.",
-      });
-    }
 
-    const transcript = String(transcriptionJson.text || "").trim();
+      const transcriptionJson = await transcriptionRes.json();
+      console.log("TRANSCRIPTION JSON:", JSON.stringify(transcriptionJson, null, 2));
+
+      if (!transcriptionRes.ok) {
+        console.error("TRANSCRIPTION PROVIDER ERROR:", {
+          status: transcriptionRes.status,
+          statusText: transcriptionRes.statusText,
+        });
+        return res.status(502).json({
+          error: "AI transcription failed. Please try again in a moment.",
+        });
+      }
+      transcript = String(transcriptionJson.text || "").trim();
+    }
 
     if (!transcript) {
       return res.status(200).json({
@@ -193,12 +236,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0,
+        max_tokens: demoMode ? 120 : 220,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
-            content:
-              "You grade short ESL speaking responses using transcript-only evidence. Evaluate both content (relevance and completeness) and inferred delivery (clarity, fluency, and answer length) from the transcript text. Infer likely speaking limits this way: very short answers may indicate limited speaking; repetitive or overly simple wording may indicate fluency limits; unnatural phrasing may indicate clarity issues. Do not pretend to hear audio and do not claim specific pronunciation errors from sound. Use classroom-safe speaking guidance such as \"speak more clearly\", \"improve pronunciation\", or \"add more detail when speaking\" when appropriate. Return valid JSON only in this exact format: {\"score\": number, \"comment\": string}. Score must be an integer from 1 to 5 using this rubric: 5 = clearly answers the prompt well with strong understandable language and solid inferred delivery; 4 = answers the prompt with minor weakness in content or inferred delivery; 3 = partially answers or is too limited in content or inferred delivery; 2 = mostly off-topic or very weak with limited understandable output; 1 = does not answer the prompt or is unrelated. Comment must be exactly two short sentences in this order: (1) one specific strength, (2) one specific improvement for future speaking. Keep tone practical, classroom-appropriate, and concise. Avoid repetition and generic filler. Do not hallucinate details not present in the transcript or prompt. For image prompts, only credit details that are visibly present in the provided image and allow only light, reasonable inferences strongly supported by visible evidence.",
+            content: `You grade short ESL speaking responses using transcript-only evidence. Evaluate both content (relevance and completeness) and inferred delivery (clarity, fluency, and answer length) from the transcript text. Infer likely speaking limits this way: very short answers may indicate limited speaking; repetitive or overly simple wording may indicate fluency limits; unnatural phrasing may indicate clarity issues. Do not pretend to hear audio and do not claim specific pronunciation errors from sound. Use classroom-safe speaking guidance such as "speak more clearly", "improve pronunciation", or "add more detail when speaking" when appropriate. Return valid JSON only in this exact format: {"score": number, "comment": string}. Score must be an integer from 1 to 5 using this rubric: 5 = clearly answers the prompt well with strong understandable language and solid inferred delivery; 4 = answers the prompt with minor weakness in content or inferred delivery; 3 = partially answers or is too limited in content or inferred delivery; 2 = mostly off-topic or very weak with limited understandable output; 1 = does not answer the prompt or is unrelated. Comment must be exactly two short sentences in this order: (1) one specific strength, (2) one specific improvement for future speaking.${demoMode ? " Keep comment concise for demo users and under 30 words total." : ""} Keep tone practical, classroom-appropriate, and concise. Avoid repetition and generic filler. Do not hallucinate details not present in the transcript or prompt. For image prompts, only credit details that are visibly present in the provided image and allow only light, reasonable inferences strongly supported by visible evidence.`,
           },
           {
             role: "user",
