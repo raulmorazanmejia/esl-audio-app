@@ -4,6 +4,7 @@ import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
 import TeacherClassDetail from "./teacher/TeacherClassDetail";
 import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
+import TeacherSubmissionsPanel from "./teacher/TeacherSubmissionsPanel";
 import { AssignmentActivityType, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 
 const SUBMISSION_SELECT =
@@ -620,7 +621,7 @@ export default function TeacherDashboard() {
   const [deletingPromptById, setDeletingPromptById] = useState<Record<string, boolean>>({});
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
-  const [teacherScreen, setTeacherScreen] = useState<"classes" | "assignment_library">("classes");
+  const [teacherScreen, setTeacherScreen] = useState<"dashboard" | "activities" | "classes" | "submissions" | "settings">("dashboard");
   const [newClassName, setNewClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentCode, setNewStudentCode] = useState("");
@@ -1872,82 +1873,95 @@ export default function TeacherDashboard() {
 
   return (
     <div style={styles.page}>
-      <style>{`
-        @media (max-width: 1180px) {
-          .teacher-dashboard-grid {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
       <div style={styles.container}>
-        <section style={{ background: "#fff", borderRadius: 18, border: "1px solid #e2e8f0", padding: 10, display: "inline-flex", gap: 8, marginBottom: 14 }}>
-          <button
-            type="button"
-            onClick={() => setTeacherScreen("classes")}
-            style={{
-              minHeight: 38,
-              borderRadius: 10,
-              border: "1px solid #cbd5e1",
-              padding: "0 14px",
-              fontWeight: 800,
-              background: teacherScreen === "classes" ? "#0f172a" : "#fff",
-              color: teacherScreen === "classes" ? "#fff" : "#334155",
-            }}
-          >
-            Classes
-          </button>
-          <button
-            type="button"
-            onClick={() => setTeacherScreen("assignment_library")}
-            style={{
-              minHeight: 38,
-              borderRadius: 10,
-              border: "1px solid #cbd5e1",
-              padding: "0 14px",
-              fontWeight: 800,
-              background: teacherScreen === "assignment_library" ? "#0f172a" : "#fff",
-              color: teacherScreen === "assignment_library" ? "#fff" : "#334155",
-            }}
-          >
-            Assignment Library
-          </button>
-        </section>
-        <section style={styles.settingsPanel}>
-          <div style={styles.settingsLabel}>App settings</div>
-          <h2 style={styles.settingsTitle}>Student welcome image</h2>
-          <p style={styles.settingsDescription}>This controls the hero image on the student code-entry screen.</p>
-          {studentWelcomeImageDisplayUrl ? <img src={studentWelcomeImageDisplayUrl} alt="Student welcome preview" style={styles.settingsPreview} /> : null}
-          <div style={styles.settingsActionRow}>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              onChange={handleStudentWelcomeImageFileChange}
-              disabled={isSavingStudentWelcomeImage}
-            />
-            <button
-              type="button"
-              onClick={() => void handleSaveStudentWelcomeImage()}
-              style={clampButton(isSavingStudentWelcomeImage || !studentWelcomeImageFile, styles.secondaryButton)}
-              disabled={isSavingStudentWelcomeImage || !studentWelcomeImageFile}
-            >
-              {isSavingStudentWelcomeImage ? "Saving..." : "Save image"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleResetStudentWelcomeImage()}
-              style={clampButton(isSavingStudentWelcomeImage, { ...styles.secondaryButton, borderColor: "#fecaca", color: "#b91c1c" })}
-              disabled={isSavingStudentWelcomeImage}
-            >
-              Reset to default
-            </button>
-          </div>
-          {isLoadingStudentWelcomeImage ? <div style={{ marginTop: 8, fontSize: 13, color: "#64748b" }}>Loading current image...</div> : null}
-          {studentWelcomeImageError ? <div style={{ marginTop: 8, fontSize: 13, color: "#b91c1c" }}>{studentWelcomeImageError}</div> : null}
-          {studentWelcomeImageSuccess ? <div style={{ marginTop: 8, fontSize: 13, color: "#065f46" }}>{studentWelcomeImageSuccess}</div> : null}
-          <div style={{ marginTop: 8, fontSize: 12, color: "#94a3b8" }}>Allowed: JPG, PNG, WEBP, GIF · Max file size: 2MB.</div>
-        </section>
+        <div style={{ display: "grid", gridTemplateColumns: "260px minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
+          <aside style={{ background: "linear-gradient(175deg, #0f172a, #1e293b)", color: "#fff", borderRadius: 22, padding: 16, border: "1px solid #1e293b", boxShadow: "0 20px 32px rgba(2,6,23,0.32)", position: "sticky", top: 24 }}>
+            <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 18 }}>ESL Hub</div>
+            {[
+              { key: "dashboard", label: "Dashboard" },
+              { key: "activities", label: "Activities" },
+              { key: "classes", label: "Classes" },
+              { key: "submissions", label: "Submissions" },
+              { key: "settings", label: "Settings" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setTeacherScreen(item.key as "dashboard" | "activities" | "classes" | "submissions" | "settings")}
+                style={{
+                  width: "100%",
+                  textAlign: "left",
+                  minHeight: 42,
+                  borderRadius: 12,
+                  marginBottom: 8,
+                  border: "1px solid transparent",
+                  padding: "0 12px",
+                  fontWeight: 800,
+                  background: teacherScreen === item.key ? "#4f46e5" : "transparent",
+                  color: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </aside>
 
-        {teacherScreen === "classes" && !selectedClassName ? (
+          <main>
+            {teacherScreen === "dashboard" ? (
+              <section style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", boxShadow: "0 14px 30px rgba(15, 23, 42, 0.06)", padding: 22 }}>
+                <div style={{ fontSize: 30, fontWeight: 900, color: "#0f172a", marginBottom: 6 }}>Welcome back</div>
+                <div style={{ fontSize: 14, color: "#64748b", marginBottom: 16 }}>Here&apos;s a quick overview of your current classes and activity workflow.</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 16 }}>
+                  <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Classes</div>
+                    <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{classSummaries.length}</div>
+                  </div>
+                  <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Activities</div>
+                    <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{sortedPrompts.length}</div>
+                  </div>
+                  <div style={{ border: "1px solid #fecaca", borderRadius: 14, background: "#fef2f2", padding: 12 }}>
+                    <div style={{ fontSize: 12, color: "#b91c1c", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Needs review</div>
+                    <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#7f1d1d" }}>{submissionsNeedingReview}</div>
+                  </div>
+                  <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Total submissions</div>
+                    <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{submissions.length}</div>
+                  </div>
+                </div>
+                <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#fff", padding: 12, marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 8 }}>Quick actions</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <button type="button" onClick={() => setTeacherScreen("activities")} style={{ minHeight: 38, borderRadius: 10, border: "none", background: "#0f172a", color: "#fff", fontWeight: 700, padding: "0 12px" }}>Create activity</button>
+                    <button type="button" onClick={() => setTeacherScreen("activities")} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 12px" }}>Browse assignment library</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+                          void navigator.clipboard.writeText(studentEntryUrl);
+                        }
+                      }}
+                      style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 12px" }}
+                    >
+                      Copy student link
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 8 }}>Use this link for student login or QR generation: {studentEntryUrl}</div>
+                </div>
+                <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#fff", padding: 12 }}>
+                  <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 8 }}>Recent activity</div>
+                  {recentActivityItems.length ? recentActivityItems.map((item) => (
+                    <div key={item.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: "10px 12px", background: "#f8fafc", marginBottom: 8 }}>
+                      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{item.title}</div>
+                      <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{item.meta}</div>
+                    </div>
+                  )) : <div style={{ fontSize: 13, color: "#64748b" }}>No recent submissions yet.</div>}
+                </div>
+              </section>
+            ) : null}
+
+            {teacherScreen === "classes" && !selectedClassName ? (
           <TeacherClassesOverview
             classSummaries={classSummaries}
             totalActivities={sortedPrompts.length}
@@ -1960,11 +1974,11 @@ export default function TeacherDashboard() {
             onRefreshClasses={() => void fetchStudents()}
             onSelectClass={(className: string) => setSelectedClass(className)}
             rosterError={rosterError}
-            onOpenAssignmentLibrary={() => setTeacherScreen("assignment_library")}
+            onOpenAssignmentLibrary={() => setTeacherScreen("activities")}
           />
-        ) : null}
+            ) : null}
 
-        {teacherScreen === "classes" && selectedClassName ? (
+            {teacherScreen === "classes" && selectedClassName ? (
           <TeacherClassDetail
             selectedClassName={selectedClassName}
             selectedClassStudents={selectedClassStudents}
@@ -2029,7 +2043,7 @@ export default function TeacherDashboard() {
               emptyStateText: `No assignments are currently assigned to ${selectedClassName}. Browse the Assignment Library to assign one.`,
               showCreateForm: false,
               showBulkHideButton: false,
-              onHeaderAction: () => setTeacherScreen("assignment_library"),
+              onHeaderAction: () => setTeacherScreen("activities"),
               headerActionLabel: "Browse Assignment Library",
             }}
             submissionsPanelProps={{
@@ -2063,9 +2077,9 @@ export default function TeacherDashboard() {
               submissionsError,
             }}
           />
-        ) : null}
+            ) : null}
 
-        {teacherScreen === "assignment_library" ? (
+            {teacherScreen === "activities" ? (
           <TeacherAssignmentLibrary
             totalPromptCount={sortedPrompts.length}
             classNameOptions={classNameOptions}
@@ -2109,7 +2123,81 @@ export default function TeacherDashboard() {
               emptyStateText: "No assignments exist in the assignment library yet.",
             }}
           />
-        ) : null}
+            ) : null}
+
+            {teacherScreen === "submissions" ? (
+              <section style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
+                <TeacherSubmissionsPanel
+                  selectedClassName={selectedClassName || ""}
+                  reviewFilter={reviewFilter}
+                  setReviewFilter={setReviewFilter}
+                  onRefreshSubmissions={() => void handleRefreshSubmissions()}
+                  isLoadingSubmissions={isLoadingSubmissions}
+                  submissionPromptFilter={submissionPromptFilter}
+                  setSubmissionPromptFilter={setSubmissionPromptFilter}
+                  submissionPromptOptions={submissionPromptOptions}
+                  selectedStudentFilter={selectedStudentFilter}
+                  onClearStudentFilter={() => setSelectedStudentFilter(null)}
+                  filteredSubmissions={filteredSubmissions}
+                  drafts={drafts}
+                  toggleSubmissionDetails={toggleSubmissionDetails}
+                  expandedSubmissionIds={expandedSubmissionIds}
+                  onSaveOverride={(submission: SubmissionRow) => void handleSaveOverride(submission)}
+                  onStartTeacherRecording={(id: string) => void startTeacherRecording(id)}
+                  onStopTeacherRecording={(id: string) => stopTeacherRecording(id)}
+                  onSaveTeacherAudio={(submission: SubmissionRow) => void handleSaveTeacherAudio(submission)}
+                  onClearTeacherRecording={(id: string) => clearTeacherRecording(id)}
+                  onDeleteSubmission={(submission: SubmissionRow) => void handleDeleteSubmission(submission)}
+                  deletingSubmissionById={deletingSubmissionById}
+                  updateDraft={updateDraft}
+                  analyticsPromptFilter={analyticsPromptFilter}
+                  setAnalyticsPromptFilter={setAnalyticsPromptFilter}
+                  analyticsPromptOptions={analyticsPromptOptions}
+                  submissionAnalytics={submissionAnalytics}
+                  submissionsSuccess={submissionsSuccess}
+                  submissionsError={submissionsError}
+                />
+              </section>
+            ) : null}
+
+            {teacherScreen === "settings" ? (
+              <section style={styles.settingsPanel}>
+                <div style={styles.settingsLabel}>App settings</div>
+                <h2 style={styles.settingsTitle}>Student welcome image</h2>
+                <p style={styles.settingsDescription}>This controls the hero image on the student code-entry screen.</p>
+                {studentWelcomeImageDisplayUrl ? <img src={studentWelcomeImageDisplayUrl} alt="Student welcome preview" style={styles.settingsPreview} /> : null}
+                <div style={styles.settingsActionRow}>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    onChange={handleStudentWelcomeImageFileChange}
+                    disabled={isSavingStudentWelcomeImage}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveStudentWelcomeImage()}
+                    style={clampButton(isSavingStudentWelcomeImage || !studentWelcomeImageFile, styles.secondaryButton)}
+                    disabled={isSavingStudentWelcomeImage || !studentWelcomeImageFile}
+                  >
+                    {isSavingStudentWelcomeImage ? "Saving..." : "Save image"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleResetStudentWelcomeImage()}
+                    style={clampButton(isSavingStudentWelcomeImage, { ...styles.secondaryButton, borderColor: "#fecaca", color: "#b91c1c" })}
+                    disabled={isSavingStudentWelcomeImage}
+                  >
+                    Reset to default
+                  </button>
+                </div>
+                {isLoadingStudentWelcomeImage ? <div style={{ marginTop: 8, fontSize: 13, color: "#64748b" }}>Loading current image...</div> : null}
+                {studentWelcomeImageError ? <div style={{ marginTop: 8, fontSize: 13, color: "#b91c1c" }}>{studentWelcomeImageError}</div> : null}
+                {studentWelcomeImageSuccess ? <div style={{ marginTop: 8, fontSize: 13, color: "#065f46" }}>{studentWelcomeImageSuccess}</div> : null}
+                <div style={{ marginTop: 8, fontSize: 12, color: "#94a3b8" }}>Allowed: JPG, PNG, WEBP, GIF · Max file size: 2MB.</div>
+              </section>
+            ) : null}
+          </main>
+        </div>
       </div>
     </div>
   );
