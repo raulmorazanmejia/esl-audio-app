@@ -9,9 +9,6 @@ type ClassSummary = {
 
 type Props = {
   classSummaries: ClassSummary[];
-  totalActivities: number;
-  submissionsNeedingReview: number;
-  recentActivityItems: { id: string; title: string; meta: string }[];
   studentEntryUrl: string;
   newClassName: string;
   onNewClassNameChange: (value: string) => void;
@@ -40,9 +37,6 @@ const createInput: React.CSSProperties = {
 
 export default function TeacherClassesOverview({
   classSummaries,
-  totalActivities,
-  submissionsNeedingReview,
-  recentActivityItems,
   studentEntryUrl,
   newClassName,
   onNewClassNameChange,
@@ -66,16 +60,6 @@ export default function TeacherClassesOverview({
           <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Classes</div>
           <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{totalClasses}</div>
           <div style={{ fontSize: 13, color: "#64748b" }}>{totalStudents} enrolled students</div>
-        </div>
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12 }}>
-          <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Activities</div>
-          <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#0f172a" }}>{totalActivities}</div>
-          <div style={{ fontSize: 13, color: "#64748b" }}>created assignments</div>
-        </div>
-        <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#fef2f2", padding: 12 }}>
-          <div style={{ fontSize: 12, color: "#b91c1c", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Need review</div>
-          <div style={{ marginTop: 4, fontSize: 28, fontWeight: 900, color: "#7f1d1d" }}>{submissionsNeedingReview}</div>
-          <div style={{ fontSize: 13, color: "#991b1b" }}>submissions awaiting feedback</div>
         </div>
       </div>
 
@@ -110,22 +94,6 @@ export default function TeacherClassesOverview({
       </div>
 
       {rosterError ? <div style={{ fontSize: 14, color: "#dc2626", fontWeight: 700, marginBottom: 10 }}>{rosterError}</div> : null}
-
-      <div style={{ border: "1px solid #e2e8f0", borderRadius: 16, background: "#fff", padding: 12, marginBottom: 14 }}>
-        <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 8 }}>Recent activity</div>
-        {recentActivityItems.length ? (
-          <div style={{ display: "grid", gap: 8 }}>
-            {recentActivityItems.map((item) => (
-              <div key={item.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: "10px 12px", background: "#f8fafc" }}>
-                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{item.title}</div>
-                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{item.meta}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ fontSize: 13, color: "#64748b" }}>No recent submissions yet.</div>
-        )}
-      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
         {classSummaries.map((row) => (
