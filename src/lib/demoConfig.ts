@@ -9,10 +9,12 @@ export type DemoActivityConfig = {
   visible: boolean;
   order: number;
   externalUrl?: string;
+  imageUrl?: string;
 };
 
 export type DemoConfig = {
   enabled: boolean;
+  aiFeedbackEnabled: boolean;
   welcomeTitle: string;
   welcomeSubtitle: string;
   heroImageUrl: string;
@@ -23,6 +25,7 @@ export const DEMO_CONFIG_SETTING_KEY = "demo_config";
 
 export const DEFAULT_DEMO_CONFIG: DemoConfig = {
   enabled: true,
+  aiFeedbackEnabled: false,
   welcomeTitle: "Try ESL Hub",
   welcomeSubtitle: "Choose a sample activity and see how it works.",
   heroImageUrl: "",
@@ -44,6 +47,7 @@ export const DEFAULT_DEMO_CONFIG: DemoConfig = {
       suggestedTime: "1 minute",
       visible: true,
       order: 2,
+      imageUrl: "",
     },
     {
       id: "demo-text",
@@ -88,12 +92,14 @@ export function normalizeDemoConfig(input: unknown): DemoConfig {
         visible: row.visible !== false,
         order: typeof row.order === "number" ? row.order : index + 1,
         externalUrl: typeof row.externalUrl === "string" ? row.externalUrl : "",
+        imageUrl: typeof row.imageUrl === "string" ? row.imageUrl : "",
       } satisfies DemoActivityConfig;
     })
     .sort((a, b) => a.order - b.order);
 
   return {
     enabled: source.enabled !== false,
+    aiFeedbackEnabled: source.aiFeedbackEnabled === true,
     welcomeTitle: String(source.welcomeTitle ?? DEFAULT_DEMO_CONFIG.welcomeTitle),
     welcomeSubtitle: String(source.welcomeSubtitle ?? DEFAULT_DEMO_CONFIG.welcomeSubtitle),
     heroImageUrl: String(source.heroImageUrl ?? ""),

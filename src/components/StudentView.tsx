@@ -66,6 +66,11 @@ type AnalyzeResponse = {
 };
 
 const MAX_AUDIO_RECORDING_SECONDS = 5 * 60;
+const DEMO_MAX_AUDIO_RECORDING_SECONDS = 90;
+const DEMO_MAX_ATTEMPTS_PER_DAY = 3;
+const DEMO_MAX_TRANSCRIPT_CHARS = 700;
+const DEMO_MIN_SUBMIT_INTERVAL_MS = 20_000;
+const DEMO_USAGE_STORAGE_KEY = "esl_demo_usage_v1";
 const DEMO_MODE_QUERY_VALUE = "demo";
 const DEMO_CLASS_NAME = "demo-class";
 const DEMO_STUDENT_CODE = "DEMO";
@@ -84,6 +89,19 @@ function formatRecordingTime(totalSeconds: number) {
     .toString()
     .padStart(2, "0");
   return `${minutes}:${seconds}`;
+}
+
+function getTodayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Could not read recording data."));
+    reader.readAsDataURL(blob);
+  });
 }
 
 const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments!inner(class_name, is_visible)";
@@ -738,6 +756,8 @@ export default function StudentView() {
   const [demoSubmissionIndex, setDemoSubmissionIndex] = useState<Record<string, SubmissionRow>>({});
   const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
   const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
+  const [demoAttemptsToday, setDemoAttemptsToday] = useState(0);
+  const [lastDemoSubmitAt, setLastDemoSubmitAt] = useState(0);
   const deferredInstallPromptRef = useRef<any>(null);
   const recordingSecondsRef = useRef(0);
   const autoStoppedAtLimitRef = useRef(false);
@@ -754,6 +774,7 @@ export default function StudentView() {
   const teacherAudioUrl = useMemo(() => currentTeacherAudio(submissionForActivePrompt), [submissionForActivePrompt]);
   const hasSubmittedActivePrompt = Boolean(submissionForActivePrompt);
   const activeAssignmentType = getAssignmentType(activePrompt);
+  const maxAudioRecordingSeconds = isDemoMode ? DEMO_MAX_AUDIO_RECORDING_SECONDS : MAX_AUDIO_RECORDING_SECONDS;
   const isVideoAssignment = activeAssignmentType === "video_response";
   const isExternalAssignment = activeAssignmentType === "external_link";
   const isTextAssignment = activeAssignmentType === "text_response";
@@ -772,7 +793,7 @@ export default function StudentView() {
         class_name: DEMO_CLASS_NAME,
         suggested_time: activity.suggestedTime || null,
         prompt_image_path: null,
-        prompt_image_url: activity.id.includes("picture") ? DEMO_IMAGE_CARD : null,
+        prompt_image_url: activity.imageUrl?.trim() || (activity.id.includes("picture") ? DEMO_IMAGE_CARD : null),
         example_text: activity.prompt || activity.title,
         is_active: true,
       } satisfies PromptRow));
@@ -922,6 +943,20 @@ export default function StudentView() {
   }, [enterDemoMode]);
 
   useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(DEMO_USAGE_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { date?: string; attempts?: number; lastSubmitAt?: number };
+      const today = getTodayIsoDate();
+      if (parsed.date !== today) return;
+      setDemoAttemptsToday(typeof parsed.attempts === "number" ? parsed.attempts : 0);
+      setLastDemoSubmitAt(typeof parsed.lastSubmitAt === "number" ? parsed.lastSubmitAt : 0);
+    } catch {
+      // ignore local storage parse errors
+    }
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
     const loadWelcomeImageSetting = async () => {
       const [welcomeSetting, demoSetting] = await Promise.all([
@@ -1047,10 +1082,10 @@ export default function StudentView() {
   }, [isRecording]);
 
   useEffect(() => {
-    if (!isRecording || recordingSeconds < MAX_AUDIO_RECORDING_SECONDS) return;
+    if (!isRecording || recordingSeconds < maxAudioRecordingSeconds) return;
     autoStoppedAtLimitRef.current = true;
     stopRecording();
-  }, [isRecording, recordingSeconds]);
+  }, [isRecording, recordingSeconds, maxAudioRecordingSeconds]);
 
   async function fetchAssignedPrompts(classNameValue: string) {
     const className = classNameValue.trim();
@@ -1305,7 +1340,7 @@ export default function StudentView() {
 
       recorder.onstop = () => {
         const finalType = recorder.mimeType || mimeType || "audio/mp4";
-        const finalDurationSeconds = Math.min(recordingSecondsRef.current, MAX_AUDIO_RECORDING_SECONDS);
+        const finalDurationSeconds = Math.min(recordingSecondsRef.current, maxAudioRecordingSeconds);
         setRecordedDurationSeconds(finalDurationSeconds);
 
         if (!chunksRef.current.length) {
@@ -1334,7 +1369,7 @@ export default function StudentView() {
         setRecordedBlob(blob);
         setRecordedAudioUrl(localUrl);
         if (autoStoppedAtLimitRef.current) {
-          setStatusMessage("Recording stopped at the 5-minute limit.");
+          setStatusMessage(`Recording stopped at the ${isDemoMode ? "90-second" : "5-minute"} limit.`);
         } else {
           setStatusMessage("Ready to submit");
         }
@@ -1366,7 +1401,33 @@ export default function StudentView() {
     setIsRecording(false);
   }
 
-  async function analyzeAudio(audioUrl: string, promptText: string, promptImageUrl?: string | null): Promise<AnalyzeResponse> {
+  function persistDemoUsage(nextAttempts: number, nextLastSubmitAt: number) {
+    setDemoAttemptsToday(nextAttempts);
+    setLastDemoSubmitAt(nextLastSubmitAt);
+    try {
+      window.localStorage.setItem(
+        DEMO_USAGE_STORAGE_KEY,
+        JSON.stringify({ date: getTodayIsoDate(), attempts: nextAttempts, lastSubmitAt: nextLastSubmitAt }),
+      );
+    } catch {
+      // ignore storage write errors
+    }
+  }
+
+  function validateDemoAttemptOrShowError(): boolean {
+    const now = Date.now();
+    if (demoAttemptsToday >= DEMO_MAX_ATTEMPTS_PER_DAY) {
+      setErrorMessage("Demo limit reached for today. Please try again later.");
+      return false;
+    }
+    if (lastDemoSubmitAt && now - lastDemoSubmitAt < DEMO_MIN_SUBMIT_INTERVAL_MS) {
+      setErrorMessage("Please wait a little before trying another demo submission.");
+      return false;
+    }
+    return true;
+  }
+
+  async function analyzeAudio(audioUrl: string, promptText: string, promptImageUrl?: string | null, transcriptText?: string): Promise<AnalyzeResponse> {
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
@@ -1379,11 +1440,16 @@ export default function StudentView() {
           promptText,
           promptImageUrl: promptImageUrl || null,
           prompt_image_url: promptImageUrl || null,
+          transcriptText: transcriptText || null,
+          isDemoMode,
+          demo: isDemoMode,
+          audioDurationSeconds: recordedDurationSeconds,
         }),
       });
 
       if (!response.ok) {
-        return { error: "AI analysis failed." };
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        return { error: body.error || "AI analysis failed." };
       }
 
       return (await response.json()) as AnalyzeResponse;
@@ -1422,8 +1488,8 @@ export default function StudentView() {
       return;
     }
 
-    if (recordedDurationSeconds > MAX_AUDIO_RECORDING_SECONDS) {
-      setErrorMessage("Recordings must be 5 minutes or shorter. Please record again.");
+    if (recordedDurationSeconds > maxAudioRecordingSeconds) {
+      setErrorMessage(isDemoMode ? "Demo recordings must be 90 seconds or shorter. Please record again." : "Recordings must be 5 minutes or shorter. Please record again.");
       return;
     }
 
@@ -1438,7 +1504,31 @@ export default function StudentView() {
     }
 
     if (isDemoMode) {
+      if (!validateDemoAttemptOrShowError()) return;
+      if (recordedDurationSeconds > DEMO_MAX_AUDIO_RECORDING_SECONDS) {
+        setErrorMessage("Demo recordings are limited to 90 seconds.");
+        return;
+      }
       const now = new Date().toISOString();
+      let demoScore: number | null = null;
+      let demoComment = "Demo complete. In a real class, feedback would appear here.";
+      let demoTranscript: string | null = null;
+      if (demoConfig.aiFeedbackEnabled) {
+        try {
+          const dataUrl = await blobToDataUrl(recordedBlob);
+          const ai = await analyzeAudio(dataUrl, promptText, activePrompt?.prompt_image_url ?? null);
+          if (ai.error) {
+            setErrorMessage(ai.error);
+            return;
+          }
+          demoScore = ai.score ?? null;
+          demoComment = ai.comment || "Demo complete. In a real class, feedback would appear here.";
+          demoTranscript = ai.transcript || null;
+        } catch (error: any) {
+          setErrorMessage(error?.message || "AI analysis failed.");
+          return;
+        }
+      }
       const demoSubmission: SubmissionRow = {
         id: `demo-audio-${Date.now()}`,
         prompt_id: activePrompt?.id ?? null,
@@ -1460,14 +1550,15 @@ export default function StudentView() {
         student_email: null,
         student_auth_id: null,
         feedback_url: null,
-        transcript: null,
-        ai_score: null,
-        ai_comment: "Demo complete. In a real class, your teacher would receive your response and you could get feedback.",
+        transcript: demoTranscript,
+        ai_score: demoScore,
+        ai_comment: demoComment,
         teacher_score: null,
         teacher_comment: null,
         student_code: DEMO_STUDENT_CODE,
       };
       saveDemoSubmission(demoSubmission);
+      persistDemoUsage(demoAttemptsToday + 1, Date.now());
       setStatusMessage("Demo complete.");
       setRecordedBlob(null);
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
@@ -1759,7 +1850,23 @@ export default function StudentView() {
     }
 
     if (isDemoMode) {
+      if (!validateDemoAttemptOrShowError()) return;
+      if (writtenResponse.length > DEMO_MAX_TRANSCRIPT_CHARS) {
+        setErrorMessage("Demo text is too long. Please keep it shorter.");
+        return;
+      }
       const now = new Date().toISOString();
+      let demoScore: number | null = null;
+      let demoComment = "Demo complete. In a real class, feedback would appear here.";
+      if (demoConfig.aiFeedbackEnabled) {
+        const ai = await analyzeAudio("", promptText, activePrompt?.prompt_image_url ?? null, writtenResponse);
+        if (ai.error) {
+          setErrorMessage(ai.error);
+          return;
+        }
+        demoScore = ai.score ?? null;
+        demoComment = ai.comment || demoComment;
+      }
       const demoSubmission: SubmissionRow = {
         id: `demo-text-${Date.now()}`,
         prompt_id: activePrompt.id,
@@ -1782,13 +1889,14 @@ export default function StudentView() {
         student_auth_id: null,
         feedback_url: null,
         transcript: writtenResponse,
-        ai_score: null,
-        ai_comment: "Demo complete. In a real class, your teacher would receive your response and you could get feedback.",
+        ai_score: demoScore,
+        ai_comment: demoComment,
         teacher_score: null,
         teacher_comment: null,
         student_code: DEMO_STUDENT_CODE,
       };
       saveDemoSubmission(demoSubmission);
+      persistDemoUsage(demoAttemptsToday + 1, Date.now());
       setStatusMessage("Demo complete.");
       return;
     }
@@ -2218,8 +2326,8 @@ export default function StudentView() {
           <div style={styles.recordingAlert}>
             <div style={styles.recordingAlertHeader}>
               <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.3 }} />
-              <span style={{ color: MAX_AUDIO_RECORDING_SECONDS - recordingSeconds <= 30 ? "#b45309" : "inherit" }}>
-                Recording... {formatRecordingTime(recordingSeconds)} / {formatRecordingTime(MAX_AUDIO_RECORDING_SECONDS)}
+              <span style={{ color: maxAudioRecordingSeconds - recordingSeconds <= 30 ? "#b45309" : "inherit" }}>
+                Recording... {formatRecordingTime(recordingSeconds)} / {formatRecordingTime(maxAudioRecordingSeconds)}
               </span>
             </div>
             <div style={styles.recordingHelper}>Tap the button again to stop</div>
@@ -2261,7 +2369,9 @@ export default function StudentView() {
             </div>
             <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#4338ca" }}>
               {isDemoMode
-                ? "In a real class, your teacher would receive your response and feedback would appear here."
+                ? demoConfig.aiFeedbackEnabled
+                  ? "Demo AI feedback is limited for public preview use."
+                  : "Demo complete. In a real class, feedback would appear here."
                 : "You can review your feedback below."}
             </div>
             {isDemoMode ? (
