@@ -6,6 +6,7 @@ import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
 import TeacherSubmissionsPanel from "./teacher/TeacherSubmissionsPanel";
 import { AssignmentActivityType, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
+import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, parseDemoConfigValue } from "../lib/demoConfig";
 
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code, prompt:prompts(assignment_type)";
@@ -621,7 +622,7 @@ export default function TeacherDashboard() {
   const [deletingPromptById, setDeletingPromptById] = useState<Record<string, boolean>>({});
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
-  const [teacherScreen, setTeacherScreen] = useState<"dashboard" | "activities" | "classes" | "submissions" | "settings">("dashboard");
+  const [teacherScreen, setTeacherScreen] = useState<"dashboard" | "activities" | "classes" | "submissions" | "settings" | "demo">("dashboard");
   const [newClassName, setNewClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentCode, setNewStudentCode] = useState("");
@@ -636,6 +637,12 @@ export default function TeacherDashboard() {
   const [isSavingStudentWelcomeImage, setIsSavingStudentWelcomeImage] = useState(false);
   const [studentWelcomeImageError, setStudentWelcomeImageError] = useState("");
   const [studentWelcomeImageSuccess, setStudentWelcomeImageSuccess] = useState("");
+  const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
+  const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
+  const [isSavingDemoConfig, setIsSavingDemoConfig] = useState(false);
+  const [demoConfigError, setDemoConfigError] = useState("");
+  const [demoConfigSuccess, setDemoConfigSuccess] = useState("");
+  const [hasCopiedDemoLink, setHasCopiedDemoLink] = useState(false);
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
@@ -737,10 +744,49 @@ export default function TeacherDashboard() {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+    const fetchDemoConfig = async () => {
+      setIsLoadingDemoConfig(true);
+      const { data, error } = await supabase.from("app_settings").select("value").eq("key", DEMO_CONFIG_SETTING_KEY).maybeSingle();
+      if (!isMounted) return;
+      if (error) {
+        setDemoConfigError(error.message || "Could not load demo settings.");
+        setIsLoadingDemoConfig(false);
+        return;
+      }
+      const value = (data as { value?: string | null } | null)?.value ?? "";
+      setDemoConfig(parseDemoConfigValue(value));
+      setIsLoadingDemoConfig(false);
+    };
+    void fetchDemoConfig();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (studentWelcomeImagePreviewUrl) URL.revokeObjectURL(studentWelcomeImagePreviewUrl);
     };
   }, [studentWelcomeImagePreviewUrl]);
+
+  const persistDemoConfig = useCallback(async (nextConfig: DemoConfig, successMessage: string) => {
+    setIsSavingDemoConfig(true);
+    setDemoConfigError("");
+    setDemoConfigSuccess("");
+    try {
+      const { error } = await supabase
+        .from("app_settings")
+        .upsert({ key: DEMO_CONFIG_SETTING_KEY, value: JSON.stringify(nextConfig) }, { onConflict: "key" });
+      if (error) throw error;
+      setDemoConfig(nextConfig);
+      setDemoConfigSuccess(successMessage);
+    } catch (error: any) {
+      setDemoConfigError(error?.message || "Could not save demo configuration.");
+    } finally {
+      setIsSavingDemoConfig(false);
+    }
+  }, []);
 
   const submissionPromptOptions = useMemo(() => {
     const promptSet = new Set<string>();
@@ -1850,6 +1896,42 @@ export default function TeacherDashboard() {
     }
   }
 
+  async function handleCopyDemoLink() {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/?mode=demo`);
+    setHasCopiedDemoLink(true);
+    window.setTimeout(() => setHasCopiedDemoLink(false), 1800);
+  }
+
+  async function handleToggleDemoEnabled() {
+    await persistDemoConfig({ ...demoConfig, enabled: !demoConfig.enabled }, `Demo mode ${demoConfig.enabled ? "disabled" : "enabled"}.`);
+  }
+
+  async function handleDemoConfigFieldChange(field: "welcomeTitle" | "welcomeSubtitle" | "heroImageUrl", value: string) {
+    await persistDemoConfig({ ...demoConfig, [field]: value }, "Demo branding saved.");
+  }
+
+  async function handleDemoActivityChange(activityId: string, patch: Partial<DemoConfig["activities"][number]>) {
+    const nextActivities = demoConfig.activities.map((activity) => (activity.id === activityId ? { ...activity, ...patch } : activity));
+    await persistDemoConfig({ ...demoConfig, activities: nextActivities }, "Demo activity updated.");
+  }
+
+  async function handleMoveDemoActivity(activityId: string, direction: "up" | "down") {
+    const sorted = [...demoConfig.activities].sort((a, b) => a.order - b.order);
+    const index = sorted.findIndex((activity) => activity.id === activityId);
+    if (index < 0) return;
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= sorted.length) return;
+    const swapped = [...sorted];
+    [swapped[index], swapped[target]] = [swapped[target], swapped[index]];
+    const ordered = swapped.map((activity, idx) => ({ ...activity, order: idx + 1 }));
+    await persistDemoConfig({ ...demoConfig, activities: ordered }, "Demo activity order saved.");
+  }
+
+  async function handleResetDemoDefaults() {
+    await persistDemoConfig(DEFAULT_DEMO_CONFIG, "Demo settings reset to defaults.");
+  }
+
   return (
     <div style={styles.page}>
       <div style={styles.container}>
@@ -1861,12 +1943,13 @@ export default function TeacherDashboard() {
               { key: "activities", label: "Activities" },
               { key: "classes", label: "Classes" },
               { key: "submissions", label: "Submissions" },
+              { key: "demo", label: "Demo" },
               { key: "settings", label: "Settings" },
             ].map((item) => (
               <button
                 key={item.key}
                 type="button"
-                onClick={() => setTeacherScreen(item.key as "dashboard" | "activities" | "classes" | "submissions" | "settings")}
+                onClick={() => setTeacherScreen(item.key as "dashboard" | "activities" | "classes" | "submissions" | "settings" | "demo")}
                 style={{
                   width: "100%",
                   textAlign: "left",
@@ -2112,6 +2195,72 @@ export default function TeacherDashboard() {
                   submissionsSuccess={submissionsSuccess}
                   submissionsError={submissionsError}
                 />
+              </section>
+            ) : null}
+
+            {teacherScreen === "demo" ? (
+              <section style={{ display: "grid", gap: 14 }}>
+                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
+                  <div style={styles.settingsLabel}>Demo status</div>
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Public demo access</h2>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                    <button type="button" onClick={() => void handleToggleDemoEnabled()} disabled={isSavingDemoConfig || isLoadingDemoConfig} style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}>
+                      {demoConfig.enabled ? "Disable demo mode" : "Enable demo mode"}
+                    </button>
+                    <div style={{ fontSize: 13, color: demoConfig.enabled ? "#065f46" : "#b45309", fontWeight: 700 }}>
+                      {demoConfig.enabled ? "Demo mode enabled" : "Demo mode disabled"}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 13, color: "#475569", marginBottom: 8 }}>Public demo link: /?mode=demo</div>
+                  <button type="button" onClick={() => void handleCopyDemoLink()} style={styles.secondaryButton}>
+                    {hasCopiedDemoLink ? "Copied" : "Copy demo link"}
+                  </button>
+                </div>
+
+                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
+                  <div style={styles.settingsLabel}>Demo activities</div>
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Configurable cards</h2>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {[...demoConfig.activities].sort((a, b) => a.order - b.order).map((activity) => (
+                      <div key={activity.id} style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, background: "#f8fafc" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                          <input value={activity.title} onChange={(e) => void handleDemoActivityChange(activity.id, { title: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Title" />
+                          <input value={activity.suggestedTime} onChange={(e) => void handleDemoActivityChange(activity.id, { suggestedTime: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Suggested time" />
+                        </div>
+                        <textarea value={activity.prompt} onChange={(e) => void handleDemoActivityChange(activity.id, { prompt: e.target.value })} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, minHeight: 90, padding: 10, marginTop: 8 }} placeholder="Prompt / instructions" />
+                        {activity.type === "external_link" ? (
+                          <input value={activity.externalUrl || ""} onChange={(e) => void handleDemoActivityChange(activity.id, { externalUrl: e.target.value })} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, marginTop: 8 }} placeholder="External URL" />
+                        ) : null}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                          <button type="button" onClick={() => void handleDemoActivityChange(activity.id, { visible: !activity.visible })} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>
+                            {activity.visible ? "Hide" : "Show"}
+                          </button>
+                          <button type="button" onClick={() => void handleMoveDemoActivity(activity.id, "up")} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>Move up</button>
+                          <button type="button" onClick={() => void handleMoveDemoActivity(activity.id, "down")} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}>Move down</button>
+                          <div style={{ fontSize: 12, color: "#64748b", alignSelf: "center" }}>{activity.type}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
+                  <div style={styles.settingsLabel}>Demo branding</div>
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Landing copy</h2>
+                  <input value={demoConfig.welcomeTitle} onChange={(e) => void handleDemoConfigFieldChange("welcomeTitle", e.target.value)} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, marginBottom: 8 }} placeholder="Welcome title" />
+                  <input value={demoConfig.welcomeSubtitle} onChange={(e) => void handleDemoConfigFieldChange("welcomeSubtitle", e.target.value)} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, marginBottom: 8 }} placeholder="Welcome subtitle" />
+                  <input value={demoConfig.heroImageUrl || ""} onChange={(e) => void handleDemoConfigFieldChange("heroImageUrl", e.target.value)} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Optional hero image URL" />
+                </div>
+
+                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
+                  <div style={styles.settingsLabel}>Reset</div>
+                  <button type="button" onClick={() => void handleResetDemoDefaults()} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, { ...styles.secondaryButton, borderColor: "#fecaca", color: "#b91c1c" })}>
+                    Reset demo defaults
+                  </button>
+                  {isLoadingDemoConfig ? <div style={{ marginTop: 8, fontSize: 13, color: "#64748b" }}>Loading demo config...</div> : null}
+                  {demoConfigError ? <div style={{ marginTop: 8, fontSize: 13, color: "#b91c1c" }}>{demoConfigError}</div> : null}
+                  {demoConfigSuccess ? <div style={{ marginTop: 8, fontSize: 13, color: "#065f46" }}>{demoConfigSuccess}</div> : null}
+                </div>
               </section>
             ) : null}
 
