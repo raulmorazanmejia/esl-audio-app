@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import ReliableAudioPlayer from "./ReliableAudioPlayer";
+import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, parseDemoConfigValue } from "../lib/demoConfig";
 
 type PromptRow = {
   id: string;
@@ -691,45 +692,6 @@ function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
   return "Audio";
 }
 
-const DEMO_PROMPTS: PromptRow[] = [
-  {
-    id: "demo-speaking-hometown",
-    prompt_text: "Talk about your hometown",
-    assignment_type: "audio_response",
-    external_url: null,
-    class_name: DEMO_CLASS_NAME,
-    suggested_time: "1 minute",
-    prompt_image_path: null,
-    prompt_image_url: null,
-    example_text: "Say 3 or more sentences about your hometown.",
-    is_active: true,
-  },
-  {
-    id: "demo-picture-description",
-    prompt_text: "Describe the picture",
-    assignment_type: "audio_response",
-    external_url: null,
-    class_name: DEMO_CLASS_NAME,
-    suggested_time: "1 minute",
-    prompt_image_path: null,
-    prompt_image_url: DEMO_IMAGE_CARD,
-    example_text: "Describe what you see in the picture.",
-    is_active: true,
-  },
-  {
-    id: "demo-text-food",
-    prompt_text: "Write about your favorite food",
-    assignment_type: "text_response",
-    external_url: null,
-    class_name: DEMO_CLASS_NAME,
-    suggested_time: null,
-    prompt_image_path: null,
-    prompt_image_url: null,
-    example_text: "Write 3 sentences about a food you like.",
-    is_active: true,
-  },
-];
-
 export default function StudentView() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -774,6 +736,8 @@ export default function StudentView() {
   const [showIosInstallPanel, setShowIosInstallPanel] = useState(false);
   const [isCodeFieldFocused, setIsCodeFieldFocused] = useState(false);
   const [demoSubmissionIndex, setDemoSubmissionIndex] = useState<Record<string, SubmissionRow>>({});
+  const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
+  const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
   const deferredInstallPromptRef = useRef<any>(null);
   const recordingSecondsRef = useRef(0);
   const autoStoppedAtLimitRef = useRef(false);
@@ -796,6 +760,25 @@ export default function StudentView() {
   const welcomeHeroImageUrl = useMemo(() => {
     return studentWelcomeImageUrl?.trim() || ENV_STUDENT_WELCOME_IMAGE_URL || DEFAULT_WELCOME_IMAGE;
   }, [studentWelcomeImageUrl]);
+  const demoPrompts = useMemo(() => {
+    return [...demoConfig.activities]
+      .filter((activity) => activity.visible)
+      .sort((a, b) => a.order - b.order)
+      .map((activity) => ({
+        id: activity.id,
+        prompt_text: activity.title,
+        assignment_type: activity.type,
+        external_url: activity.externalUrl || null,
+        class_name: DEMO_CLASS_NAME,
+        suggested_time: activity.suggestedTime || null,
+        prompt_image_path: null,
+        prompt_image_url: activity.id.includes("picture") ? DEMO_IMAGE_CARD : null,
+        example_text: activity.prompt || activity.title,
+        is_active: true,
+      } satisfies PromptRow));
+  }, [demoConfig.activities]);
+  const demoUnavailable = isDemoMode && !demoConfig.enabled;
+  const demoHeroImageUrl = demoConfig.heroImageUrl?.trim() || welcomeHeroImageUrl;
 
   const setModeInUrl = useCallback((mode: "student" | "demo") => {
     if (typeof window === "undefined") return;
@@ -806,6 +789,10 @@ export default function StudentView() {
   }, []);
 
   const enterDemoMode = useCallback(() => {
+    if (!demoConfig.enabled) {
+      setErrorMessage("Demo mode is currently unavailable.");
+      return;
+    }
     setIsDemoMode(true);
     setModeInUrl("demo");
     setStudentCode(DEMO_STUDENT_CODE);
@@ -815,7 +802,7 @@ export default function StudentView() {
       student_name: "Demo learner",
       student_code: DEMO_STUDENT_CODE,
     });
-    setAssignedPrompts(DEMO_PROMPTS);
+    setAssignedPrompts(demoPrompts);
     setSelectedPromptId(null);
     setCompletedPromptKeys([]);
     setSubmissionStatusIndex({});
@@ -826,7 +813,7 @@ export default function StudentView() {
     setVideoStatusMessage("");
     setVideoErrorMessage("");
     setTextResponse("");
-  }, [setModeInUrl]);
+  }, [demoConfig.enabled, demoPrompts, setModeInUrl]);
 
   const exitDemoMode = useCallback(() => {
     setIsDemoMode(false);
@@ -913,6 +900,11 @@ export default function StudentView() {
 
   useEffect(() => {
     if (!isDemoMode) return;
+    if (!demoConfig.enabled) {
+      setRosterStudent(null);
+      setAssignedPrompts([]);
+      return;
+    }
     setRosterStudent({
       id: "demo-student",
       class_name: DEMO_CLASS_NAME,
@@ -920,8 +912,8 @@ export default function StudentView() {
       student_code: DEMO_STUDENT_CODE,
     });
     setStudentCode(DEMO_STUDENT_CODE);
-    setAssignedPrompts(DEMO_PROMPTS);
-  }, [isDemoMode]);
+    setAssignedPrompts(demoPrompts);
+  }, [demoConfig.enabled, demoPrompts, isDemoMode]);
 
   useEffect(() => {
     if (getIsDemoModeFromUrl()) {
@@ -932,11 +924,18 @@ export default function StudentView() {
   useEffect(() => {
     let isMounted = true;
     const loadWelcomeImageSetting = async () => {
-      const { data, error } = await supabase.from("app_settings").select("value").eq("key", STUDENT_WELCOME_IMAGE_SETTING_KEY).maybeSingle();
-      if (error || !isMounted) return;
-      const value = (data as { value?: string | null } | null)?.value?.trim() ?? "";
-      setStudentWelcomeImageUrl(value || null);
+      const [welcomeSetting, demoSetting] = await Promise.all([
+        supabase.from("app_settings").select("value").eq("key", STUDENT_WELCOME_IMAGE_SETTING_KEY).maybeSingle(),
+        supabase.from("app_settings").select("value").eq("key", DEMO_CONFIG_SETTING_KEY).maybeSingle(),
+      ]);
+      if (!isMounted) return;
+      const welcomeValue = (welcomeSetting.data as { value?: string | null } | null)?.value?.trim() ?? "";
+      setStudentWelcomeImageUrl(welcomeValue || null);
+      const demoValue = (demoSetting.data as { value?: string | null } | null)?.value ?? "";
+      setDemoConfig(parseDemoConfigValue(demoValue));
+      setIsLoadingDemoConfig(false);
     };
+    setIsLoadingDemoConfig(true);
     void loadWelcomeImageSetting();
     return () => {
       isMounted = false;
@@ -1633,7 +1632,41 @@ export default function StudentView() {
 
   async function submitVideoResponse() {
     if (isDemoMode) {
-      setVideoErrorMessage("Video upload is disabled in demo mode.");
+      if (!activePrompt?.id) {
+        setVideoErrorMessage("Select an assignment first.");
+        return;
+      }
+      const now = new Date().toISOString();
+      const demoSubmission: SubmissionRow = {
+        id: `demo-video-${Date.now()}`,
+        prompt_id: activePrompt.id,
+        response_mode: "video",
+        text_response: null,
+        completion_marked_at: null,
+        student_name: rosterStudent?.student_name || "Demo learner",
+        prompt_text: activePrompt.prompt_text || null,
+        audio_path: null,
+        audio_url: null,
+        video_path: null,
+        video_url: recordedVideoUrl || null,
+        status: "demo_complete",
+        created_at: now,
+        feedback_audio_path: null,
+        feedback_audio_url: null,
+        feedback_status: null,
+        feedback_created_at: null,
+        student_email: null,
+        student_auth_id: null,
+        feedback_url: null,
+        transcript: null,
+        ai_score: null,
+        ai_comment: null,
+        teacher_score: null,
+        teacher_comment: null,
+        student_code: DEMO_STUDENT_CODE,
+      };
+      saveDemoSubmission(demoSubmission);
+      setVideoStatusMessage("Demo complete.");
       return;
     }
     const code = studentCode.trim();
@@ -1793,6 +1826,36 @@ export default function StudentView() {
 
   async function markExternalActivityCompleted() {
     if (isDemoMode) {
+      const now = new Date().toISOString();
+      const demoSubmission: SubmissionRow = {
+        id: `demo-external-${Date.now()}`,
+        prompt_id: activePrompt?.id ?? null,
+        response_mode: "text",
+        text_response: null,
+        completion_marked_at: now,
+        student_name: rosterStudent?.student_name || "Demo learner",
+        prompt_text: activePrompt?.prompt_text || null,
+        audio_path: null,
+        audio_url: null,
+        video_path: null,
+        video_url: null,
+        status: "demo_complete",
+        created_at: now,
+        feedback_audio_path: null,
+        feedback_audio_url: null,
+        feedback_status: null,
+        feedback_created_at: null,
+        student_email: null,
+        student_auth_id: null,
+        feedback_url: null,
+        transcript: null,
+        ai_score: null,
+        ai_comment: null,
+        teacher_score: null,
+        teacher_comment: null,
+        student_code: DEMO_STUDENT_CODE,
+      };
+      saveDemoSubmission(demoSubmission);
       setStatusMessage("Demo complete.");
       return;
     }
@@ -1873,7 +1936,7 @@ export default function StudentView() {
             Demo mode
           </div>
         ) : null}
-        {!rosterStudent ? (
+        {!rosterStudent && !isDemoMode ? (
           <>
             <div style={styles.heroMediaFrame} className="student-entry-hero">
               <img src={welcomeHeroImageUrl} alt="Welcome to ESL activity hub" style={styles.heroImage} />
@@ -1912,13 +1975,15 @@ export default function StudentView() {
             <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "14px" }} className="student-primary-btn student-entry-continue">
               {isFinding ? "Checking..." : "Continue"}
             </button>
-            <button
-              type="button"
-              onClick={enterDemoMode}
-              style={{ ...styles.secondaryButton, width: "100%", minHeight: "44px", marginTop: "10px", fontWeight: 700 }}
-            >
-              Try a sample activity
-            </button>
+            {demoConfig.enabled ? (
+              <button
+                type="button"
+                onClick={enterDemoMode}
+                style={{ ...styles.secondaryButton, width: "100%", minHeight: "44px", marginTop: "10px", fontWeight: 700 }}
+              >
+                Try a sample activity
+              </button>
+            ) : null}
             {!isAppInstalled ? (
               <>
                 <div style={styles.installHelpRow}>
@@ -1945,13 +2010,36 @@ export default function StudentView() {
           </>
         ) : null}
 
+        {!rosterStudent && isDemoMode ? (
+          <>
+            <div style={styles.heroMediaFrame}>
+              <img src={demoHeroImageUrl} alt="Demo preview" style={styles.heroImage} />
+              <div style={styles.heroImageOverlay} />
+            </div>
+            {demoUnavailable ? (
+              <div style={{ ...styles.recordingAlert, borderColor: "#fecaca", background: "#fff7f7", color: "#b91c1c" }}>
+                <div style={{ ...styles.recordingAlertHeader, fontSize: "20px" }}>Demo mode is currently unavailable.</div>
+                <button type="button" onClick={exitDemoMode} style={{ ...styles.secondaryButton, marginTop: 10 }}>Go to student login</button>
+              </div>
+            ) : (
+              <>
+                <div style={styles.heroTitle}>{demoConfig.welcomeTitle}</div>
+                <div style={styles.heroSubtitle}>{demoConfig.welcomeSubtitle}</div>
+                <button type="button" onClick={enterDemoMode} disabled={isLoadingDemoConfig} style={{ ...styles.actionButton, marginTop: 8 }}>
+                  {isLoadingDemoConfig ? "Loading..." : "View demo activities"}
+                </button>
+              </>
+            )}
+          </>
+        ) : null}
+
         {rosterStudent && !selectedPromptId ? (
           <div style={{ ...styles.message, color: "#0f766e", fontWeight: 800 }}>
-            {isDemoMode ? "Welcome to the sample student experience." : `Welcome, ${rosterStudent.student_name}.`}
+            {isDemoMode ? "Demo mode · Public preview experience" : `Welcome, ${rosterStudent.student_name}.`}
           </div>
         ) : null}
 
-        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px", fontSize: "30px", letterSpacing: "0.01em" }}>Choose an assignment</div> : null}
+        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px", fontSize: "30px", letterSpacing: "0.01em" }}>{isDemoMode ? "Demo activities" : "Choose an assignment"}</div> : null}
 
         {rosterStudent && !selectedPromptId ? (
           hasVisiblePrompts ? (
@@ -1969,8 +2057,9 @@ export default function StudentView() {
                     className="student-assignment-card"
                     style={{
                       ...styles.taskButton,
-                      borderColor: "#dbe3f0",
-                      boxShadow: "0 8px 18px rgba(15, 23, 42, 0.06)",
+                      borderColor: isDemoMode ? "#cbd5e1" : "#dbe3f0",
+                      boxShadow: isDemoMode ? "0 8px 18px rgba(99, 102, 241, 0.08)" : "0 8px 18px rgba(15, 23, 42, 0.06)",
+                      background: isDemoMode ? "#f8fafc" : "#ffffff",
                     }}
                   >
                     <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -1982,14 +2071,16 @@ export default function StudentView() {
                           <div style={styles.taskStatus}>{cardStatus}</div>
                         </div>
                         {prompt.suggested_time ? <div style={styles.taskMeta}>Suggested time: {prompt.suggested_time}</div> : null}
+                        {isDemoMode ? <div style={styles.taskMeta}>{prompt.example_text || "Sample instructions"}</div> : null}
                       </div>
+                      {isDemoMode ? <div style={{ ...styles.secondaryButton, minHeight: 36, padding: "0 10px", display: "flex", alignItems: "center" }}>Start</div> : null}
                     </div>
                   </button>
                 );
               })}
             </div>
           ) : (
-            <div style={styles.helperText}>No visible assignments are assigned to your class right now.</div>
+            <div style={styles.helperText}>{isDemoMode ? "No demo activities are available right now." : "No visible assignments are assigned to your class right now."}</div>
           )
         ) : null}
 
@@ -2174,13 +2265,22 @@ export default function StudentView() {
                 : "You can review your feedback below."}
             </div>
             {isDemoMode ? (
-              <button
-                type="button"
-                onClick={() => setSelectedPromptId(null)}
-                style={{ ...styles.secondaryButton, minHeight: "44px", marginTop: "10px" }}
-              >
-                Back to demo activities
-              </button>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPromptId(null)}
+                  style={{ ...styles.secondaryButton, minHeight: "44px" }}
+                >
+                  Back to demo activities
+                </button>
+                <button
+                  type="button"
+                  onClick={exitDemoMode}
+                  style={{ ...styles.secondaryButton, minHeight: "44px" }}
+                >
+                  Go to student login
+                </button>
+              </div>
             ) : null}
           </div>
         ) : null}
@@ -2206,7 +2306,7 @@ export default function StudentView() {
         >
           {isSubmitting ? "Submitting..." : "Submit"}
         </button> : null}
-        {!rosterStudent ? <div style={styles.helperText}>Enter your assigned code to start.</div> : null}
+        {!rosterStudent && !isDemoMode ? <div style={styles.helperText}>Enter your assigned code to start.</div> : null}
         {rosterStudent && !activePrompt ? <div style={styles.helperText}>Select an assignment above to get started.</div> : null}
         {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent && activePrompt && !isVideoAssignment && !isExternalAssignment && !isTextAssignment ? <div style={styles.helperText}>Record your answer first.</div> : null}
 
