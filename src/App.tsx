@@ -10,6 +10,7 @@ function getModeFromUrl(): "student" | "teacher" {
 
 export default function App() {
   const [view, setView] = useState<"student" | "teacher">(getModeFromUrl());
+  const [isStudentEntryState, setIsStudentEntryState] = useState(true);
   const [hasTeacherSession, setHasTeacherSession] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [emailInput, setEmailInput] = useState("");
@@ -81,67 +82,72 @@ export default function App() {
     setAuthError("");
   };
 
+  const showModeToggle =
+    (view === "student" && isStudentEntryState) || (view === "teacher" && !hasTeacherSession);
+
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          gap: "10px",
-          marginTop: "20px",
-          marginBottom: "20px",
-        }}
-      >
-        <a
-          href="/?mode=student"
-          onClick={(e) => {
-            e.preventDefault();
-            switchMode("student");
-          }}
+      {showModeToggle ? (
+        <div
           style={{
-            height: "42px",
-            padding: "0 18px",
-            borderRadius: "12px",
-            border: "1px solid #cbd5e1",
-            background: view === "student" ? "#0f172a" : "#ffffff",
-            color: view === "student" ? "#ffffff" : "#334155",
-            fontWeight: 700,
-            cursor: "pointer",
-            textDecoration: "none",
             display: "flex",
-            alignItems: "center",
             justifyContent: "center",
+            gap: "10px",
+            marginTop: "20px",
+            marginBottom: "20px",
           }}
         >
-          Student
-        </a>
+          <a
+            href="/?mode=student"
+            onClick={(e) => {
+              e.preventDefault();
+              switchMode("student");
+            }}
+            style={{
+              height: "42px",
+              padding: "0 18px",
+              borderRadius: "12px",
+              border: "1px solid #cbd5e1",
+              background: view === "student" ? "#0f172a" : "#ffffff",
+              color: view === "student" ? "#ffffff" : "#334155",
+              fontWeight: 700,
+              cursor: "pointer",
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            Student
+          </a>
 
-        <a
-          href="/?mode=teacher"
-          onClick={(e) => {
-            e.preventDefault();
-            switchMode("teacher");
-          }}
-          style={{
-            height: "42px",
-            padding: "0 18px",
-            borderRadius: "12px",
-            border: "1px solid #cbd5e1",
-            background: view === "teacher" ? "#0f172a" : "#ffffff",
-            color: view === "teacher" ? "#ffffff" : "#334155",
-            fontWeight: 700,
-            cursor: "pointer",
-            textDecoration: "none",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          Teacher
-        </a>
-      </div>
+          <a
+            href="/?mode=teacher"
+            onClick={(e) => {
+              e.preventDefault();
+              switchMode("teacher");
+            }}
+            style={{
+              height: "42px",
+              padding: "0 18px",
+              borderRadius: "12px",
+              border: "1px solid #cbd5e1",
+              background: view === "teacher" ? "#0f172a" : "#ffffff",
+              color: view === "teacher" ? "#ffffff" : "#334155",
+              fontWeight: 700,
+              cursor: "pointer",
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            Teacher
+          </a>
+        </div>
+      ) : null}
 
-      {view === "student" && <StudentView />}
+      {view === "student" && <StudentView onEntryStateChange={setIsStudentEntryState} />}
 
       {view === "teacher" && !hasTeacherSession && (
         <div

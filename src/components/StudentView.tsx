@@ -760,7 +760,11 @@ function normalizePictureAccuracy(
   return normalized;
 }
 
-export default function StudentView() {
+type StudentViewProps = {
+  onEntryStateChange?: (isEntryState: boolean) => void;
+};
+
+export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -2198,6 +2202,11 @@ export default function StudentView() {
   const shouldClampTranscript = latestTranscript.length > 280;
   const visibleTranscript = showFullTranscript || !shouldClampTranscript ? latestTranscript : `${latestTranscript.slice(0, 280)}...`;
   const hasVisiblePrompts = assignedPrompts.length > 0;
+  const isStudentEntryState = !rosterStudent && !isDemoMode;
+
+  useEffect(() => {
+    onEntryStateChange?.(isStudentEntryState);
+  }, [isStudentEntryState, onEntryStateChange]);
 
   function discardUnsubmittedRecording() {
     setRecordedBlob(null);
@@ -2222,7 +2231,7 @@ export default function StudentView() {
             Demo showcase
           </div>
         ) : null}
-        {!rosterStudent && !isDemoMode ? (
+        {isStudentEntryState ? (
           <>
             <div style={styles.heroMediaFrame} className="student-entry-hero">
               <img src={welcomeHeroImageUrl} alt="Welcome to ESL activity hub" style={styles.heroImage} />
