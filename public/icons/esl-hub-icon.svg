@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ESL Hub app icon</title>
+  <desc id="desc">Rounded indigo gradient square with white speech bubble and microphone.</desc>
+  <defs>
+    <linearGradient id="bg" x1="8%" y1="6%" x2="92%" y2="94%">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="104" fill="url(#bg)"/>
+  <rect x="24" y="24" width="464" height="464" rx="104" fill="url(#shine)"/>
+  <path d="M136 145c0-18 15-33 33-33h174c18 0 33 15 33 33v131c0 18-15 33-33 33h-90l-61 57c-8 7-20 2-20-9v-48h-3c-18 0-33-15-33-33V145z" fill="#fff"/>
+  <rect x="236" y="169" width="40" height="82" rx="20" fill="#4f46e5"/>
+  <path d="M206 222c0 29 23 52 50 52s50-23 50-52" fill="none" stroke="#4f46e5" stroke-width="16" stroke-linecap="round"/>
+  <rect x="249" y="274" width="14" height="34" rx="7" fill="#4f46e5"/>
+  <rect x="224" y="305" width="64" height="12" rx="6" fill="#4f46e5"/>
+</svg>
