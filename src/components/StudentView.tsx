@@ -72,6 +72,9 @@ const DEMO_MAX_TRANSCRIPT_CHARS = 700;
 const DEMO_SERVER_HARD_FLOOR_MS = 3_000;
 const DEMO_USAGE_STORAGE_KEY = "esl_demo_usage_v1";
 const DEMO_AI_UNAVAILABLE_MESSAGE = "Demo feedback is unavailable right now. Please try again later.";
+const DEMO_LIMIT_REACHED_MESSAGE = "Demo limit reached for today. Please try again later.";
+const DEMO_NON_AI_MESSAGE = "Demo feedback is currently in non-AI mode. Enable AI demo feedback to see transcript and scoring.";
+const DEMO_AI_ANALYZING_MESSAGE = "Analyzing your response…";
 const DEMO_MODE_QUERY_VALUE = "demo";
 const DEMO_CLASS_NAME = "demo-class";
 const DEMO_STUDENT_CODE = "DEMO";
@@ -744,6 +747,7 @@ export default function StudentView() {
   const [videoStatusMessage, setVideoStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [videoErrorMessage, setVideoErrorMessage] = useState("");
+  const [isAnalyzingDemoFeedback, setIsAnalyzingDemoFeedback] = useState(false);
 
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedAudioUrl, setRecordedAudioUrl] = useState("");
@@ -1472,6 +1476,10 @@ export default function StudentView() {
 
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
+        const normalizedError = String(body.error || "").toLowerCase();
+        if (response.status === 429 || normalizedError.includes("demo limit reached")) {
+          return { error: DEMO_LIMIT_REACHED_MESSAGE };
+        }
         return { error: body.error || "AI analysis failed." };
       }
 
@@ -1532,16 +1540,20 @@ export default function StudentView() {
         setErrorMessage("Demo recordings are limited to 90 seconds.");
         return;
       }
+      setIsAnalyzingDemoFeedback(demoConfig.aiFeedbackEnabled);
+      setErrorMessage("");
+      setStatusMessage(demoConfig.aiFeedbackEnabled ? DEMO_AI_ANALYZING_MESSAGE : "");
       const now = new Date().toISOString();
       let demoScore: number | null = null;
-      let demoComment = "Demo complete. In a real class, feedback would appear here.";
+      let demoComment = DEMO_NON_AI_MESSAGE;
       let demoTranscript: string | null = null;
       if (demoConfig.aiFeedbackEnabled) {
         try {
           const dataUrl = await blobToDataUrl(recordedBlob);
           const ai = await analyzeAudio(dataUrl, promptText, activePrompt?.prompt_image_url ?? null);
           if (ai.error) {
-            setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
+            setErrorMessage(ai.error === DEMO_LIMIT_REACHED_MESSAGE ? DEMO_LIMIT_REACHED_MESSAGE : DEMO_AI_UNAVAILABLE_MESSAGE);
+            setStatusMessage("");
             return;
           }
           demoScore = ai.score ?? null;
@@ -1549,8 +1561,13 @@ export default function StudentView() {
           demoTranscript = ai.transcript || null;
         } catch (error: any) {
           setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
+          setStatusMessage("");
           return;
+        } finally {
+          setIsAnalyzingDemoFeedback(false);
         }
+      } else {
+        setIsAnalyzingDemoFeedback(false);
       }
       const demoSubmission: SubmissionRow = {
         id: `demo-audio-${Date.now()}`,
@@ -1582,7 +1599,7 @@ export default function StudentView() {
       };
       saveDemoSubmission(demoSubmission);
       persistDemoUsage(demoAttemptsToday + 1, Date.now());
-      setStatusMessage("Demo complete.");
+      setStatusMessage("");
       setRecordedBlob(null);
       if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
       setRecordedAudioUrl("");
@@ -1880,13 +1897,18 @@ export default function StudentView() {
         setErrorMessage("Demo text is too long. Please keep it shorter.");
         return;
       }
+      setIsAnalyzingDemoFeedback(demoConfig.aiFeedbackEnabled);
+      setErrorMessage("");
+      setStatusMessage(demoConfig.aiFeedbackEnabled ? DEMO_AI_ANALYZING_MESSAGE : "");
       const now = new Date().toISOString();
       let demoScore: number | null = null;
-      let demoComment = "Demo complete. In a real class, feedback would appear here.";
+      let demoComment = DEMO_NON_AI_MESSAGE;
       if (demoConfig.aiFeedbackEnabled) {
         const ai = await analyzeAudio("", promptText, activePrompt?.prompt_image_url ?? null, writtenResponse);
         if (ai.error) {
-          setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
+          setErrorMessage(ai.error === DEMO_LIMIT_REACHED_MESSAGE ? DEMO_LIMIT_REACHED_MESSAGE : DEMO_AI_UNAVAILABLE_MESSAGE);
+          setStatusMessage("");
+          setIsAnalyzingDemoFeedback(false);
           return;
         }
         demoScore = ai.score ?? null;
@@ -1922,7 +1944,8 @@ export default function StudentView() {
       };
       saveDemoSubmission(demoSubmission);
       persistDemoUsage(demoAttemptsToday + 1, Date.now());
-      setStatusMessage("Demo complete.");
+      setStatusMessage("");
+      setIsAnalyzingDemoFeedback(false);
       return;
     }
 
@@ -2044,7 +2067,7 @@ export default function StudentView() {
   const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
   const latestTranscript = submissionForActivePrompt?.text_response || submissionForActivePrompt?.transcript || "";
-  const showAiDemoFeedback = isDemoMode && demoConfig.aiFeedbackEnabled && Boolean(submissionForActivePrompt?.ai_comment);
+  const showAiDemoFeedback = isDemoMode && (submissionForActivePrompt?.ai_score !== null || Boolean(submissionForActivePrompt?.transcript) || Boolean(submissionForActivePrompt?.ai_comment && submissionForActivePrompt.ai_comment !== DEMO_NON_AI_MESSAGE));
   const shouldClampTranscript = latestTranscript.length > 280;
   const visibleTranscript = showFullTranscript || !shouldClampTranscript ? latestTranscript : `${latestTranscript.slice(0, 280)}...`;
   const hasVisiblePrompts = assignedPrompts.length > 0;
@@ -2296,17 +2319,17 @@ export default function StudentView() {
               value={textResponse}
               onChange={(e) => setTextResponse(e.target.value)}
               placeholder="Write your response here..."
-              disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
+              disabled={isSubmitting || isAnalyzingDemoFeedback || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
               style={styles.textArea}
             />
             <button
               type="button"
               onClick={() => void submitTextResponse()}
-              disabled={!textResponse.trim() || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
+              disabled={!textResponse.trim() || isSubmitting || isAnalyzingDemoFeedback || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
               style={{ ...styles.primaryButton, minHeight: "50px", marginTop: "12px", width: "100%" }}
               className="student-primary-btn"
             >
-              {isSubmitting ? "Submitting..." : "Submit response"}
+              {isSubmitting || isAnalyzingDemoFeedback ? "Submitting..." : "Submit response"}
             </button>
           </div>
         ) : isVideoAssignment ? (
@@ -2395,17 +2418,29 @@ export default function StudentView() {
           </div>
         ) : null}
 
-        {hasSubmittedActivePrompt ? (
+        {isDemoMode && isAnalyzingDemoFeedback ? (
+          <div style={{ ...styles.recordingAlert, borderColor: "#7c3aed", background: "#f5f3ff", color: "#4c1d95" }}>
+            <div style={{ ...styles.recordingAlertHeader, fontSize: "20px" }}>
+              <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.45, background: "#8b5cf6" }} />
+              <span>{DEMO_AI_ANALYZING_MESSAGE}</span>
+            </div>
+            <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#6d28d9" }}>
+              Please wait while we generate instant AI feedback.
+            </div>
+          </div>
+        ) : null}
+
+        {hasSubmittedActivePrompt && !isAnalyzingDemoFeedback ? (
           <div style={{ ...styles.recordingAlert, borderColor: "#4f46e5", background: "#eef2ff", color: "#312e81" }}>
             <div style={{ ...styles.recordingAlertHeader, fontSize: "22px" }}>
               <span aria-hidden="true">✓</span>
-              <span>{isDemoMode ? "Demo complete" : "Submission received"}</span>
+              <span>{isDemoMode ? (showAiDemoFeedback ? "Nice — here’s your AI feedback." : "Nice — here’s your demo result.") : "Submission received"}</span>
             </div>
             <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#4338ca" }}>
               {isDemoMode
-                ? demoConfig.aiFeedbackEnabled
-                  ? "Nice work. Try another activity."
-                  : "Nice work. Try another activity."
+                ? showAiDemoFeedback
+                  ? "This is instant AI feedback on your speaking."
+                  : "AI demo feedback is currently off for this public demo."
                 : "You can review your feedback below."}
             </div>
             {isDemoMode ? (
@@ -2426,6 +2461,11 @@ export default function StudentView() {
                 </button>
               </div>
             ) : null}
+            {isDemoMode ? (
+              <div style={{ ...styles.recordingHelper, marginTop: 8, color: "#4338ca", fontSize: "14px", fontWeight: 600 }}>
+                Try another sample activity when you’re ready.
+              </div>
+            ) : null}
           </div>
         ) : null}
 
@@ -2439,16 +2479,16 @@ export default function StudentView() {
         {!isVideoAssignment && !isExternalAssignment && !isTextAssignment && recordedBlob ? <button
           type="button"
           onClick={() => void submitRecording()}
-          disabled={!recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
+          disabled={!recordedBlob || isRecording || isSubmitting || isAnalyzingDemoFeedback || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
           style={{
             ...styles.submitButton,
-            opacity: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? 0.6 : 1,
-            cursor: !recordedBlob || isRecording || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? "not-allowed" : "pointer",
+            opacity: !recordedBlob || isRecording || isSubmitting || isAnalyzingDemoFeedback || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? 0.6 : 1,
+            cursor: !recordedBlob || isRecording || isSubmitting || isAnalyzingDemoFeedback || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? "not-allowed" : "pointer",
             marginTop: "22px",
           }}
           className="student-primary-btn"
         >
-          {isSubmitting ? "Submitting..." : "Submit"}
+          {isSubmitting || isAnalyzingDemoFeedback ? "Submitting..." : "Submit"}
         </button> : null}
         {!rosterStudent && !isDemoMode ? <div style={styles.helperText}>Enter your assigned code to start.</div> : null}
         {rosterStudent && !activePrompt ? <div style={styles.helperText}>Select an assignment above to get started.</div> : null}
@@ -2469,9 +2509,9 @@ export default function StudentView() {
           {submissionForActivePrompt ? (
             <>
               <div style={styles.feedbackHeader}>
-                <div style={styles.feedbackTitle}>Your feedback</div>
+                <div style={styles.feedbackTitle}>{showAiDemoFeedback ? "AI demo feedback" : "Your feedback"}</div>
                 {primaryFeedbackScore !== null && primaryFeedbackScore !== undefined ? (
-                  <div style={styles.scoreBadge}>Score: {primaryFeedbackScore}/5</div>
+                  <div style={styles.scoreBadge}>Score: {primaryFeedbackScore} / 5</div>
                 ) : null}
               </div>
               {isExternalAssignment ? (
@@ -2503,11 +2543,10 @@ export default function StudentView() {
                 <div style={styles.feedbackPanelLabel}>{showAiDemoFeedback ? "AI demo feedback" : "Feedback"}</div>
                 <div style={styles.feedbackHighlight}>
                   <div style={styles.feedbackPanelText}>
-                    {isDemoMode && !showAiDemoFeedback
-                      ? "Demo complete. In a real class, your teacher would receive your response and you could get feedback."
-                      : primaryFeedbackComment || "No written feedback yet."}
+                    {primaryFeedbackComment || "No written feedback yet."}
                   </div>
                 </div>
+                {showAiDemoFeedback ? <div style={{ ...styles.feedbackPanelLabel, textTransform: "none", letterSpacing: "normal", color: "#2563eb" }}>Powered by ESL Hub AI feedback</div> : null}
               </div>
 
               <div style={styles.feedbackPanel}>

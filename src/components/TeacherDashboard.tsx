@@ -2300,6 +2300,7 @@ export default function TeacherDashboard() {
                   <h2 style={{ ...styles.settingsTitle, marginBottom: 6 }}>Public demo access</h2>
                   <p style={{ ...styles.settingsDescription, marginBottom: 12 }}>Use this link to let people try ESL Hub without a class code.</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>Enable public demo</div>
                     <button type="button" onClick={() => void handleToggleDemoEnabled()} disabled={isSavingDemoConfig || isLoadingDemoConfig} style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}>
                       {demoConfig.demoEnabled ? "Disable public demo" : "Enable public demo"}
                     </button>
@@ -2312,6 +2313,7 @@ export default function TeacherDashboard() {
                     {hasCopiedDemoLink ? "Copied" : "Copy demo link"}
                   </button>
                   <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>Enable AI demo feedback</div>
                     <button
                       type="button"
                       onClick={() => void persistDemoConfig({ ...demoConfig, aiFeedbackEnabled: !demoConfig.aiFeedbackEnabled }, `Demo AI feedback ${demoConfig.aiFeedbackEnabled ? "disabled" : "enabled"}.`)}
