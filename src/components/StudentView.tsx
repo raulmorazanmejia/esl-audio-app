@@ -45,6 +45,9 @@ type SubmissionRow = {
   transcript: string | null;
   ai_score: number | null;
   ai_comment: string | null;
+  ai_strengths?: string[] | null;
+  ai_improvements?: string[] | null;
+  ai_picture_accuracy?: string | null;
   teacher_score: number | null;
   teacher_comment: string | null;
   student_code: string | null;
@@ -61,6 +64,9 @@ type AnalyzeResponse = {
   transcript?: string | null;
   score?: number | null;
   comment?: string | null;
+  strengths?: string[];
+  improvements?: string[];
+  pictureAccuracy?: string;
   flagged?: boolean;
   error?: string;
 };
@@ -1456,6 +1462,8 @@ export default function StudentView() {
 
   async function analyzeAudio(audioUrl: string, promptText: string, promptImageUrl?: string | null, transcriptText?: string): Promise<AnalyzeResponse> {
     const assignmentType = activePrompt?.assignment_type || null;
+    const promptImagePath = activePrompt?.prompt_image_path || null;
+    const resolvedImageUrl = promptImageUrl || activePrompt?.prompt_image_url || null;
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
@@ -1466,8 +1474,10 @@ export default function StudentView() {
           prompt: promptText,
           prompt_text: promptText,
           promptText,
-          promptImageUrl: promptImageUrl || null,
-          prompt_image_url: promptImageUrl || null,
+          promptImageUrl: resolvedImageUrl,
+          prompt_image_url: resolvedImageUrl,
+          imageUrl: resolvedImageUrl,
+          prompt_image_path: promptImagePath,
           transcriptText: transcriptText || null,
           assignmentType,
           assignment_type: assignmentType,
@@ -1552,6 +1562,9 @@ export default function StudentView() {
       let demoScore: number | null = null;
       let demoComment = DEMO_NON_AI_MESSAGE;
       let demoTranscript: string | null = null;
+      let demoStrengths: string[] | null = null;
+      let demoImprovements: string[] | null = null;
+      let demoPictureAccuracy: string | null = null;
       if (demoConfig.aiFeedbackEnabled) {
         try {
           const dataUrl = await blobToDataUrl(recordedBlob);
@@ -1564,6 +1577,9 @@ export default function StudentView() {
           demoScore = ai.score ?? null;
           demoComment = ai.comment || DEMO_AI_UNAVAILABLE_MESSAGE;
           demoTranscript = ai.transcript || null;
+          demoStrengths = ai.strengths ?? null;
+          demoImprovements = ai.improvements ?? null;
+          demoPictureAccuracy = ai.pictureAccuracy ?? null;
         } catch (error: any) {
           setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
           setStatusMessage("");
@@ -1598,6 +1614,9 @@ export default function StudentView() {
         transcript: demoTranscript,
         ai_score: demoScore,
         ai_comment: demoComment,
+        ai_strengths: demoStrengths,
+        ai_improvements: demoImprovements,
+        ai_picture_accuracy: demoPictureAccuracy,
         teacher_score: null,
         teacher_comment: null,
         student_code: DEMO_STUDENT_CODE,
@@ -1660,7 +1679,13 @@ export default function StudentView() {
 
       if (error) throw error;
 
-      setSubmissionForActivePrompt((data as SubmissionRow) || null);
+      const nextSubmission: SubmissionRow = {
+        ...(data as SubmissionRow),
+        ai_strengths: ai.strengths ?? null,
+        ai_improvements: ai.improvements ?? null,
+        ai_picture_accuracy: ai.pictureAccuracy ?? null,
+      };
+      setSubmissionForActivePrompt(nextSubmission);
       await fetchCompletedPromptKeys(code);
       await fetchSubmissionStatuses(code);
       setStatusMessage("Done ✅");
@@ -1908,6 +1933,9 @@ export default function StudentView() {
       const now = new Date().toISOString();
       let demoScore: number | null = null;
       let demoComment = DEMO_NON_AI_MESSAGE;
+      let demoStrengths: string[] | null = null;
+      let demoImprovements: string[] | null = null;
+      let demoPictureAccuracy: string | null = null;
       if (demoConfig.aiFeedbackEnabled) {
         const ai = await analyzeAudio("", promptText, activePrompt?.prompt_image_url ?? null, writtenResponse);
         if (ai.error) {
@@ -1918,6 +1946,9 @@ export default function StudentView() {
         }
         demoScore = ai.score ?? null;
         demoComment = ai.comment || DEMO_AI_UNAVAILABLE_MESSAGE;
+        demoStrengths = ai.strengths ?? null;
+        demoImprovements = ai.improvements ?? null;
+        demoPictureAccuracy = ai.pictureAccuracy ?? null;
       }
       const demoSubmission: SubmissionRow = {
         id: `demo-text-${Date.now()}`,
@@ -1943,6 +1974,9 @@ export default function StudentView() {
         transcript: writtenResponse,
         ai_score: demoScore,
         ai_comment: demoComment,
+        ai_strengths: demoStrengths,
+        ai_improvements: demoImprovements,
+        ai_picture_accuracy: demoPictureAccuracy,
         teacher_score: null,
         teacher_comment: null,
         student_code: DEMO_STUDENT_CODE,
@@ -2071,6 +2105,9 @@ export default function StudentView() {
   const micLabel = isRecording ? "Stop" : "Start recording";
   const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
+  const aiStrengths = submissionForActivePrompt?.ai_strengths?.filter(Boolean) || [];
+  const aiImprovements = submissionForActivePrompt?.ai_improvements?.filter(Boolean) || [];
+  const aiPictureAccuracy = submissionForActivePrompt?.ai_picture_accuracy?.trim() || "";
   const latestTranscript = submissionForActivePrompt?.text_response || submissionForActivePrompt?.transcript || "";
   const showAiDemoFeedback = isDemoMode && (submissionForActivePrompt?.ai_score !== null || Boolean(submissionForActivePrompt?.transcript) || Boolean(submissionForActivePrompt?.ai_comment && submissionForActivePrompt.ai_comment !== DEMO_NON_AI_MESSAGE));
   const shouldClampTranscript = latestTranscript.length > 280;
@@ -2551,6 +2588,32 @@ export default function StudentView() {
                     {primaryFeedbackComment || "No written feedback yet."}
                   </div>
                 </div>
+                {aiStrengths.length ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={styles.feedbackPanelLabel}>What you did well</div>
+                    <ul style={{ margin: "8px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
+                      {aiStrengths.map((item, index) => (
+                        <li key={`strength-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {aiImprovements.length ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={styles.feedbackPanelLabel}>What to improve</div>
+                    <ul style={{ margin: "8px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
+                      {aiImprovements.map((item, index) => (
+                        <li key={`improve-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {aiPictureAccuracy ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={styles.feedbackPanelLabel}>Picture accuracy</div>
+                    <div style={styles.feedbackPanelText}>{aiPictureAccuracy}</div>
+                  </div>
+                ) : null}
                 {showAiDemoFeedback ? <div style={{ ...styles.feedbackPanelLabel, textTransform: "none", letterSpacing: "normal", color: "#2563eb" }}>Powered by ESL Hub AI feedback</div> : null}
               </div>
 
