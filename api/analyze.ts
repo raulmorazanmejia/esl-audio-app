@@ -99,6 +99,35 @@ function isClearlyInappropriate(moderationResult: any): boolean {
   });
 }
 
+function sanitizeStringArray(value: any, maxItems = 3): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const cleaned = value
+    .filter((item) => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, maxItems);
+  return cleaned.length ? cleaned : undefined;
+}
+
+function sanitizePictureAccuracy(value: any):
+  | {
+      correct?: string[];
+      missing?: string[];
+      incorrect?: string[];
+    }
+  | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const correct = sanitizeStringArray(value.correct, 5);
+  const missing = sanitizeStringArray(value.missing, 5);
+  const incorrect = sanitizeStringArray(value.incorrect, 5) || [];
+  if (!correct && !missing && !incorrect.length) return undefined;
+  return {
+    correct,
+    missing,
+    incorrect,
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   function fail(
     status: number,
@@ -308,7 +337,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           messages: [
             {
               role: "system",
-              content: `You are an ESL teacher grading one learner response. Return valid JSON only in this schema: {"score": number, "comment": string, "strengths": string[], "improvements": string[], "pictureAccuracy": string, "grammarFeedback": string[]}.
+              content: `You are an ESL teacher grading one learner response. Return valid JSON only in this schema:
+{"score": number, "comment": string, "scoreReason": string, "strengths": string[], "improvements": string[], "grammarFeedback": string[], "modelAnswer": string, "pictureAccuracy": {"correct": string[], "missing": string[], "incorrect": string[]}}.
 Rules:
 - transcript/score/comment must always be usable by old clients.
 - Score must be an integer 1-5.
@@ -322,18 +352,25 @@ Rules:
   1 = unrelated, too short, mostly unclear, or not connected to task
 - For A1-A2 level learners, do not over-penalize small grammar mistakes when meaning is clear. Still give 1-2 useful grammar corrections when relevant.
 - Grammar checks to consider every time: subject-verb agreement, verb tense, articles (a/an/the), plural nouns, word order, basic prepositions, sentence completeness, repeated/unclear phrasing.
-- Include grammarFeedback only when there is something useful to correct.
-- grammarFeedback should be a short list of direct fixes (max 2 items), e.g. "Say 'There are six people,' not 'There is six people.'"
+- scoreReason is required and must mention: task completion, detail, and grammar/clarity in one short explanation.
+- strengths/improvements should be short bullet-style items.
+- grammarFeedback should be 1-3 useful mini-teaching fixes, each with a correction + short pattern rule.
+- If score is 1-3, modelAnswer is required (A1-A2 level, 2-4 short sentences). If score is 4-5, modelAnswer is optional.
 - strengths/improvements should be short bullet-style items.
 ${demoMode ? "Keep wording concise for demo users." : ""}
 ${isPictureActivity ? `For describe-a-picture tasks:
 - You MUST ground feedback in the actual image when image context is available.
-- First identify key visible elements, then compare the student answer to what is visible.
+- Internally identify at least 4 key visible elements/actions first, then compare the student answer to what is visible.
 - Detect: correct details, missing important details, and invented/inaccurate details.
-- pictureAccuracy must explicitly mention accuracy vs. missing/invented details.
-- In feedback text (comment/pictureAccuracy), reference at least 2 concrete visible elements from the image (objects, people, actions, positions, etc.).
+- pictureAccuracy must be an object with arrays:
+  - correct: student-mentioned details that are visible and accurate
+  - missing: important visible elements/actions not mentioned
+  - incorrect: invented/inaccurate details (use [] when none)
+- In feedback text (comment/scoreReason), reference concrete visible elements from the image.
 - Do not say vague lines like "You mentioned several things in the picture."
-- If image is unavailable, fall back to prompt+transcript-only grading while still providing grammar review.` : "For non-picture tasks: evaluate against prompt and transcript only."}`,
+- If image is unavailable, fall back to prompt+transcript-only grading while still providing grammarFeedback and modelAnswer when needed.` : `For non-picture tasks:
+- Evaluate whether the student answered the prompt, gave enough detail, used understandable complete sentences, and whether grammar/syntax affects clarity.
+- Give practical ESL-teacher feedback, not generic praise.`}`,
             },
             {
               role: "user",
@@ -373,22 +410,39 @@ ${isPictureActivity ? `For describe-a-picture tasks:
     let comment = "Basic response.";
     let strengths: string[] | undefined;
     let improvements: string[] | undefined;
-    let pictureAccuracy: string | undefined;
+    let pictureAccuracy:
+      | {
+          correct?: string[];
+          missing?: string[];
+          incorrect?: string[];
+        }
+      | undefined;
     let grammarFeedback: string[] | undefined;
+    let scoreReason: string | undefined;
+    let modelAnswer: string | undefined;
 
     try {
       const raw = gradingJson.choices?.[0]?.message?.content ?? "{}";
       const parsed = JSON.parse(raw);
       score = typeof parsed.score === "number" ? parsed.score : 3;
+      score = Math.min(5, Math.max(1, Math.round(score)));
       comment = typeof parsed.comment === "string" ? parsed.comment : "Basic response.";
-      strengths = Array.isArray(parsed.strengths) ? parsed.strengths.filter((item: any) => typeof item === "string") : undefined;
-      improvements = Array.isArray(parsed.improvements) ? parsed.improvements.filter((item: any) => typeof item === "string") : undefined;
-      pictureAccuracy = typeof parsed.pictureAccuracy === "string" ? parsed.pictureAccuracy : undefined;
-      grammarFeedback = Array.isArray(parsed.grammarFeedback)
-        ? parsed.grammarFeedback.filter((item: any) => typeof item === "string").slice(0, 2)
-        : undefined;
+      strengths = sanitizeStringArray(parsed.strengths, 3);
+      improvements = sanitizeStringArray(parsed.improvements, 3);
+      pictureAccuracy = sanitizePictureAccuracy(parsed.pictureAccuracy);
+      grammarFeedback = sanitizeStringArray(parsed.grammarFeedback, 3);
+      scoreReason = typeof parsed.scoreReason === "string" ? parsed.scoreReason.trim() : undefined;
+      modelAnswer = typeof parsed.modelAnswer === "string" ? parsed.modelAnswer.trim() : undefined;
+      if (score <= 3 && !modelAnswer) {
+        modelAnswer = "Try adding one or two more clear sentences to fully answer the prompt.";
+      }
+      if (!scoreReason) {
+        scoreReason = `Score ${score} because your answer ${score >= 3 ? "is related to the task" : "does not fully complete the task"}, has ${score >= 4 ? "good detail" : "limited detail"}, and needs ${score >= 4 ? "minor grammar polish" : "clearer grammar and sentence structure"}.`;
+      }
     } catch (err) {
-      console.error("GRADE PARSE ERROR:", err);
+      console.error("GRADE PARSE ERROR:", {
+        message: err instanceof Error ? err.message : "unknown_parse_error",
+      });
     }
 
     return res.status(200).json({
@@ -399,6 +453,8 @@ ${isPictureActivity ? `For describe-a-picture tasks:
       improvements,
       pictureAccuracy,
       grammarFeedback,
+      scoreReason,
+      modelAnswer,
       flagged: false,
     });
   } catch (err) {
