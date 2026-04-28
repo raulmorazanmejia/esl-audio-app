@@ -365,6 +365,19 @@ const styles = {
     padding: "0 12px",
     cursor: "pointer",
   },
+  changeCodeButton: {
+    minHeight: "40px",
+    borderRadius: "999px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#475569",
+    fontSize: "14px",
+    fontWeight: 700,
+    cursor: "pointer",
+    padding: "0 14px",
+    display: "inline-flex",
+    alignItems: "center",
+  },
   taskThumb: {
     width: "64px",
     height: "64px",
@@ -957,6 +970,44 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       livePreviewVideoRef.current.srcObject = null;
     }
   }, []);
+
+  const changeCode = useCallback(() => {
+    stopTracks();
+    stopVideoTracks();
+    recorderRef.current = null;
+    videoRecorderRef.current = null;
+    chunksRef.current = [];
+    videoChunksRef.current = [];
+    setIsRecording(false);
+    setIsRecordingVideo(false);
+    setRecordedBlob(null);
+    if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+    setRecordedAudioUrl("");
+    setRecordingMimeType("");
+    setRecordedDurationSeconds(0);
+    setRecordedVideoBlob(null);
+    if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
+    setRecordedVideoUrl("");
+    setVideoMimeType("");
+    setRecordingSeconds(0);
+    setPulseVisible(true);
+    setShowFullTranscript(false);
+    setTextResponse("");
+    setStudentCode("");
+    setRosterStudent(null);
+    setAssignedPrompts([]);
+    setSelectedPromptId(null);
+    setSubmissionForActivePrompt(null);
+    setCompletedPromptKeys([]);
+    setSubmissionStatusIndex({});
+    setDemoSubmissionIndex({});
+    setStatusMessage("");
+    setErrorMessage("");
+    setVideoStatusMessage("");
+    setVideoErrorMessage("");
+    setIsDemoMode(false);
+    setModeInUrl("student");
+  }, [recordedAudioUrl, recordedVideoUrl, setModeInUrl, stopTracks, stopVideoTracks]);
 
   const initializeVideoPreview = useCallback(async () => {
     if (typeof window === "undefined" || typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -2332,6 +2383,14 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         ) : null}
 
         {rosterStudent && !selectedPromptId ? (
+          <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: "4px" }}>
+            <button type="button" onClick={changeCode} style={styles.changeCodeButton}>
+              ← Change code
+            </button>
+          </div>
+        ) : null}
+
+        {rosterStudent && !selectedPromptId ? (
           <div style={{ ...styles.message, color: "#0f766e", fontWeight: 800 }}>
             {isDemoMode ? "Demo mode · Public preview experience" : `Welcome, ${rosterStudent.student_name}.`}
           </div>
@@ -2387,6 +2446,11 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
         {rosterStudent && selectedPromptId ? (
           <>
+        <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "4px", marginBottom: "4px" }}>
+          <button type="button" onClick={changeCode} style={styles.changeCodeButton}>
+            ← Change code
+          </button>
+        </div>
         <div style={{ marginTop: "8px" }}>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <button type="button" onClick={() => setSelectedPromptId(null)} style={styles.backButton}>
