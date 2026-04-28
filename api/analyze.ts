@@ -18,6 +18,19 @@ function getTodayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function firstNonEmptyString(...values: any[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function isLikelyImageUrl(value: string | null): boolean {
+  if (!value) return false;
+  const lower = value.toLowerCase();
+  return lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("data:image/");
+}
+
 function guessAudioMetaFromUrl(audioUrl: string) {
   const lower = audioUrl.toLowerCase();
 
@@ -115,6 +128,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       promptImageUrl,
       prompt_image_url,
       promptImage,
+      imageUrl,
+      prompt_image_path,
       transcriptText,
       assignmentType,
       assignment_type,
@@ -128,9 +143,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const demoMode = Boolean(isDemoMode || demo);
     const finalAudioUrl = audioUrl || audio_url;
     const finalPromptText = promptText || prompt_text || prompt;
-    const finalPromptImageUrl = promptImageUrl || prompt_image_url || promptImage || null;
+    const finalPromptImageUrl = firstNonEmptyString(promptImageUrl, prompt_image_url, promptImage, imageUrl, prompt_image_path);
     const finalTranscriptText = typeof transcriptText === "string" ? transcriptText.trim() : "";
     const finalActivityType = assignmentType || assignment_type || activityType || activity_type || null;
+    const isPictureActivity =
+      finalActivityType === "audio_response" &&
+      Boolean(firstNonEmptyString(promptImageUrl, prompt_image_url, imageUrl, prompt_image_path, promptImage));
 
     if (demoMode) {
       const ip = getClientIp(req);
@@ -259,44 +277,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const userContent = finalPromptImageUrl
-      ? [
-          {
-            type: "text",
-            text: `Activity type: ${finalActivityType || "unknown"}\nPrompt: ${finalPromptText}\nStudent answer: ${transcript}\n\nEvaluate task completion against BOTH the prompt text and this image. Reward relevant visible details. Do not invent invisible details. Light inferences are okay only when strongly supported by visible evidence.`,
-          },
-          {
-            type: "image_url",
-            image_url: {
-              url: finalPromptImageUrl,
+    async function requestGrade(usePictureContext: boolean) {
+      const shouldIncludeImage = usePictureContext && isPictureActivity && isLikelyImageUrl(finalPromptImageUrl);
+      const userContent = shouldIncludeImage
+        ? [
+            {
+              type: "text",
+              text: `Activity type: ${finalActivityType || "unknown"}\nPrompt: ${finalPromptText}\nStudent answer: ${transcript}\n\nEvaluate against BOTH the prompt and image.`,
             },
-          },
-        ]
-      : `Activity type: ${finalActivityType || "unknown"}\nPrompt: ${finalPromptText}\nStudent answer: ${transcript}`;
+            {
+              type: "image_url",
+              image_url: {
+                url: finalPromptImageUrl,
+              },
+            },
+          ]
+        : `Activity type: ${finalActivityType || "unknown"}\nPrompt: ${finalPromptText}\nStudent answer: ${transcript}`;
 
-    const gradingRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openAiApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        temperature: 0,
-        max_tokens: demoMode ? 120 : 220,
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: `You grade short ESL speaking responses using transcript-only evidence. Evaluate both content (relevance and completeness) and inferred delivery (clarity, fluency, and answer length) from the transcript text. Infer likely speaking limits this way: very short answers may indicate limited speaking; repetitive or overly simple wording may indicate fluency limits; unnatural phrasing may indicate clarity issues. Do not pretend to hear audio and do not claim specific pronunciation errors from sound. Use classroom-safe speaking guidance such as "speak more clearly", "improve pronunciation", or "add more detail when speaking" when appropriate. Return valid JSON only in this exact format: {"score": number, "comment": string}. Score must be an integer from 1 to 5 using this rubric: 5 = clearly answers the prompt well with strong understandable language and solid inferred delivery; 4 = answers the prompt with minor weakness in content or inferred delivery; 3 = partially answers or is too limited in content or inferred delivery; 2 = mostly off-topic or very weak with limited understandable output; 1 = does not answer the prompt or is unrelated. Comment must be exactly two short sentences in this order: (1) one specific strength, (2) one specific improvement for future speaking.${demoMode ? " Keep comment concise for demo users and under 30 words total." : ""} Keep tone practical, classroom-appropriate, and concise. Avoid repetition and generic filler. Do not hallucinate details not present in the transcript or prompt. For image prompts, only credit details that are visibly present in the provided image and allow only light, reasonable inferences strongly supported by visible evidence.`,
-          },
-          {
-            role: "user",
-            content: userContent,
-          },
-        ],
-      }),
-    });
+      return fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          temperature: 0,
+          max_tokens: demoMode ? 220 : 360,
+          response_format: { type: "json_object" },
+          messages: [
+            {
+              role: "system",
+              content: `You grade ESL responses. Return valid JSON only in this schema: {"score": number, "comment": string, "strengths": string[], "improvements": string[], "pictureAccuracy": string}. Score must be integer 1-5. Evaluate relevance, completeness, and understandable grammar/syntax. Do not heavily punish minor grammar errors when meaning is clear. Keep comments practical and specific.${demoMode ? " Keep wording concise for demo users." : ""} ${
+                isPictureActivity
+                  ? "For describe-a-picture tasks: judge whether learner mentions visible objects/people/actions, describes scene accurately, avoids invented details, and gives enough detail for level. If image is unavailable, fall back to prompt+transcript only."
+                  : "For non-picture tasks: evaluate against prompt and transcript only."
+              }`,
+            },
+            {
+              role: "user",
+              content: userContent,
+            },
+          ],
+        }),
+      });
+    }
+
+    let gradingRes: Response;
+    try {
+      gradingRes = await requestGrade(true);
+    } catch (pictureErr: any) {
+      if (isPictureActivity) {
+        console.error("picture grading fallback", { reason: pictureErr?.message || "picture_request_failed" });
+      }
+      gradingRes = await requestGrade(false);
+    }
+    if (!gradingRes.ok && isPictureActivity && isLikelyImageUrl(finalPromptImageUrl)) {
+      console.error("picture grading fallback", { reason: `provider_status_${gradingRes.status}` });
+      gradingRes = await requestGrade(false);
+    }
 
     const gradingJson = await gradingRes.json();
     console.log("GRADING JSON:", JSON.stringify(gradingJson, null, 2));
@@ -311,12 +350,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let score = 3;
     let comment = "Basic response.";
+    let strengths: string[] | undefined;
+    let improvements: string[] | undefined;
+    let pictureAccuracy: string | undefined;
 
     try {
       const raw = gradingJson.choices?.[0]?.message?.content ?? "{}";
       const parsed = JSON.parse(raw);
       score = typeof parsed.score === "number" ? parsed.score : 3;
       comment = typeof parsed.comment === "string" ? parsed.comment : "Basic response.";
+      strengths = Array.isArray(parsed.strengths) ? parsed.strengths.filter((item: any) => typeof item === "string") : undefined;
+      improvements = Array.isArray(parsed.improvements) ? parsed.improvements.filter((item: any) => typeof item === "string") : undefined;
+      pictureAccuracy = typeof parsed.pictureAccuracy === "string" ? parsed.pictureAccuracy : undefined;
     } catch (err) {
       console.error("GRADE PARSE ERROR:", err);
     }
@@ -325,6 +370,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       transcript,
       score,
       comment,
+      strengths,
+      improvements,
+      pictureAccuracy,
       flagged: false,
     });
   } catch (err) {
