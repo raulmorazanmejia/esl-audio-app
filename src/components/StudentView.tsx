@@ -235,7 +235,7 @@ const styles = {
   field: {
     width: "100%",
     minHeight: "68px",
-    borderRadius: "18px",
+    borderRadius: "20px",
     border: "1px solid #cfd8e3",
     background: "#ffffff",
     padding: "0 16px",
@@ -308,20 +308,20 @@ const styles = {
     marginBottom: "14px",
   },
   taskList: {
-    marginTop: "20px",
+    marginTop: "14px",
     display: "grid",
-    gap: "10px",
+    gap: "12px",
   },
   taskButton: {
     width: "100%",
-    borderRadius: "18px",
+    borderRadius: "20px",
     border: "1px solid #dbe3f0",
     background: "#ffffff",
-    padding: "14px",
+    padding: "16px",
     textAlign: "left" as const,
     cursor: "pointer",
     display: "grid",
-    gap: "6px",
+    gap: "8px",
   },
   taskTitle: {
     fontSize: "16px",
@@ -329,7 +329,7 @@ const styles = {
     color: "#0f172a",
   },
   taskMeta: {
-    fontSize: "13px",
+    fontSize: "12px",
     color: "#64748b",
   },
   taskStatus: {
@@ -379,9 +379,9 @@ const styles = {
     alignItems: "center",
   },
   taskThumb: {
-    width: "64px",
-    height: "64px",
-    borderRadius: "10px",
+    width: "72px",
+    height: "72px",
+    borderRadius: "12px",
     border: "1px solid #cbd5e1",
     objectFit: "cover" as const,
   },
@@ -400,7 +400,7 @@ const styles = {
     justifyContent: "center",
     margin: "22px auto 18px",
     flexDirection: "column" as const,
-    gap: "6px",
+    gap: "8px",
     lineHeight: 1.1,
     padding: "12px",
     textAlign: "center" as const,
@@ -409,13 +409,13 @@ const styles = {
     fontSize: "48px",
   },
   micButtonLabel: {
-    fontSize: "20px",
+    fontSize: "19px",
     fontWeight: 800,
   },
   recordingAlert: {
     width: "100%",
     margin: "-8px 0 14px",
-    borderRadius: "18px",
+    borderRadius: "20px",
     border: "1px solid #c7d2fe",
     background: "#eef2ff",
     color: "#3730a3",
@@ -516,12 +516,12 @@ const styles = {
     lineHeight: 1.4,
     display: "inline-flex",
     alignItems: "center",
-    gap: "6px",
+    gap: "8px",
     fontWeight: 600,
   },
   activityProgressWrap: {
-    marginTop: "10px",
-    marginBottom: "12px",
+    marginTop: "6px",
+    marginBottom: "10px",
   },
   activityProgressLabel: {
     fontSize: "12px",
@@ -533,7 +533,7 @@ const styles = {
   },
   activityProgressTrack: {
     width: "100%",
-    height: "6px",
+    height: "7px",
     borderRadius: "999px",
     background: "#e0e7ff",
     overflow: "hidden" as const,
@@ -555,7 +555,7 @@ const styles = {
     padding: "5px 10px",
     display: "inline-flex",
     alignItems: "center",
-    gap: "6px",
+    gap: "8px",
   },
   iosInstallPanel: {
     marginTop: "10px",
@@ -591,16 +591,18 @@ const styles = {
     boxShadow: "0 10px 28px rgba(15, 23, 42, 0.07)",
     display: "grid",
     gap: "14px",
+    scrollMarginTop: "12px",
+    transition: "opacity 240ms ease, transform 240ms ease",
   },
   feedbackHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: "10px",
+    gap: "12px",
     flexWrap: "wrap" as const,
   },
   feedbackTitle: {
-    fontSize: "20px",
+    fontSize: "19px",
     fontWeight: 800,
     color: "#0f172a",
   },
@@ -667,6 +669,38 @@ const styles = {
     border: "1px solid #cbd5e1",
     background: "#000000",
     marginTop: "12px",
+  },
+
+  assignmentOverviewCard: {
+    border: "1px solid #dbeafe",
+    background: "#f8fbff",
+    borderRadius: "16px",
+    padding: "12px 14px",
+    display: "grid",
+    gap: "8px",
+    marginTop: "10px",
+  },
+  assignmentOverviewLabel: {
+    fontSize: "14px",
+    color: "#1e40af",
+    fontWeight: 700,
+  },
+  assignmentOverviewTrack: {
+    width: "100%",
+    height: "8px",
+    borderRadius: "999px",
+    background: "#dbeafe",
+    overflow: "hidden" as const,
+  },
+  assignmentOverviewFill: {
+    height: "100%",
+    borderRadius: "999px",
+    background: "linear-gradient(90deg, #2563eb 0%, #7c3aed 100%)",
+    transition: "width 200ms ease",
+  },
+  subtleHelper: {
+    fontSize: "13px",
+    color: "#64748b",
   },
   portraitVideoPreview: {
     width: "100%",
@@ -785,6 +819,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const videoStreamRef = useRef<MediaStream | null>(null);
   const videoChunksRef = useRef<BlobPart[]>([]);
   const livePreviewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const feedbackCardRef = useRef<HTMLDivElement | null>(null);
 
   const [studentCode, setStudentCode] = useState("");
   const [isDemoMode, setIsDemoMode] = useState(getIsDemoModeFromUrl());
@@ -1643,7 +1678,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     }
 
     if (!recordedBlob) {
-      setErrorMessage("Record your answer first.");
+      setErrorMessage("Record your answer to get feedback.");
       return;
     }
 
@@ -1759,7 +1794,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
     setIsSubmitting(true);
     setErrorMessage("");
-    setStatusMessage("Uploading...");
+    setStatusMessage("Uploading your recording...");
 
     try {
       const mimeType = recordingMimeType || recordedBlob.type || "audio/mp4";
@@ -1781,7 +1816,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         data: { publicUrl },
       } = supabase.storage.from("student-audio-oai").getPublicUrl(filePath);
 
-      setStatusMessage("Analyzing...");
+      setStatusMessage("Analyzing your response...");
       const ai = await analyzeAudio(publicUrl, promptText, activePrompt?.prompt_image_url ?? null);
 
       const payload = {
@@ -1923,7 +1958,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     if (isDemoMode) {
       if (!validateDemoAttemptOrShowError()) return;
       if (!activePrompt?.id) {
-        setVideoErrorMessage("Select an assignment first.");
+        setVideoErrorMessage("Select an activity first.");
         return;
       }
       const now = new Date().toISOString();
@@ -1968,7 +2003,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       return;
     }
     if (!activePrompt?.id || !promptText) {
-      setVideoErrorMessage("Select an assignment first.");
+      setVideoErrorMessage("Select an activity first.");
       return;
     }
     if (!recordedVideoBlob || !recordedVideoBlob.size) {
@@ -2037,7 +2072,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       return;
     }
     if (!activePrompt?.id || !promptText) {
-      setErrorMessage("Select an assignment first.");
+      setErrorMessage("Select an activity first.");
       return;
     }
     if (!writtenResponse) {
@@ -2201,7 +2236,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       return;
     }
     if (!activePrompt?.id || !promptText) {
-      setErrorMessage("Select an assignment first.");
+      setErrorMessage("Select an activity first.");
       return;
     }
     if (hasSubmittedActivePrompt) {
@@ -2239,7 +2274,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     }
   }
 
-  const micLabel = isRecording ? "Stop" : "Start recording";
+  const micLabel = isRecording ? "Stop recording" : "Start recording";
   const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
   const aiStrengths = submissionForActivePrompt?.ai_strengths?.filter(Boolean) || [];
@@ -2253,11 +2288,27 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const shouldClampTranscript = latestTranscript.length > 280;
   const visibleTranscript = showFullTranscript || !shouldClampTranscript ? latestTranscript : `${latestTranscript.slice(0, 280)}...`;
   const hasVisiblePrompts = assignedPrompts.length > 0;
+  const completedCount = useMemo(
+    () =>
+      assignedPrompts.filter((prompt) => {
+        const promptText = prompt.prompt_text?.trim() || "";
+        const info = submissionStatusIndex[prompt.id] || (promptText ? submissionStatusIndex[`text:${promptText}`] : undefined);
+        return Boolean(info?.hasSubmission);
+      }).length,
+    [assignedPrompts, submissionStatusIndex]
+  );
+  const progressLabel = `${completedCount} of ${assignedPrompts.length || 0} activities completed`;
+  const progressPercent = assignedPrompts.length ? Math.round((completedCount / assignedPrompts.length) * 100) : 0;
   const isStudentEntryState = !rosterStudent && !isDemoMode;
 
   useEffect(() => {
     onEntryStateChange?.(isStudentEntryState);
   }, [isStudentEntryState, onEntryStateChange]);
+
+  useEffect(() => {
+    if (!submissionForActivePrompt || isAnalyzingDemoFeedback) return;
+    feedbackCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [submissionForActivePrompt?.id, isAnalyzingDemoFeedback]);
 
   function discardUnsubmittedRecording() {
     setRecordedBlob(null);
@@ -2279,7 +2330,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       <div style={{ ...styles.shell, maxWidth: isDemoMode ? "640px" : styles.shell.maxWidth }} className="student-fade-in student-entry-shell">
         {isDemoMode ? (
           <div style={{ marginBottom: "10px", fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            Demo showcase
+            Try ESL Hub
           </div>
         ) : null}
         {isStudentEntryState ? (
@@ -2289,7 +2340,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               <div style={styles.heroImageOverlay} />
             </div>
             <div style={styles.heroTitle} className="student-entry-title">Join your activity</div>
-            <div style={styles.heroSubtitle} className="student-entry-subtitle">Enter your class code to see your assignments.</div>
+            <div style={styles.heroSubtitle} className="student-entry-subtitle">Enter your class code to see your activities.</div>
             <input
               value={studentCode}
               onChange={(e) => {
@@ -2327,7 +2378,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 onClick={enterDemoMode}
                 style={{ ...styles.secondaryButton, width: "100%", minHeight: "44px", marginTop: "10px", fontWeight: 700 }}
               >
-                Try a sample activity
+                Try ESL Hub
               </button>
             ) : null}
             {!isAppInstalled ? (
@@ -2375,7 +2426,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 <div style={styles.heroTitle}>{demoConfig.welcomeTitle}</div>
                 <div style={styles.heroSubtitle}>{demoConfig.welcomeSubtitle}</div>
                 <button type="button" onClick={enterDemoMode} disabled={isLoadingDemoConfig} style={{ ...styles.actionButton, marginTop: 8 }}>
-                  {isLoadingDemoConfig ? "Loading..." : "View demo activities"}
+                  {isLoadingDemoConfig ? "Loading..." : "Try ESL Hub"}
                 </button>
               </>
             )}
@@ -2396,8 +2447,17 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           </div>
         ) : null}
 
-        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px", fontSize: "30px", letterSpacing: "0.01em" }}>{isDemoMode ? "Try ESL Hub" : "Choose an assignment"}</div> : null}
+        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px", fontSize: "30px", letterSpacing: "0.01em" }}>{isDemoMode ? "Try ESL Hub" : "Choose an activity"}</div> : null}
         {rosterStudent && !selectedPromptId && isDemoMode ? <div style={{ ...styles.helperText, marginTop: 0, marginBottom: 8, textAlign: "center" }}>Complete a sample activity and see how it works.</div> : null}
+        {rosterStudent && !selectedPromptId && hasVisiblePrompts ? (
+          <div style={styles.assignmentOverviewCard}>
+            <div style={styles.assignmentOverviewLabel}>{progressLabel}</div>
+            <div style={styles.assignmentOverviewTrack} aria-hidden="true">
+              <div style={{ ...styles.assignmentOverviewFill, width: `${progressPercent}%` }} />
+            </div>
+            <div style={styles.subtleHelper}>Keep going — your feedback appears after each submit.</div>
+          </div>
+        ) : null}
 
         {rosterStudent && !selectedPromptId ? (
           hasVisiblePrompts ? (
@@ -2406,7 +2466,12 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 const promptText = prompt.prompt_text?.trim() || "";
                 const assignmentType = getAssignmentType(prompt);
                 const statusInfo = submissionStatusIndex[prompt.id] || (promptText ? submissionStatusIndex[`text:${promptText}`] : undefined);
-                const cardStatus = statusInfo?.hasFeedback ? "Feedback ready" : statusInfo?.hasSubmission ? "Submitted" : "Not submitted";
+                const cardStatus = statusInfo?.hasFeedback ? "Feedback ready" : statusInfo?.hasSubmission ? "Completed" : "Not started";
+                const statusStyle = statusInfo?.hasFeedback
+                  ? { border: "1px solid #c4b5fd", background: "#f5f3ff", color: "#6d28d9" }
+                  : statusInfo?.hasSubmission
+                    ? { border: "1px solid #86efac", background: "#f0fdf4", color: "#166534" }
+                    : { border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569" };
                 return (
                   <button
                     key={prompt.id}
@@ -2422,15 +2487,16 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                       padding: isDemoMode ? "20px" : styles.taskButton.padding,
                     }}
                   >
-                    <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                      {prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Task thumbnail" style={styles.taskThumb} /> : null}
-                      <div style={{ display: "grid", gap: "4px", flex: 1 }}>
-                        <div style={styles.taskTitle}>{prompt.prompt_text || "Untitled assignment"}</div>
+                    <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                      {prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Activity thumbnail" style={styles.taskThumb} /> : null}
+                      <div style={{ display: "grid", gap: "6px", flex: 1, minWidth: 0 }}>
+                        <div style={styles.taskTitle}>{prompt.prompt_text || "Untitled activity"}</div>
                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           <div style={styles.taskTypeBadge}>{assignmentTypeLabel(assignmentType)}</div>
-                          <div style={styles.taskStatus}>{cardStatus}</div>
+                          {prompt.suggested_time ? <div style={styles.taskTypeBadge}>{prompt.suggested_time}</div> : null}
+                          <div style={{ ...styles.taskStatus, ...statusStyle }}>{cardStatus}</div>
                         </div>
-                        {prompt.suggested_time ? <div style={styles.taskMeta}>Suggested time: {prompt.suggested_time}</div> : null}
+                        <div style={styles.taskMeta}>{isDemoMode ? "Sample activity" : "Tap to open activity"}</div>
                         {isDemoMode ? <div style={styles.taskMeta}>{prompt.example_text || "Sample instructions"}</div> : null}
                       </div>
                       {isDemoMode ? <div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>Start activity</div> : null}
@@ -2440,7 +2506,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               })}
             </div>
           ) : (
-            <div style={styles.helperText}>{isDemoMode ? "No demo activities are available right now." : "No visible assignments are assigned to your class right now."}</div>
+            <div style={styles.helperText}>{isDemoMode ? "No demo activities are available right now." : "No activities yet. Your teacher will add activities soon."}</div>
           )
         ) : null}
 
@@ -2474,7 +2540,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
         <div style={styles.promptCard}>
-          {activePrompt?.example_text || activePrompt?.prompt_text || "Select an assignment above"}
+          {activePrompt?.example_text || activePrompt?.prompt_text || "Select an activity above"}
         </div>
         {activePrompt?.suggested_time ? (
           <div style={{ textAlign: "center" }}>
@@ -2498,7 +2564,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 </button>
               ))}
               {!externalActivityData.externalLinks.length ? (
-                <div style={{ ...styles.infoText, color: "#b91c1c" }}>This external assignment is missing a link. Please ask your teacher.</div>
+                <div style={{ ...styles.infoText, color: "#b91c1c" }}>This external activity is missing a link. Please ask your teacher.</div>
               ) : null}
               <button
                 type="button"
@@ -2527,7 +2593,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               style={{ ...styles.primaryButton, minHeight: "50px", marginTop: "12px", width: "100%" }}
               className="student-primary-btn"
             >
-              {isSubmitting || isAnalyzingDemoFeedback ? "Submitting..." : "Submit response"}
+              {isSubmitting || isAnalyzingDemoFeedback ? "Submitting..." : "Submit"}
             </button>
           </div>
         ) : isVideoAssignment ? (
@@ -2553,28 +2619,36 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 Re-record / Clear
               </button>
               <button type="button" onClick={() => void submitVideoResponse()} disabled={!recordedVideoUrl || isRecordingVideo || isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt} style={{ ...styles.primaryButton, minHeight: "50px" }} className="student-primary-btn">
-                {isSubmitting ? "Submitting..." : "Submit video"}
+                {isSubmitting ? "Submitting..." : "Submit"}
               </button>
             </div>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={isRecording ? stopRecording : () => void startRecording()}
-            disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
-            style={{
-              ...styles.micButton,
-              opacity: isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? 0.55 : 1,
-              cursor: isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? "not-allowed" : "pointer",
-              boxShadow: isRecording
-                ? `0 0 0 10px rgba(99, 102, 241, ${pulseVisible ? 0.22 : 0.08}), 0 0 0 18px rgba(59, 130, 246, ${pulseVisible ? 0.12 : 0.05}), 0 18px 36px rgba(99, 102, 241, 0.24)`
-                : styles.micButton.boxShadow,
-              transition: "box-shadow 300ms ease, transform 120ms ease",
-            }}
-          >
-            <span style={styles.micEmoji}>{isRecording ? "⏹" : "🎤"}</span>
-            <span style={styles.micButtonLabel}>{micLabel}</span>
-          </button>
+          <>
+            {!recordedBlob ? (
+              <div style={{ ...styles.helperText, marginTop: 10 }}>
+                Speak clearly. You can listen before submitting.
+              </div>
+            ) : null}
+            <button
+              type="button"
+              aria-label={micLabel}
+              onClick={isRecording ? stopRecording : () => void startRecording()}
+              disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
+              style={{
+                ...styles.micButton,
+                opacity: isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? 0.55 : 1,
+                cursor: isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt ? "not-allowed" : "pointer",
+                boxShadow: isRecording
+                  ? `0 0 0 10px rgba(99, 102, 241, ${pulseVisible ? 0.22 : 0.08}), 0 0 0 18px rgba(59, 130, 246, ${pulseVisible ? 0.12 : 0.05}), 0 18px 36px rgba(99, 102, 241, 0.24)`
+                  : styles.micButton.boxShadow,
+                transition: "box-shadow 300ms ease, transform 120ms ease",
+              }}
+            >
+              <span style={styles.micEmoji}>{isRecording ? "⏹" : "🎤"}</span>
+              <span style={styles.micButtonLabel}>{micLabel}</span>
+            </button>
+          </>
         )}
 
         {isRecording ? (
@@ -2582,10 +2656,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
             <div style={styles.recordingAlertHeader}>
               <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.3 }} />
               <span style={{ color: maxAudioRecordingSeconds - recordingSeconds <= 30 ? "#b45309" : "inherit" }}>
-                Recording... {formatRecordingTime(recordingSeconds)} / {formatRecordingTime(maxAudioRecordingSeconds)}
+                Recording: {formatRecordingTime(recordingSeconds)} / {formatRecordingTime(maxAudioRecordingSeconds)}
               </span>
             </div>
-            <div style={styles.recordingHelper}>Tap the button again to stop</div>
+            <div style={styles.recordingHelper}>Tap Stop recording when you finish.</div>
           </div>
         ) : null}
 
@@ -2620,10 +2694,21 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           <div style={{ ...styles.recordingAlert, borderColor: "#7c3aed", background: "#f5f3ff", color: "#4c1d95" }}>
             <div style={{ ...styles.recordingAlertHeader, fontSize: "20px" }}>
               <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.45, background: "#8b5cf6" }} />
-              <span>{DEMO_AI_ANALYZING_MESSAGE}</span>
+              <span>Analyzing your response…</span>
             </div>
             <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#6d28d9" }}>
-              Please wait while we generate instant AI feedback.
+              This may take a few seconds.
+            </div>
+          </div>
+        ) : null}
+        {!isDemoMode && isSubmitting ? (
+          <div style={{ ...styles.recordingAlert, borderColor: "#bfdbfe", background: "#eff6ff", color: "#1d4ed8" }}>
+            <div style={{ ...styles.recordingAlertHeader, fontSize: "20px" }}>
+              <span style={{ ...styles.pulseDot, opacity: pulseVisible ? 1 : 0.45, background: "#3b82f6" }} />
+              <span>Analyzing your response…</span>
+            </div>
+            <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#1e40af" }}>
+              This may take a few seconds.
             </div>
           </div>
         ) : null}
@@ -2632,7 +2717,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           <div style={{ ...styles.recordingAlert, borderColor: "#4f46e5", background: "#eef2ff", color: "#312e81" }}>
             <div style={{ ...styles.recordingAlertHeader, fontSize: "22px" }}>
               <span aria-hidden="true">✓</span>
-              <span>{isDemoMode ? (showAiDemoFeedback ? "Nice — here’s your AI feedback." : "Nice — here’s your demo result.") : "Submission received"}</span>
+              <span>{isDemoMode ? (showAiDemoFeedback ? "Nice — here’s your AI feedback." : "Nice — here’s your demo result.") : "Completed"}</span>
             </div>
             <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#4338ca" }}>
               {isDemoMode
@@ -2689,8 +2774,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           {isSubmitting || isAnalyzingDemoFeedback ? "Submitting..." : "Submit"}
         </button> : null}
         {!rosterStudent && !isDemoMode ? <div style={styles.helperText}>Enter your assigned code to start.</div> : null}
-        {rosterStudent && !activePrompt ? <div style={styles.helperText}>Select an assignment above to get started.</div> : null}
-        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent && activePrompt && !isVideoAssignment && !isExternalAssignment && !isTextAssignment ? <div style={styles.helperText}>Record your answer first.</div> : null}
+        {rosterStudent && !activePrompt ? <div style={styles.helperText}>Select an activity above to get started.</div> : null}
+        {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent && activePrompt && !isVideoAssignment && !isExternalAssignment && !isTextAssignment ? <div style={styles.helperText}>Record your answer to get feedback.</div> : null}
 
         {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
@@ -2703,7 +2788,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         {videoStatusMessage ? <div style={{ ...styles.message, color: "#4338ca", marginTop: "10px" }}>{videoStatusMessage}</div> : null}
         {videoErrorMessage ? <div style={{ ...styles.message, color: "#dc2626", fontWeight: 700 }}>{videoErrorMessage}</div> : null}
 
-        <div style={styles.feedbackCard}>
+        <div ref={feedbackCardRef} style={styles.feedbackCard} className="student-feedback-card">
           {submissionForActivePrompt ? (
             <>
               <div style={styles.feedbackHeader}>
@@ -2718,6 +2803,12 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                   <div style={styles.feedbackPanelText}>{aiScoreReason}</div>
                 </div>
               ) : null}
+              <div style={styles.feedbackPanel}>
+                <div style={styles.feedbackPanelLabel}>{showAiDemoFeedback ? "AI comment" : "Main comment"}</div>
+                <div style={styles.feedbackHighlight}>
+                  <div style={styles.feedbackPanelText}>{primaryFeedbackComment || "Feedback will appear here after you submit."}</div>
+                </div>
+              </div>
               {isExternalAssignment ? (
                 <div style={styles.feedbackPanel}>
                   <div style={styles.feedbackPanelLabel}>Completion</div>
@@ -2744,12 +2835,6 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               )}
 
               <div style={styles.feedbackPanel}>
-                <div style={styles.feedbackPanelLabel}>{showAiDemoFeedback ? "AI demo feedback" : isDemoMode ? "Demo feedback" : "Feedback"}</div>
-                <div style={styles.feedbackHighlight}>
-                  <div style={styles.feedbackPanelText}>
-                    {primaryFeedbackComment || "No written feedback yet."}
-                  </div>
-                </div>
                 {aiStrengths.length ? (
                   <div style={{ marginTop: 10 }}>
                     <div style={styles.feedbackPanelLabel}>{feedbackSectionLabels.strengths}</div>
@@ -2831,7 +2916,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 {teacherAudioUrl ? (
                   <ReliableAudioPlayer src={teacherAudioUrl} style={{ width: "100%" }} />
                 ) : (
-                  <div style={{ ...styles.feedbackPanelText, color: "#64748b" }}>No teacher audio feedback yet</div>
+                  <div style={{ ...styles.feedbackPanelText, color: "#64748b" }}>No teacher audio feedback yet.</div>
                 )}
               </div>
 
@@ -2847,7 +2932,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 <div style={styles.feedbackTitle}>Your feedback</div>
               </div>
               <div style={{ ...styles.feedbackPanelText, color: "#64748b" }}>
-                No submission yet. Record your answer to get feedback.
+                Feedback will appear here after you submit.
               </div>
             </>
           )}

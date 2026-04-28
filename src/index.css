@@ -141,6 +141,19 @@ button, input { font: inherit; }
   transform: translateY(0) scale(0.995);
 }
 
+.student-assignment-card:focus-visible,
+.student-primary-btn:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(79, 70, 229, 0.35);
+  outline-offset: 2px;
+}
+
+.student-feedback-card {
+  animation: studentCardIn 260ms ease-out;
+}
+
 @media (max-width: 640px) {
   .student-entry-page {
     padding: 12px !important;
