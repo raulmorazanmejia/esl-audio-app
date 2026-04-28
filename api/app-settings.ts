@@ -28,50 +28,74 @@ function isAllowedTeacherEmail(email?: string | null): boolean {
   return !!email && allowed.has(email.toLowerCase());
 }
 
+function getInvalidPayloadResponse(body: unknown): string | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return "Invalid payload. Expected JSON object with key and value.";
+  }
+  const payload = body as { key?: unknown };
+  if (typeof payload.key !== "string" || !payload.key.trim()) {
+    return "Invalid payload. Expected non-empty string key.";
+  }
+  if (!Object.prototype.hasOwnProperty.call(payload, "value")) {
+    return "Invalid payload. Missing value field.";
+  }
+  return null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+  try {
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
+
+    const supabaseAdmin = getServiceSupabase();
+    if (!supabaseAdmin) {
+      console.error("APP_SETTINGS CONFIG ERROR: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+      return res.status(500).json({ error: "Settings service is unavailable." });
+    }
+
+    const token = getBearerToken(req);
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized. Missing bearer token." });
+    }
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    if (userError || !user) {
+      return res.status(401).json({ error: "Unauthorized. Invalid auth token." });
+    }
+
+    if (!isAllowedTeacherEmail(user.email)) {
+      return res.status(403).json({ error: "Forbidden." });
+    }
+
+    const payloadError = getInvalidPayloadResponse(req.body);
+    if (payloadError) {
+      return res.status(400).json({ error: payloadError });
+    }
+
+    const { key, value } = req.body as { key: string; value: unknown };
+    const normalizedKey = key.trim();
+
+    if (!WRITEABLE_KEYS.has(normalizedKey)) {
+      return res.status(400).json({ error: `Unsupported settings key: ${normalizedKey}` });
+    }
+
+    const nextValue = value == null ? null : typeof value === "string" ? value : JSON.stringify(value);
+
+    const { error: writeError } = await supabaseAdmin.from("app_settings").upsert({ key: normalizedKey, value: nextValue }, { onConflict: "key" });
+
+    if (writeError) {
+      console.error("APP_SETTINGS WRITE ERROR:", writeError);
+      return res.status(500).json({ error: "Could not save settings." });
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("APP_SETTINGS UNEXPECTED ERROR:", error);
+    return res.status(500).json({ error: "Unexpected server error while saving settings." });
   }
-
-  const supabaseAdmin = getServiceSupabase();
-  if (!supabaseAdmin) {
-    console.error("APP_SETTINGS CONFIG ERROR: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-    return res.status(500).json({ error: "Settings service is unavailable." });
-  }
-
-  const token = getBearerToken(req);
-  if (!token) {
-    return res.status(401).json({ error: "Unauthorized." });
-  }
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabaseAdmin.auth.getUser(token);
-
-  if (userError || !user) {
-    return res.status(401).json({ error: "Unauthorized." });
-  }
-
-  if (!isAllowedTeacherEmail(user.email)) {
-    return res.status(403).json({ error: "Forbidden." });
-  }
-
-  const { key, value } = req.body ?? {};
-  const normalizedKey = typeof key === "string" ? key.trim() : "";
-
-  if (!normalizedKey || !WRITEABLE_KEYS.has(normalizedKey)) {
-    return res.status(400).json({ error: "Unsupported settings key." });
-  }
-
-  const nextValue = value == null ? null : String(value);
-
-  const { error: writeError } = await supabaseAdmin.from("app_settings").upsert({ key: normalizedKey, value: nextValue }, { onConflict: "key" });
-
-  if (writeError) {
-    console.error("APP_SETTINGS WRITE ERROR:", writeError.message);
-    return res.status(500).json({ error: "Could not save settings." });
-  }
-
-  return res.status(200).json({ ok: true });
 }
