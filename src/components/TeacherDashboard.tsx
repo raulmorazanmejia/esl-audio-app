@@ -7,6 +7,7 @@ import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
 import TeacherSubmissionsPanel from "./teacher/TeacherSubmissionsPanel";
 import { AssignmentActivityType, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
+import { ExternalActivityLink, isValidExternalUrl, serializeExternalActivityData } from "../lib/externalLinks";
 
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code, prompt:prompts(assignment_type)";
@@ -652,6 +653,7 @@ export default function TeacherDashboard() {
   const [newAssignmentType, setNewAssignmentType] = useState<AssignmentActivityType>("audio_response");
   const [newInstructions, setNewInstructions] = useState("");
   const [newExternalUrl, setNewExternalUrl] = useState("");
+  const [newExternalLinks, setNewExternalLinks] = useState<ExternalActivityLink[]>([{ title: "", url: "" }]);
   const [newPromptImageFile, setNewPromptImageFile] = useState<File | null>(null);
   const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -1199,10 +1201,27 @@ export default function TeacherDashboard() {
     const text = newPrompt.trim();
     const instructions = newInstructions.trim();
     const externalUrl = newExternalUrl.trim();
+    const normalizedLinks = newExternalLinks.map((link) => ({ title: link.title.trim(), url: link.url.trim() })).filter((link) => link.title || link.url);
     if (!text) return;
-    if (newAssignmentType === "external_link" && !externalUrl) {
-      setPromptError("External URL is required for external activity assignments.");
-      return;
+    if (newAssignmentType === "external_link") {
+      if (!normalizedLinks.length) {
+        setPromptError("Add at least one external link.");
+        return;
+      }
+      for (const link of normalizedLinks) {
+        if (!link.title) {
+          setPromptError("Each external link needs a title.");
+          return;
+        }
+        if (!link.url) {
+          setPromptError("Each external link needs a URL.");
+          return;
+        }
+        if (!isValidExternalUrl(link.url)) {
+          setPromptError("External URLs must start with http:// or https://");
+          return;
+        }
+      }
     }
     setIsSavingPrompt(true);
     setPromptError("");
@@ -1235,12 +1254,14 @@ export default function TeacherDashboard() {
       .insert({
         prompt_text: text,
         assignment_type: newAssignmentType,
-        external_url: newAssignmentType === "external_link" ? externalUrl : null,
+        external_url: newAssignmentType === "external_link" ? (normalizedLinks[0]?.url || externalUrl || null) : null,
         class_name: null,
         suggested_time: newSuggestedTime.trim() || null,
         prompt_image_path: promptImagePath,
         prompt_image_url: promptImageUrl,
-        example_text: instructions || null,
+        example_text: newAssignmentType === "external_link"
+          ? serializeExternalActivityData(instructions, normalizedLinks)
+          : (instructions || null),
         is_active: false,
       })
       .select("id")
@@ -1258,6 +1279,7 @@ export default function TeacherDashboard() {
     setNewAssignmentType("audio_response");
     setNewInstructions("");
     setNewExternalUrl("");
+    setNewExternalLinks([{ title: "", url: "" }]);
     setNewPromptImageFile(null);
     if (newPromptImagePreviewUrl) {
       URL.revokeObjectURL(newPromptImagePreviewUrl);
@@ -1449,7 +1471,23 @@ export default function TeacherDashboard() {
     if (value === "external_link") {
       handleClearNewPromptImage();
       setNewSuggestedTime("");
+      setNewExternalLinks((prev) => prev.length ? prev : [{ title: "", url: "" }]);
     }
+  }
+
+  function handleExternalLinkChange(index: number, patch: Partial<ExternalActivityLink>) {
+    setNewExternalLinks((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  }
+
+  function handleAddExternalLinkRow() {
+    setNewExternalLinks((prev) => [...prev, { title: "", url: "" }]);
+  }
+
+  function handleRemoveExternalLinkRow(index: number) {
+    setNewExternalLinks((prev) => {
+      const next = prev.filter((_, rowIndex) => rowIndex !== index);
+      return next.length ? next : [{ title: "", url: "" }];
+    });
   }
 
   async function handleDeletePrompt(prompt: PromptRow) {
@@ -2198,11 +2236,15 @@ export default function TeacherDashboard() {
               newAssignmentType,
               newInstructions,
               newExternalUrl,
+              newExternalLinks,
               setNewPrompt,
               setNewSuggestedTime,
               setNewAssignmentType: handleAssignmentTypeChange,
               setNewInstructions,
               setNewExternalUrl,
+              onExternalLinkChange: handleExternalLinkChange,
+              onAddExternalLink: handleAddExternalLinkRow,
+              onRemoveExternalLink: handleRemoveExternalLinkRow,
               newPromptImagePreviewUrl,
               onPromptImageChange: handleNewPromptImageChange,
               onClearPromptImage: handleClearNewPromptImage,
@@ -2272,12 +2314,16 @@ export default function TeacherDashboard() {
                 newAssignmentType={newAssignmentType}
                 newInstructions={newInstructions}
                 newExternalUrl={newExternalUrl}
+                newExternalLinks={newExternalLinks}
                 newPromptImagePreviewUrl={newPromptImagePreviewUrl}
                 setNewPrompt={setNewPrompt}
                 setNewSuggestedTime={setNewSuggestedTime}
                 setNewAssignmentType={handleAssignmentTypeChange}
                 setNewInstructions={setNewInstructions}
                 setNewExternalUrl={setNewExternalUrl}
+                onExternalLinkChange={handleExternalLinkChange}
+                onAddExternalLink={handleAddExternalLinkRow}
+                onRemoveExternalLink={handleRemoveExternalLinkRow}
                 onPromptImageChange={handleNewPromptImageChange}
                 onClearPromptImage={handleClearNewPromptImage}
                 onSavePrompt={() => void handleSavePrompt()}
@@ -2433,7 +2479,56 @@ export default function TeacherDashboard() {
                             <input value={activity.suggestedTime} onChange={(e) => void handleDemoActivityChange(activity.id, { suggestedTime: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Suggested time (example: 1 minute)" />
                             <textarea value={activity.prompt} onChange={(e) => void handleDemoActivityChange(activity.id, { prompt: e.target.value })} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, minHeight: 90, padding: 10 }} placeholder="Prompt / instructions" />
                             {activity.type === "external_link" ? (
-                              <input value={activity.externalUrl || ""} onChange={(e) => void handleDemoActivityChange(activity.id, { externalUrl: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="External URL" />
+                              <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 10, display: "grid", gap: 8 }}>
+                                {(activity.externalLinks?.length ? activity.externalLinks : [{ title: "Open activity", url: activity.externalUrl || "" }]).map((link, linkIndex) => (
+                                  <div key={`${activity.id}-demo-link-${linkIndex}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 6 }}>
+                                    <input
+                                      value={link.title}
+                                      onChange={(e) => {
+                                        const nextLinks = [...(activity.externalLinks?.length ? activity.externalLinks : [{ title: "Open activity", url: activity.externalUrl || "" }])];
+                                        nextLinks[linkIndex] = { ...nextLinks[linkIndex], title: e.target.value };
+                                        void handleDemoActivityChange(activity.id, { externalLinks: nextLinks, externalUrl: nextLinks[0]?.url || "" });
+                                      }}
+                                      disabled={isSavingDemoConfig}
+                                      style={styles.rosterInput}
+                                      placeholder="Link title"
+                                    />
+                                    <input
+                                      value={link.url}
+                                      onChange={(e) => {
+                                        const nextLinks = [...(activity.externalLinks?.length ? activity.externalLinks : [{ title: "Open activity", url: activity.externalUrl || "" }])];
+                                        nextLinks[linkIndex] = { ...nextLinks[linkIndex], url: e.target.value };
+                                        void handleDemoActivityChange(activity.id, { externalLinks: nextLinks, externalUrl: nextLinks[0]?.url || "" });
+                                      }}
+                                      disabled={isSavingDemoConfig}
+                                      style={styles.rosterInput}
+                                      placeholder="https://example.com"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const nextLinks = (activity.externalLinks?.length ? activity.externalLinks : [{ title: "Open activity", url: activity.externalUrl || "" }]).filter((_, idx) => idx !== linkIndex);
+                                        void handleDemoActivityChange(activity.id, { externalLinks: nextLinks, externalUrl: nextLinks[0]?.url || "" });
+                                      }}
+                                      disabled={isSavingDemoConfig}
+                                      style={clampButton(isSavingDemoConfig, { ...styles.promptAssignmentButton, borderColor: "#fecaca", color: "#b91c1c" })}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextLinks = [...(activity.externalLinks?.length ? activity.externalLinks : [{ title: "Open activity", url: activity.externalUrl || "" }]), { title: "", url: "" }];
+                                    void handleDemoActivityChange(activity.id, { externalLinks: nextLinks, externalUrl: nextLinks[0]?.url || "" });
+                                  }}
+                                  disabled={isSavingDemoConfig}
+                                  style={clampButton(isSavingDemoConfig, styles.promptAssignmentButton)}
+                                >
+                                  Add another link
+                                </button>
+                              </div>
                             ) : null}
                             {activity.id.includes("picture") ? (
                               <div style={{ display: "grid", gap: 6 }}>

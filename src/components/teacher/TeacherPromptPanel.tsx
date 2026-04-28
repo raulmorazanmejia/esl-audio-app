@@ -1,5 +1,6 @@
 import React from "react";
 import { AssignmentActivityType, PromptRow } from "../TeacherDashboardTypes";
+import { ExternalActivityLink, parseExternalActivityData } from "../../lib/externalLinks";
 
 type Props = {
   mode?: "library" | "class";
@@ -11,11 +12,15 @@ type Props = {
   newAssignmentType: AssignmentActivityType;
   newInstructions: string;
   newExternalUrl: string;
+  newExternalLinks: ExternalActivityLink[];
   setNewPrompt: (v: string) => void;
   setNewSuggestedTime: (v: string) => void;
   setNewAssignmentType: (value: AssignmentActivityType) => void;
   setNewInstructions: (v: string) => void;
   setNewExternalUrl: (v: string) => void;
+  onExternalLinkChange: (index: number, patch: Partial<ExternalActivityLink>) => void;
+  onAddExternalLink: () => void;
+  onRemoveExternalLink: (index: number) => void;
   newPromptImagePreviewUrl: string;
   onPromptImageChange: (file: File | null) => void;
   onClearPromptImage: () => void;
@@ -92,7 +97,21 @@ export default function TeacherPromptPanel(props: Props) {
         <option value="external_link">External activity link</option>
       </select>
       {p.newAssignmentType === "external_link" ? (
-        <input value={p.newExternalUrl} onChange={(e) => p.setNewExternalUrl(e.target.value)} placeholder="External URL (Google Form link, etc.)" style={inputStyle} />
+        <div style={{ border: "1px dashed #cbd5e1", borderRadius: 10, padding: 10, display: "grid", gap: 8, background: "#fff" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>Links</div>
+          {p.newExternalLinks.map((link, index) => (
+            <div key={`external-link-${index}`} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 6 }}>
+              <input value={link.title} onChange={(e) => p.onExternalLinkChange(index, { title: e.target.value })} placeholder="Link title" style={inputStyle} />
+              <input value={link.url} onChange={(e) => p.onExternalLinkChange(index, { url: e.target.value })} placeholder="https://example.com/form" style={inputStyle} />
+              <button type="button" onClick={() => p.onRemoveExternalLink(index)} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontWeight: 700 }}>
+                Remove
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={p.onAddExternalLink} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700 }}>
+            Add another link
+          </button>
+        </div>
       ) : (
         <input type="file" accept="image/*" onChange={(e) => p.onPromptImageChange(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
       )}
@@ -178,7 +197,11 @@ export default function TeacherPromptPanel(props: Props) {
           </div> : null}
           {prompt.suggested_time ? <div style={{ fontSize: 12, color: "#64748b" }}>Suggested time: {prompt.suggested_time}</div> : null}
           <div style={{ fontSize: 12, color: "#64748b" }}>Type: {prompt.assignment_type === "external_link" ? "External activity" : prompt.assignment_type === "video_response" ? "Video response" : prompt.assignment_type === "text_response" ? "Text response" : "Audio response"}</div>
-          {prompt.external_url ? <div style={{ fontSize: 12, color: "#64748b" }}>External URL: {prompt.external_url}</div> : null}
+          {prompt.assignment_type === "external_link" ? (
+            <div style={{ fontSize: 12, color: "#64748b" }}>
+              Links: {parseExternalActivityData(prompt.example_text, prompt.external_url).externalLinks.map((link) => link.title).join(", ") || "No links"}
+            </div>
+          ) : null}
           {prompt.example_text ? <div style={{ fontSize: 12, color: "#64748b" }}>Instructions: {prompt.example_text}</div> : null}
           {prompt.created_at ? <div style={{ fontSize: 12, color: "#94a3b8" }}>Created: {new Date(prompt.created_at).toLocaleString()}</div> : null}
           {p.selectedClassName && p.selectedClassName !== "Assignment Library" ? (

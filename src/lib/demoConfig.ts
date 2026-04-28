@@ -10,6 +10,7 @@ export type DemoActivityConfig = {
   visible: boolean;
   order: number;
   externalUrl?: string;
+  externalLinks?: { title: string; url: string }[];
   imageUrl?: string;
 };
 
@@ -70,6 +71,7 @@ export const DEFAULT_DEMO_CONFIG: DemoConfig = {
       visible: false,
       order: 4,
       externalUrl: "https://example.com",
+      externalLinks: [{ title: "Open sample worksheet", url: "https://example.com" }],
     },
   ],
 };
@@ -95,6 +97,14 @@ export function normalizeDemoConfig(input: unknown): DemoConfig {
         visible: row.visible !== false,
         order: typeof row.order === "number" ? row.order : index + 1,
         externalUrl: typeof row.externalUrl === "string" ? row.externalUrl : "",
+        externalLinks: Array.isArray(row.externalLinks)
+          ? row.externalLinks
+            .map((item) => ({
+              title: String(item?.title ?? "").trim(),
+              url: String(item?.url ?? "").trim(),
+            }))
+            .filter((item) => Boolean(item.title && item.url))
+          : [],
         imageUrl: typeof row.imageUrl === "string" ? row.imageUrl : "",
       } satisfies DemoActivityConfig;
     })
