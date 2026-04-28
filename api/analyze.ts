@@ -308,11 +308,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           messages: [
             {
               role: "system",
-              content: `You grade ESL responses. Return valid JSON only in this schema: {"score": number, "comment": string, "strengths": string[], "improvements": string[], "pictureAccuracy": string}. Score must be integer 1-5. Evaluate relevance, completeness, and understandable grammar/syntax. Do not heavily punish minor grammar errors when meaning is clear. Keep comments practical and specific.${demoMode ? " Keep wording concise for demo users." : ""} ${
-                isPictureActivity
-                  ? "For describe-a-picture tasks: judge whether learner mentions visible objects/people/actions, describes scene accurately, avoids invented details, and gives enough detail for level. If image is unavailable, fall back to prompt+transcript only."
-                  : "For non-picture tasks: evaluate against prompt and transcript only."
-              }`,
+              content: `You are an ESL teacher grading one learner response. Return valid JSON only in this schema: {"score": number, "comment": string, "strengths": string[], "improvements": string[], "pictureAccuracy": string, "grammarFeedback": string[]}.
+Rules:
+- transcript/score/comment must always be usable by old clients.
+- Score must be an integer 1-5.
+- Keep feedback specific, practical, short, and teacher-like (not robotic, not generic praise).
+- Evaluate across three areas: (1) task relevance/accuracy, (2) completeness/detail, (3) grammar+clarity.
+- Use this 5-point scale:
+  5 = accurate, detailed, clear, and mostly correct grammar
+  4 = accurate and understandable, with some grammar mistakes
+  3 = relevant but limited, several grammar issues, or missing key details
+  2 = hard to understand, very limited, or many grammar problems
+  1 = unrelated, too short, mostly unclear, or not connected to task
+- For A1-A2 level learners, do not over-penalize small grammar mistakes when meaning is clear. Still give 1-2 useful grammar corrections when relevant.
+- Grammar checks to consider every time: subject-verb agreement, verb tense, articles (a/an/the), plural nouns, word order, basic prepositions, sentence completeness, repeated/unclear phrasing.
+- Include grammarFeedback only when there is something useful to correct.
+- grammarFeedback should be a short list of direct fixes (max 2 items), e.g. "Say 'There are six people,' not 'There is six people.'"
+- strengths/improvements should be short bullet-style items.
+${demoMode ? "Keep wording concise for demo users." : ""}
+${isPictureActivity ? `For describe-a-picture tasks:
+- You MUST ground feedback in the actual image when image context is available.
+- First identify key visible elements, then compare the student answer to what is visible.
+- Detect: correct details, missing important details, and invented/inaccurate details.
+- pictureAccuracy must explicitly mention accuracy vs. missing/invented details.
+- In feedback text (comment/pictureAccuracy), reference at least 2 concrete visible elements from the image (objects, people, actions, positions, etc.).
+- Do not say vague lines like "You mentioned several things in the picture."
+- If image is unavailable, fall back to prompt+transcript-only grading while still providing grammar review.` : "For non-picture tasks: evaluate against prompt and transcript only."}`,
             },
             {
               role: "user",
@@ -353,6 +374,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let strengths: string[] | undefined;
     let improvements: string[] | undefined;
     let pictureAccuracy: string | undefined;
+    let grammarFeedback: string[] | undefined;
 
     try {
       const raw = gradingJson.choices?.[0]?.message?.content ?? "{}";
@@ -362,6 +384,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       strengths = Array.isArray(parsed.strengths) ? parsed.strengths.filter((item: any) => typeof item === "string") : undefined;
       improvements = Array.isArray(parsed.improvements) ? parsed.improvements.filter((item: any) => typeof item === "string") : undefined;
       pictureAccuracy = typeof parsed.pictureAccuracy === "string" ? parsed.pictureAccuracy : undefined;
+      grammarFeedback = Array.isArray(parsed.grammarFeedback)
+        ? parsed.grammarFeedback.filter((item: any) => typeof item === "string").slice(0, 2)
+        : undefined;
     } catch (err) {
       console.error("GRADE PARSE ERROR:", err);
     }
@@ -373,6 +398,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       strengths,
       improvements,
       pictureAccuracy,
+      grammarFeedback,
       flagged: false,
     });
   } catch (err) {
