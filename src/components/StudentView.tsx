@@ -48,6 +48,7 @@ type SubmissionRow = {
   ai_strengths?: string[] | null;
   ai_improvements?: string[] | null;
   ai_picture_accuracy?: string | null;
+  ai_grammar_feedback?: string[] | null;
   teacher_score: number | null;
   teacher_comment: string | null;
   student_code: string | null;
@@ -67,6 +68,7 @@ type AnalyzeResponse = {
   strengths?: string[];
   improvements?: string[];
   pictureAccuracy?: string;
+  grammarFeedback?: string[];
   flagged?: boolean;
   error?: string;
 };
@@ -1565,6 +1567,7 @@ export default function StudentView() {
       let demoStrengths: string[] | null = null;
       let demoImprovements: string[] | null = null;
       let demoPictureAccuracy: string | null = null;
+      let demoGrammarFeedback: string[] | null = null;
       if (demoConfig.aiFeedbackEnabled) {
         try {
           const dataUrl = await blobToDataUrl(recordedBlob);
@@ -1580,6 +1583,7 @@ export default function StudentView() {
           demoStrengths = ai.strengths ?? null;
           demoImprovements = ai.improvements ?? null;
           demoPictureAccuracy = ai.pictureAccuracy ?? null;
+          demoGrammarFeedback = ai.grammarFeedback ?? null;
         } catch (error: any) {
           setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
           setStatusMessage("");
@@ -1617,6 +1621,7 @@ export default function StudentView() {
         ai_strengths: demoStrengths,
         ai_improvements: demoImprovements,
         ai_picture_accuracy: demoPictureAccuracy,
+        ai_grammar_feedback: demoGrammarFeedback,
         teacher_score: null,
         teacher_comment: null,
         student_code: DEMO_STUDENT_CODE,
@@ -1684,6 +1689,7 @@ export default function StudentView() {
         ai_strengths: ai.strengths ?? null,
         ai_improvements: ai.improvements ?? null,
         ai_picture_accuracy: ai.pictureAccuracy ?? null,
+        ai_grammar_feedback: ai.grammarFeedback ?? null,
       };
       setSubmissionForActivePrompt(nextSubmission);
       await fetchCompletedPromptKeys(code);
@@ -1936,6 +1942,7 @@ export default function StudentView() {
       let demoStrengths: string[] | null = null;
       let demoImprovements: string[] | null = null;
       let demoPictureAccuracy: string | null = null;
+      let demoGrammarFeedback: string[] | null = null;
       if (demoConfig.aiFeedbackEnabled) {
         const ai = await analyzeAudio("", promptText, activePrompt?.prompt_image_url ?? null, writtenResponse);
         if (ai.error) {
@@ -1949,6 +1956,7 @@ export default function StudentView() {
         demoStrengths = ai.strengths ?? null;
         demoImprovements = ai.improvements ?? null;
         demoPictureAccuracy = ai.pictureAccuracy ?? null;
+        demoGrammarFeedback = ai.grammarFeedback ?? null;
       }
       const demoSubmission: SubmissionRow = {
         id: `demo-text-${Date.now()}`,
@@ -1977,6 +1985,7 @@ export default function StudentView() {
         ai_strengths: demoStrengths,
         ai_improvements: demoImprovements,
         ai_picture_accuracy: demoPictureAccuracy,
+        ai_grammar_feedback: demoGrammarFeedback,
         teacher_score: null,
         teacher_comment: null,
         student_code: DEMO_STUDENT_CODE,
@@ -2108,6 +2117,7 @@ export default function StudentView() {
   const aiStrengths = submissionForActivePrompt?.ai_strengths?.filter(Boolean) || [];
   const aiImprovements = submissionForActivePrompt?.ai_improvements?.filter(Boolean) || [];
   const aiPictureAccuracy = submissionForActivePrompt?.ai_picture_accuracy?.trim() || "";
+  const aiGrammarFeedback = submissionForActivePrompt?.ai_grammar_feedback?.filter(Boolean) || [];
   const latestTranscript = submissionForActivePrompt?.text_response || submissionForActivePrompt?.transcript || "";
   const showAiDemoFeedback = isDemoMode && (submissionForActivePrompt?.ai_score !== null || Boolean(submissionForActivePrompt?.transcript) || Boolean(submissionForActivePrompt?.ai_comment && submissionForActivePrompt.ai_comment !== DEMO_NON_AI_MESSAGE));
   const shouldClampTranscript = latestTranscript.length > 280;
@@ -2612,6 +2622,16 @@ export default function StudentView() {
                   <div style={{ marginTop: 10 }}>
                     <div style={styles.feedbackPanelLabel}>Picture accuracy</div>
                     <div style={styles.feedbackPanelText}>{aiPictureAccuracy}</div>
+                  </div>
+                ) : null}
+                {aiGrammarFeedback.length ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={styles.feedbackPanelLabel}>Grammar to fix</div>
+                    <ul style={{ margin: "8px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
+                      {aiGrammarFeedback.map((item, index) => (
+                        <li key={`grammar-${index}`}>{item}</li>
+                      ))}
+                    </ul>
                   </div>
                 ) : null}
                 {showAiDemoFeedback ? <div style={{ ...styles.feedbackPanelLabel, textTransform: "none", letterSpacing: "normal", color: "#2563eb" }}>Powered by ESL Hub AI feedback</div> : null}
