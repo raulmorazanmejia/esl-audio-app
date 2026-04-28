@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { getTeacherAuthToken } from "../lib/teacherAuth";
 import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
 import TeacherClassDetail from "./teacher/TeacherClassDetail";
 import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
@@ -601,10 +602,16 @@ function extractStoragePathFromPublicUrl(publicUrl: string, bucket: string): str
 }
 
 async function saveAppSettingViaApi(key: string, value: unknown) {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const token = session?.access_token;
+  const teacherToken = getTeacherAuthToken();
+
+  let token = teacherToken;
+  if (!token) {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    token = session?.access_token || "";
+  }
+
   if (!token) {
     throw new Error("Teacher session expired. Please sign in again.");
   }

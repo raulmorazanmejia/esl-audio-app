@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
 import StudentView from "./components/StudentView";
 import TeacherDashboard from "./components/TeacherDashboard";
-import { supabase } from "./lib/supabase";
+import { clearTeacherAuthToken, getTeacherAuthToken, setTeacherAuthToken } from "./lib/teacherAuth";
 
 function getModeFromUrl(): "student" | "teacher" {
   const params = new URLSearchParams(window.location.search);
@@ -11,7 +10,7 @@ function getModeFromUrl(): "student" | "teacher" {
 
 export default function App() {
   const [view, setView] = useState<"student" | "teacher">(getModeFromUrl());
-  const [teacherSession, setTeacherSession] = useState<Session | null>(null);
+  const [hasTeacherSession, setHasTeacherSession] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
@@ -25,56 +24,50 @@ export default function App() {
   };
 
   useEffect(() => {
-    let isMounted = true;
-
-    const loadSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!isMounted) return;
-      setTeacherSession(data.session ?? null);
-      setIsAuthLoading(false);
-    };
-
-    void loadSession();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setTeacherSession(session ?? null);
-      setIsAuthLoading(false);
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.unsubscribe();
-    };
+    setHasTeacherSession(Boolean(getTeacherAuthToken()));
+    setIsAuthLoading(false);
   }, []);
 
   const signInTeacher = async () => {
-    const email = emailInput.trim();
-    if (!email || !passwordInput) {
-      setAuthError("Enter both email and password.");
+    if (!passwordInput) {
+      setAuthError("Enter your password.");
       return;
     }
 
     setIsSigningIn(true);
     setAuthError("");
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: passwordInput,
-    });
 
-    if (error) {
-      setAuthError(error.message);
+    try {
+      const response = await fetch("/api/teacher-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailInput.trim(), password: passwordInput }),
+      });
+
+      const payload = (await response.json()) as { error?: string; missingEnvVar?: string; token?: string };
+
+      if (!response.ok || !payload?.token) {
+        const errorMessage = payload?.error || "Incorrect email or password";
+        const withConfigHint = payload?.missingEnvVar ? `${errorMessage} (${payload.missingEnvVar})` : errorMessage;
+        setAuthError(withConfigHint);
+        setIsSigningIn(false);
+        return;
+      }
+
+      setTeacherAuthToken(payload.token);
+      setHasTeacherSession(true);
+      setPasswordInput("");
+      setAuthError("");
       setIsSigningIn(false);
-      return;
+    } catch {
+      setAuthError("Could not contact server. Please try again.");
+      setIsSigningIn(false);
     }
-
-    setPasswordInput("");
-    setIsSigningIn(false);
   };
 
-  const signOutTeacher = async () => {
-    await supabase.auth.signOut();
+  const signOutTeacher = () => {
+    clearTeacherAuthToken();
+    setHasTeacherSession(false);
     setPasswordInput("");
     setAuthError("");
   };
@@ -141,7 +134,7 @@ export default function App() {
 
       {view === "student" && <StudentView />}
 
-      {view === "teacher" && !teacherSession && (
+      {view === "teacher" && !hasTeacherSession && (
         <div
           style={{
             minHeight: "100vh",
@@ -187,71 +180,75 @@ export default function App() {
               Sign in with your teacher email and password
             </div>
 
-            <input
-              type="email"
-              value={emailInput}
-              onChange={(e) => setEmailInput(e.target.value)}
-              placeholder="Teacher email"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void signInTeacher();
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void signInTeacher();
               }}
-              style={{
-                width: "100%",
-                height: "54px",
-                borderRadius: "16px",
-                border: "1px solid #dbe3f0",
-                background: "#f8fafc",
-                fontSize: "18px",
-                textAlign: "center",
-                color: "#334155",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-              autoComplete="email"
-            />
-
-            <input
-              type="password"
-              value={passwordInput}
-              onChange={(e) => setPasswordInput(e.target.value)}
-              placeholder="Password"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void signInTeacher();
-              }}
-              style={{
-                width: "100%",
-                height: "54px",
-                borderRadius: "16px",
-                border: "1px solid #dbe3f0",
-                background: "#f8fafc",
-                fontSize: "18px",
-                textAlign: "center",
-                color: "#334155",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-              autoComplete="current-password"
-            />
-
-            <button
-              onClick={() => void signInTeacher()}
-              disabled={isSigningIn || isAuthLoading}
-              style={{
-                width: "100%",
-                height: "54px",
-                borderRadius: "16px",
-                border: "none",
-                background: "#0f172a",
-                color: "#ffffff",
-                fontSize: "18px",
-                fontWeight: 700,
-                cursor: "pointer",
-                boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
-                opacity: isSigningIn || isAuthLoading ? 0.6 : 1,
-              }}
+              style={{ display: "flex", flexDirection: "column", gap: "18px" }}
             >
-              {isSigningIn ? "Signing in..." : "Sign in"}
-            </button>
+              <input
+                type="email"
+                name="username"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder="Teacher email"
+                style={{
+                  width: "100%",
+                  height: "54px",
+                  borderRadius: "16px",
+                  border: "1px solid #dbe3f0",
+                  background: "#f8fafc",
+                  fontSize: "18px",
+                  textAlign: "center",
+                  color: "#334155",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+                autoComplete="username"
+              />
+
+              <input
+                type="password"
+                name="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="Password"
+                style={{
+                  width: "100%",
+                  height: "54px",
+                  borderRadius: "16px",
+                  border: "1px solid #dbe3f0",
+                  background: "#f8fafc",
+                  fontSize: "18px",
+                  textAlign: "center",
+                  color: "#334155",
+                  outline: "none",
+                  boxSizing: "border-box",
+                }}
+                autoComplete="current-password"
+              />
+
+              <button
+                type="submit"
+                disabled={isSigningIn || isAuthLoading}
+                style={{
+                  width: "100%",
+                  height: "54px",
+                  borderRadius: "16px",
+                  border: "none",
+                  background: "#0f172a",
+                  color: "#ffffff",
+                  fontSize: "18px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 10px 24px rgba(15, 23, 42, 0.18)",
+                  opacity: isSigningIn || isAuthLoading ? 0.6 : 1,
+                }}
+              >
+                {isSigningIn ? "Signing in..." : "Sign in"}
+              </button>
+            </form>
 
             <div
               style={{
@@ -267,7 +264,7 @@ export default function App() {
         </div>
       )}
 
-      {view === "teacher" && teacherSession && (
+      {view === "teacher" && hasTeacherSession && (
         <>
           <div
             style={{
@@ -277,21 +274,21 @@ export default function App() {
             }}
           >
             <button
-              onClick={() => void signOutTeacher()}
+              onClick={() => signOutTeacher()}
               style={{
-                height: "42px",
-                padding: "0 18px",
-                borderRadius: "12px",
-                border: "1px solid #cbd5e1",
-                background: "#ffffff",
-                color: "#334155",
+                border: "none",
+                background: "#e2e8f0",
+                color: "#0f172a",
+                padding: "10px 18px",
+                borderRadius: "999px",
                 fontWeight: 700,
                 cursor: "pointer",
               }}
             >
-              Logout teacher
+              Sign out teacher
             </button>
           </div>
+
           <TeacherDashboard />
         </>
       )}
