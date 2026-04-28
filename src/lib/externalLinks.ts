@@ -27,12 +27,19 @@ export function parseExternalActivityData(exampleText: string | null | undefined
     return { instructions: "", externalLinks: fallbackLinks };
   }
   try {
-    const parsed = JSON.parse(sourceText) as ExternalActivityPayload;
+    const parsedRaw = JSON.parse(sourceText) as unknown;
+    if (!parsedRaw || typeof parsedRaw !== "object") {
+      return { instructions: sourceText, externalLinks: fallbackLinks };
+    }
+    const parsed = parsedRaw as ExternalActivityPayload;
+    if (!("externalLinks" in parsed)) {
+      return { instructions: sourceText, externalLinks: fallbackLinks };
+    }
     const links = Array.isArray(parsed.externalLinks)
       ? parsed.externalLinks.map((link) => normalizeLink(link)).filter((link): link is ExternalActivityLink => Boolean(link))
       : [];
     return {
-      instructions: typeof parsed.instructions === "string" ? parsed.instructions : "",
+      instructions: typeof parsed.instructions === "string" ? parsed.instructions.trim() : "",
       externalLinks: links.length ? links : fallbackLinks,
     };
   } catch {
