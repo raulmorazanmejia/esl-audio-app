@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
-import { getTeacherConfig, verifyTeacherToken } from "./teacher-auth";
+import { getTeacherConfig, getTeacherTokenFromRequest, verifyTeacherToken } from "./teacher-auth";
 
 const WRITEABLE_KEYS = new Set(["demo_config", "student_welcome_image_url", "student_feedback_profile"]);
 
@@ -97,9 +97,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: "Server app settings configuration missing", missingEnvVar });
     }
 
-    const token = getBearerToken(req);
+    const token = getBearerToken(req) || getTeacherTokenFromRequest(req);
     if (!token) {
-      return res.status(401).json({ error: "Unauthorized. Missing bearer token." });
+      return res.status(401).json({ error: "Unauthorized. Missing auth token." });
     }
 
     let isAuthorized = isValidTeacherApiToken(token);

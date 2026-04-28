@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import StudentView from "./components/StudentView";
 import TeacherDashboard from "./components/TeacherDashboard";
-import { clearTeacherAuthToken, getTeacherAuthToken, setTeacherAuthToken } from "./lib/teacherAuth";
+import { clearTeacherSession, getTeacherSessionStatus } from "./lib/teacherAuth";
 
 function getModeFromUrl(): "student" | "teacher" {
   const params = new URLSearchParams(window.location.search);
@@ -24,8 +24,16 @@ export default function App() {
   };
 
   useEffect(() => {
-    setHasTeacherSession(Boolean(getTeacherAuthToken()));
-    setIsAuthLoading(false);
+    void (async () => {
+      try {
+        const authenticated = await getTeacherSessionStatus();
+        setHasTeacherSession(authenticated);
+      } catch {
+        setHasTeacherSession(false);
+      } finally {
+        setIsAuthLoading(false);
+      }
+    })();
   }, []);
 
   const signInTeacher = async () => {
@@ -44,29 +52,30 @@ export default function App() {
         body: JSON.stringify({ email: emailInput.trim(), password: passwordInput }),
       });
 
-      const payload = (await response.json()) as { error?: string; missingEnvVar?: string; token?: string };
+      const payload = (await response.json()) as { error?: string; authenticated?: boolean };
 
-      if (!response.ok || !payload?.token) {
-        const errorMessage = payload?.error || "Incorrect email or password";
-        const withConfigHint = payload?.missingEnvVar ? `${errorMessage} (${payload.missingEnvVar})` : errorMessage;
-        setAuthError(withConfigHint);
+      if (!response.ok || !payload?.authenticated) {
+        setAuthError(payload?.error || "Incorrect email or password");
         setIsSigningIn(false);
         return;
       }
 
-      setTeacherAuthToken(payload.token);
       setHasTeacherSession(true);
       setPasswordInput("");
       setAuthError("");
       setIsSigningIn(false);
-    } catch {
-      setAuthError("Could not contact server. Please try again.");
+    } catch (error) {
+      if (error instanceof Error && error.message) {
+        setAuthError(error.message);
+      } else {
+        setAuthError("Could not contact server. Please try again.");
+      }
       setIsSigningIn(false);
     }
   };
 
-  const signOutTeacher = () => {
-    clearTeacherAuthToken();
+  const signOutTeacher = async () => {
+    await clearTeacherSession();
     setHasTeacherSession(false);
     setPasswordInput("");
     setAuthError("");
@@ -274,7 +283,9 @@ export default function App() {
             }}
           >
             <button
-              onClick={() => signOutTeacher()}
+              onClick={() => {
+                void signOutTeacher();
+              }}
               style={{
                 border: "none",
                 background: "#e2e8f0",

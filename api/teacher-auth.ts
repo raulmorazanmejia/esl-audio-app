@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import type { VercelRequest } from "@vercel/node";
 
 export const TEACHER_AUTH_ERROR_CODES = {
   MISSING_CONFIG: "MISSING_CONFIG",
@@ -11,22 +12,32 @@ export type TeacherAuthErrorCode = (typeof TEACHER_AUTH_ERROR_CODES)[keyof typeo
 export type TeacherConfig = {
   teacherEmail: string;
   teacherPassword: string;
-  authSecret: string;
+  sessionSecret: string;
   tokenTtlSeconds: number;
 };
 
 export type TeacherConfigResult =
   | { ok: true; config: TeacherConfig }
-  | { ok: false; missingEnvVar: "TEACHER_PASSWORD" };
+  | { ok: false; missingEnvVar: "TEACHER_EMAIL" | "TEACHER_PASSWORD" | "TEACHER_SESSION_SECRET" };
+
+export const TEACHER_SESSION_COOKIE_NAME = "teacher_session";
 
 export function getTeacherConfig(): TeacherConfigResult {
+  const teacherEmail = process.env.TEACHER_EMAIL?.trim().toLowerCase() || "";
+  if (!teacherEmail) {
+    return { ok: false, missingEnvVar: "TEACHER_EMAIL" };
+  }
+
   const teacherPassword = process.env.TEACHER_PASSWORD?.trim() || "";
   if (!teacherPassword) {
     return { ok: false, missingEnvVar: "TEACHER_PASSWORD" };
   }
 
-  const teacherEmail = process.env.TEACHER_EMAIL?.trim().toLowerCase() || "";
-  const authSecret = process.env.TEACHER_AUTH_SECRET?.trim() || teacherPassword;
+  const sessionSecret = process.env.TEACHER_SESSION_SECRET?.trim() || "";
+  if (!sessionSecret) {
+    return { ok: false, missingEnvVar: "TEACHER_SESSION_SECRET" };
+  }
+
   const parsedTtl = Number(process.env.TEACHER_AUTH_TOKEN_TTL_SECONDS ?? "43200");
   const tokenTtlSeconds = Number.isFinite(parsedTtl) && parsedTtl > 0 ? Math.floor(parsedTtl) : 43200;
 
@@ -35,7 +46,7 @@ export function getTeacherConfig(): TeacherConfigResult {
     config: {
       teacherEmail,
       teacherPassword,
-      authSecret,
+      sessionSecret,
       tokenTtlSeconds,
     },
   };
@@ -88,7 +99,7 @@ export function createTeacherToken(config: TeacherConfig, nowMs = Date.now()): s
     exp: Math.floor(nowMs / 1000) + config.tokenTtlSeconds,
   };
   const payloadBase64 = toBase64Url(JSON.stringify(payload));
-  const signature = signPayload(payloadBase64, config.authSecret);
+  const signature = signPayload(payloadBase64, config.sessionSecret);
   return `${payloadBase64}.${signature}`;
 }
 
@@ -97,7 +108,7 @@ export function verifyTeacherToken(token: string, config: TeacherConfig, nowMs =
   const [payloadBase64, signature] = token.split(".");
   if (!payloadBase64 || !signature) return false;
 
-  const expectedSignature = signPayload(payloadBase64, config.authSecret);
+  const expectedSignature = signPayload(payloadBase64, config.sessionSecret);
   const signatureBuffer = Buffer.from(signature);
   const expectedBuffer = Buffer.from(expectedSignature);
 
@@ -116,4 +127,25 @@ export function verifyTeacherToken(token: string, config: TeacherConfig, nowMs =
 
   const nowSeconds = Math.floor(nowMs / 1000);
   return payload.exp > nowSeconds;
+}
+
+export function getTeacherTokenFromRequest(req: VercelRequest): string {
+  const rawCookie = req.headers.cookie || "";
+  if (!rawCookie) return "";
+
+  const cookieParts = rawCookie.split(";");
+  for (const part of cookieParts) {
+    const [rawName, ...rawValue] = part.trim().split("=");
+    if (rawName !== TEACHER_SESSION_COOKIE_NAME) continue;
+    return decodeURIComponent(rawValue.join("=") || "");
+  }
+  return "";
+}
+
+export function createTeacherSessionCookie(token: string, maxAgeSeconds: number): string {
+  return `${TEACHER_SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+}
+
+export function createTeacherSessionLogoutCookie(): string {
+  return `${TEACHER_SESSION_COOKIE_NAME}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
