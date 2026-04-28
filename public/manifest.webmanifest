@@ -9,10 +9,16 @@
   "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "/icons/icon.svg",
+      "src": "/icons/esl-hub-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/esl-hub-apple-touch-icon.svg",
+      "sizes": "180x180",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }

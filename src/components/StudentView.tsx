@@ -71,6 +71,7 @@ const DEMO_MAX_ATTEMPTS_PER_DAY = 3;
 const DEMO_MAX_TRANSCRIPT_CHARS = 700;
 const DEMO_SERVER_HARD_FLOOR_MS = 3_000;
 const DEMO_USAGE_STORAGE_KEY = "esl_demo_usage_v1";
+const DEMO_AI_UNAVAILABLE_MESSAGE = "Demo feedback is unavailable right now. Please try again later.";
 const DEMO_MODE_QUERY_VALUE = "demo";
 const DEMO_CLASS_NAME = "demo-class";
 const DEMO_STUDENT_CODE = "DEMO";
@@ -1540,14 +1541,14 @@ export default function StudentView() {
           const dataUrl = await blobToDataUrl(recordedBlob);
           const ai = await analyzeAudio(dataUrl, promptText, activePrompt?.prompt_image_url ?? null);
           if (ai.error) {
-            setErrorMessage(ai.error);
+            setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
             return;
           }
           demoScore = ai.score ?? null;
-          demoComment = ai.comment || "Demo complete. In a real class, feedback would appear here.";
+          demoComment = ai.comment || DEMO_AI_UNAVAILABLE_MESSAGE;
           demoTranscript = ai.transcript || null;
         } catch (error: any) {
-          setErrorMessage(error?.message || "AI analysis failed.");
+          setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
           return;
         }
       }
@@ -1885,11 +1886,11 @@ export default function StudentView() {
       if (demoConfig.aiFeedbackEnabled) {
         const ai = await analyzeAudio("", promptText, activePrompt?.prompt_image_url ?? null, writtenResponse);
         if (ai.error) {
-          setErrorMessage(ai.error);
+          setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
           return;
         }
         demoScore = ai.score ?? null;
-        demoComment = ai.comment || demoComment;
+        demoComment = ai.comment || DEMO_AI_UNAVAILABLE_MESSAGE;
       }
       const demoSubmission: SubmissionRow = {
         id: `demo-text-${Date.now()}`,
@@ -2043,6 +2044,7 @@ export default function StudentView() {
   const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
   const latestTranscript = submissionForActivePrompt?.text_response || submissionForActivePrompt?.transcript || "";
+  const showAiDemoFeedback = isDemoMode && demoConfig.aiFeedbackEnabled && Boolean(submissionForActivePrompt?.ai_comment);
   const shouldClampTranscript = latestTranscript.length > 280;
   const visibleTranscript = showFullTranscript || !shouldClampTranscript ? latestTranscript : `${latestTranscript.slice(0, 280)}...`;
   const hasVisiblePrompts = assignedPrompts.length > 0;
@@ -2498,10 +2500,10 @@ export default function StudentView() {
               )}
 
               <div style={styles.feedbackPanel}>
-                <div style={styles.feedbackPanelLabel}>Feedback</div>
+                <div style={styles.feedbackPanelLabel}>{showAiDemoFeedback ? "AI demo feedback" : "Feedback"}</div>
                 <div style={styles.feedbackHighlight}>
                   <div style={styles.feedbackPanelText}>
-                    {isDemoMode
+                    {isDemoMode && !showAiDemoFeedback
                       ? "Demo complete. In a real class, your teacher would receive your response and you could get feedback."
                       : primaryFeedbackComment || "No written feedback yet."}
                   </div>
