@@ -6,7 +6,7 @@ import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
 import TeacherSubmissionsPanel from "./teacher/TeacherSubmissionsPanel";
 import { AssignmentActivityType, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
-import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, parseDemoConfigValue } from "../lib/demoConfig";
+import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
 
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code, prompt:prompts(assignment_type)";
@@ -581,6 +581,7 @@ function deriveAssignmentType(prompt: Pick<PromptRow, "assignment_type">): Assig
 const PROMPT_IMAGES_BUCKET = "prompt-images";
 const APP_ASSETS_BUCKET = "app-assets";
 const STUDENT_WELCOME_IMAGE_SETTING_KEY = "student_welcome_image_url";
+const STUDENT_FEEDBACK_PROFILE_SETTING_KEY = "student_feedback_profile";
 const MAX_WELCOME_IMAGE_FILE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_WELCOME_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
@@ -692,6 +693,10 @@ export default function TeacherDashboard() {
   const [hasCopiedDemoLink, setHasCopiedDemoLink] = useState(false);
   const [activeDemoEditId, setActiveDemoEditId] = useState<string | null>(null);
   const [demoActivityImageById, setDemoActivityImageById] = useState<Record<string, File | null>>({});
+  const [studentFeedbackProfile, setStudentFeedbackProfile] = useState<FeedbackProfile>("student_friendly");
+  const [isSavingStudentFeedbackProfile, setIsSavingStudentFeedbackProfile] = useState(false);
+  const [studentFeedbackProfileError, setStudentFeedbackProfileError] = useState("");
+  const [studentFeedbackProfileSuccess, setStudentFeedbackProfileSuccess] = useState("");
 
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
@@ -774,14 +779,27 @@ export default function TeacherDashboard() {
 
     const fetchStudentWelcomeImage = async () => {
       setIsLoadingStudentWelcomeImage(true);
-      const { data, error } = await supabase.from("app_settings").select("value").eq("key", STUDENT_WELCOME_IMAGE_SETTING_KEY).maybeSingle();
+      const [welcomeResult, profileResult] = await Promise.all([
+        supabase.from("app_settings").select("value").eq("key", STUDENT_WELCOME_IMAGE_SETTING_KEY).maybeSingle(),
+        supabase.from("app_settings").select("value").eq("key", STUDENT_FEEDBACK_PROFILE_SETTING_KEY).maybeSingle(),
+      ]);
       if (!isMounted) return;
-      if (error) {
-        setStudentWelcomeImageError(error.message || "Could not load student welcome image setting.");
+      if (welcomeResult.error) {
+        setStudentWelcomeImageError(welcomeResult.error.message || "Could not load student welcome image setting.");
         setIsLoadingStudentWelcomeImage(false);
         return;
       }
-      const value = (data as { value?: string | null } | null)?.value?.trim() ?? "";
+      if (profileResult.error) {
+        setStudentFeedbackProfileError(profileResult.error.message || "Could not load student feedback style.");
+      } else {
+        const profileRaw = (profileResult.data as { value?: string | null } | null)?.value?.trim();
+        if (profileRaw === "student_friendly" || profileRaw === "balanced" || profileRaw === "strict") {
+          setStudentFeedbackProfile(profileRaw);
+        } else {
+          setStudentFeedbackProfile("student_friendly");
+        }
+      }
+      const value = (welcomeResult.data as { value?: string | null } | null)?.value?.trim() ?? "";
       setStudentWelcomeImageUrl(value || null);
       setIsLoadingStudentWelcomeImage(false);
     };
@@ -1955,6 +1973,25 @@ export default function TeacherDashboard() {
     await persistDemoConfig({ ...demoConfig, [field]: value }, "Demo branding saved.");
   }
 
+  async function handleDemoFeedbackProfileChange(profile: FeedbackProfile) {
+    await persistDemoConfig({ ...demoConfig, feedbackProfile: profile }, "Demo feedback style saved.");
+  }
+
+  async function handleStudentFeedbackProfileChange(profile: FeedbackProfile) {
+    setIsSavingStudentFeedbackProfile(true);
+    setStudentFeedbackProfileError("");
+    setStudentFeedbackProfileSuccess("");
+    try {
+      await saveAppSettingViaApi(STUDENT_FEEDBACK_PROFILE_SETTING_KEY, profile);
+      setStudentFeedbackProfile(profile);
+      setStudentFeedbackProfileSuccess("Student feedback style saved.");
+    } catch (error: any) {
+      setStudentFeedbackProfileError(error?.message || "Could not save student feedback style.");
+    } finally {
+      setIsSavingStudentFeedbackProfile(false);
+    }
+  }
+
   async function handleDemoActivityChange(activityId: string, patch: Partial<DemoConfig["activities"][number]>) {
     const nextActivities = demoConfig.activities.map((activity) => (activity.id === activityId ? { ...activity, ...patch } : activity));
     await persistDemoConfig({ ...demoConfig, activities: nextActivities }, "Demo activity updated.");
@@ -2335,6 +2372,20 @@ export default function TeacherDashboard() {
                         </button>
                       </div>
                     </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", border: "1px solid #e2e8f0", borderRadius: 14, padding: "10px 12px", background: "#f8fafc" }}>
+                      <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>Demo feedback style</div>
+                      <select
+                        value={demoConfig.feedbackProfile}
+                        onChange={(e) => void handleDemoFeedbackProfileChange(e.target.value as FeedbackProfile)}
+                        disabled={isSavingDemoConfig || isLoadingDemoConfig}
+                        style={{ ...styles.rosterInput, minHeight: 40, width: 220, fontSize: 14 }}
+                      >
+                        <option value="academic_demo">academic_demo</option>
+                        <option value="balanced">balanced</option>
+                        <option value="student_friendly">student_friendly</option>
+                        <option value="strict">strict</option>
+                      </select>
+                    </div>
                   </div>
                   <div style={{ marginTop: 12, border: "1px dashed #cbd5e1", borderRadius: 14, background: "#ffffff", padding: 12 }}>
                     <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, marginBottom: 6 }}>Public demo link</div>
@@ -2455,6 +2506,25 @@ export default function TeacherDashboard() {
                 {studentWelcomeImageError ? <div style={{ marginTop: 8, fontSize: 13, color: "#b91c1c" }}>{studentWelcomeImageError}</div> : null}
                 {studentWelcomeImageSuccess ? <div style={{ marginTop: 8, fontSize: 13, color: "#065f46" }}>{studentWelcomeImageSuccess}</div> : null}
                 <div style={{ marginTop: 8, fontSize: 12, color: "#94a3b8" }}>Allowed: JPG, PNG, WEBP, GIF · Max file size: 2MB.</div>
+                <div style={{ marginTop: 16, borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 6 }}>Student feedback style</h2>
+                  <p style={styles.settingsDescription}>Set the default AI feedback profile for real class responses.</p>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <select
+                      value={studentFeedbackProfile}
+                      onChange={(e) => void handleStudentFeedbackProfileChange(e.target.value as FeedbackProfile)}
+                      disabled={isSavingStudentFeedbackProfile}
+                      style={{ ...styles.rosterInput, maxWidth: 260 }}
+                    >
+                      <option value="student_friendly">student_friendly</option>
+                      <option value="balanced">balanced</option>
+                      <option value="strict">strict</option>
+                    </select>
+                    {isSavingStudentFeedbackProfile ? <span style={{ fontSize: 13, color: "#64748b" }}>Saving...</span> : null}
+                  </div>
+                  {studentFeedbackProfileError ? <div style={{ marginTop: 8, fontSize: 13, color: "#b91c1c" }}>{studentFeedbackProfileError}</div> : null}
+                  {studentFeedbackProfileSuccess ? <div style={{ marginTop: 8, fontSize: 13, color: "#065f46" }}>{studentFeedbackProfileSuccess}</div> : null}
+                </div>
               </section>
             ) : null}
           </main>

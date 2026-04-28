@@ -1,4 +1,5 @@
 export type DemoActivityType = "audio_response" | "text_response" | "external_link" | "video_response";
+export type FeedbackProfile = "student_friendly" | "academic_demo" | "balanced" | "strict";
 
 export type DemoActivityConfig = {
   id: string;
@@ -15,6 +16,7 @@ export type DemoActivityConfig = {
 export type DemoConfig = {
   demoEnabled: boolean;
   aiFeedbackEnabled: boolean;
+  feedbackProfile: FeedbackProfile;
   welcomeTitle: string;
   welcomeSubtitle: string;
   heroImageUrl: string;
@@ -26,6 +28,7 @@ export const DEMO_CONFIG_SETTING_KEY = "demo_config";
 export const DEFAULT_DEMO_CONFIG: DemoConfig = {
   demoEnabled: true,
   aiFeedbackEnabled: false,
+  feedbackProfile: "academic_demo",
   welcomeTitle: "Try ESL Hub",
   welcomeSubtitle: "Complete a sample activity and see how it works.",
   heroImageUrl: "",
@@ -100,6 +103,13 @@ export function normalizeDemoConfig(input: unknown): DemoConfig {
   return {
     demoEnabled: source.demoEnabled ?? source.enabled !== false,
     aiFeedbackEnabled: source.aiFeedbackEnabled === true,
+    feedbackProfile:
+      source.feedbackProfile === "student_friendly" ||
+      source.feedbackProfile === "academic_demo" ||
+      source.feedbackProfile === "balanced" ||
+      source.feedbackProfile === "strict"
+        ? source.feedbackProfile
+        : DEFAULT_DEMO_CONFIG.feedbackProfile,
     welcomeTitle: String(source.welcomeTitle ?? DEFAULT_DEMO_CONFIG.welcomeTitle),
     welcomeSubtitle: String(source.welcomeSubtitle ?? DEFAULT_DEMO_CONFIG.welcomeSubtitle),
     heroImageUrl: String(source.heroImageUrl ?? ""),

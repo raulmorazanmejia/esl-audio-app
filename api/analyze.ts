@@ -8,6 +8,8 @@ const DEMO_MIN_SUBMIT_INTERVAL_MS = 3_000;
 const DEMO_MAX_TRANSCRIPT_CHARS = 700;
 const DEMO_MAX_AUDIO_SECONDS = 90;
 const demoUsageByIp = new Map<string, { date: string; count: number; lastAt: number }>();
+const FEEDBACK_PROFILES = new Set(["student_friendly", "academic_demo", "balanced", "strict"]);
+type FeedbackProfile = "student_friendly" | "academic_demo" | "balanced" | "strict";
 
 function getClientIp(req: VercelRequest): string {
   const forwarded = String(req.headers["x-forwarded-for"] || "");
@@ -128,6 +130,21 @@ function sanitizePictureAccuracy(value: any):
   };
 }
 
+function splitSentences(input: string): string[] {
+  return input
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function normalizeCommentLength(value: string): string {
+  const fallback = "Your response is relevant to the task. Focus on one grammar or detail improvement next time.";
+  if (!value?.trim()) return fallback;
+  const sentences = splitSentences(value.trim());
+  if (!sentences.length) return fallback;
+  return sentences.slice(0, 3).join(" ");
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   function fail(
     status: number,
@@ -167,6 +184,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       isDemoMode,
       demo,
       audioDurationSeconds,
+      feedbackProfile,
+      feedback_profile,
     } = req.body ?? {};
 
     const demoMode = Boolean(isDemoMode || demo);
@@ -175,6 +194,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const finalPromptImageUrl = firstNonEmptyString(promptImageUrl, prompt_image_url, promptImage, imageUrl, prompt_image_path);
     const finalTranscriptText = typeof transcriptText === "string" ? transcriptText.trim() : "";
     const finalActivityType = assignmentType || assignment_type || activityType || activity_type || null;
+    const requestedProfile = firstNonEmptyString(feedbackProfile, feedback_profile);
+    const activeFeedbackProfile = FEEDBACK_PROFILES.has(String(requestedProfile))
+      ? (requestedProfile as FeedbackProfile)
+      : (demoMode ? "academic_demo" : "student_friendly");
     const isPictureActivity =
       finalActivityType === "audio_response" &&
       Boolean(firstNonEmptyString(promptImageUrl, prompt_image_url, imageUrl, prompt_image_path, promptImage));
@@ -342,7 +365,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 Rules:
 - transcript/score/comment must always be usable by old clients.
 - Score must be an integer 1-5.
+- Feedback profile for tone: ${activeFeedbackProfile}.
 - Keep feedback specific, practical, short, and teacher-like (not robotic, not generic praise).
+- comment must be 2-3 sentences, never more than 3.
+- comment sentence structure:
+  1) overall evaluation
+  2) key issue (detail, grammar, or accuracy)
+  3) optional next-step suggestion
 - Evaluate across three areas: (1) task relevance/accuracy, (2) completeness/detail, (3) grammar+clarity.
 - Use this 5-point scale:
   5 = accurate, detailed, clear, and mostly correct grammar
@@ -356,18 +385,32 @@ Rules:
 - strengths/improvements should be short bullet-style items.
 - grammarFeedback should be 1-3 useful mini-teaching fixes, each with a correction + short pattern rule.
 - If score is 1-3, modelAnswer is required (A1-A2 level, 2-4 short sentences). If score is 4-5, modelAnswer is optional.
-- strengths/improvements should be short bullet-style items.
+- Keep grammar corrections separate from pictureAccuracy.
+- Profile guidance:
+  * student_friendly: encouraging, gentle correction phrasing.
+  * academic_demo: professional, evaluation-focused, concise.
+  * balanced: practical middle ground.
+  * strict: direct correction, still respectful.
 ${demoMode ? "Keep wording concise for demo users." : ""}
 ${isPictureActivity ? `For describe-a-picture tasks:
 - You MUST ground feedback in the actual image when image context is available.
-- Internally identify at least 4 key visible elements/actions first, then compare the student answer to what is visible.
+- Run a visual fact-check before grading:
+  1) identify number of people, main objects, setting, visible actions, and obvious details
+  2) compare student claims with those facts
+- You must explicitly check numeric claims, colors mentioned, setting/location claims, and visible action claims.
+- If student gives a wrong number, explicitly flag it in comment and pictureAccuracy.incorrect.
+- Example mismatch style: "You said there are seven people, but the picture shows six."
 - Detect: correct details, missing important details, and invented/inaccurate details.
 - pictureAccuracy must be an object with arrays:
   - correct: student-mentioned details that are visible and accurate
   - missing: important visible elements/actions not mentioned
   - incorrect: invented/inaccurate details (use [] when none)
+- For clear mismatches, pictureAccuracy.incorrect must include short factual notes like:
+  - "said seven people, but the image shows six"
+  - "called the screen a board"
 - In feedback text (comment/scoreReason), reference concrete visible elements from the image.
 - Do not say vague lines like "You mentioned several things in the picture."
+- Do not overcorrect ambiguous details. If setting is ambiguous, say it could be either possibility.
 - If image is unavailable, fall back to prompt+transcript-only grading while still providing grammarFeedback and modelAnswer when needed.` : `For non-picture tasks:
 - Evaluate whether the student answered the prompt, gave enough detail, used understandable complete sentences, and whether grammar/syntax affects clarity.
 - Give practical ESL-teacher feedback, not generic praise.`}`,
@@ -426,7 +469,7 @@ ${isPictureActivity ? `For describe-a-picture tasks:
       const parsed = JSON.parse(raw);
       score = typeof parsed.score === "number" ? parsed.score : 3;
       score = Math.min(5, Math.max(1, Math.round(score)));
-      comment = typeof parsed.comment === "string" ? parsed.comment : "Basic response.";
+      comment = normalizeCommentLength(typeof parsed.comment === "string" ? parsed.comment : "Basic response.");
       strengths = sanitizeStringArray(parsed.strengths, 3);
       improvements = sanitizeStringArray(parsed.improvements, 3);
       pictureAccuracy = sanitizePictureAccuracy(parsed.pictureAccuracy);
@@ -436,14 +479,19 @@ ${isPictureActivity ? `For describe-a-picture tasks:
       if (score <= 3 && !modelAnswer) {
         modelAnswer = "Try adding one or two more clear sentences to fully answer the prompt.";
       }
+      if (!grammarFeedback?.length) {
+        grammarFeedback = ["Use complete sentences with subject + verb so your ideas are clear."];
+      }
       if (!scoreReason) {
         scoreReason = `Score ${score} because your answer ${score >= 3 ? "is related to the task" : "does not fully complete the task"}, has ${score >= 4 ? "good detail" : "limited detail"}, and needs ${score >= 4 ? "minor grammar polish" : "clearer grammar and sentence structure"}.`;
       }
     } catch (err) {
-      console.error("GRADE PARSE ERROR:", {
+      console.error("safe parse error", {
         message: err instanceof Error ? err.message : "unknown_parse_error",
       });
     }
+
+    comment = normalizeCommentLength(comment);
 
     return res.status(200).json({
       transcript,
