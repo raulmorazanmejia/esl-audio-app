@@ -1455,6 +1455,7 @@ export default function StudentView() {
   }
 
   async function analyzeAudio(audioUrl: string, promptText: string, promptImageUrl?: string | null, transcriptText?: string): Promise<AnalyzeResponse> {
+    const assignmentType = activePrompt?.assignment_type || null;
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
@@ -1468,6 +1469,10 @@ export default function StudentView() {
           promptImageUrl: promptImageUrl || null,
           prompt_image_url: promptImageUrl || null,
           transcriptText: transcriptText || null,
+          assignmentType,
+          assignment_type: assignmentType,
+          activityType: assignmentType,
+          activity_type: assignmentType,
           isDemoMode,
           demo: isDemoMode,
           audioDurationSeconds: recordedDurationSeconds,
@@ -1475,12 +1480,12 @@ export default function StudentView() {
       });
 
       if (!response.ok) {
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        const normalizedError = String(body.error || "").toLowerCase();
+        const body = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
+        const normalizedError = String(body.error || body.message || "").toLowerCase();
         if (response.status === 429 || normalizedError.includes("demo limit reached")) {
           return { error: DEMO_LIMIT_REACHED_MESSAGE };
         }
-        return { error: body.error || "AI analysis failed." };
+        return { error: body.message || body.error || "AI analysis failed." };
       }
 
       return (await response.json()) as AnalyzeResponse;

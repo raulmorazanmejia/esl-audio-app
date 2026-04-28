@@ -40,6 +40,30 @@ function guessAudioMetaFromUrl(audioUrl: string) {
   return { mimeType: "audio/webm", fileName: "student-audio.webm" };
 }
 
+function guessAudioMeta(audioInput: string, fallbackUrl?: string) {
+  if (audioInput.startsWith("data:")) {
+    const header = audioInput.slice(5, audioInput.indexOf(","));
+    const mime = header.split(";")[0]?.trim().toLowerCase() || "";
+    if (mime === "audio/mp4" || mime === "audio/x-m4a" || mime === "audio/m4a") {
+      return { mimeType: "audio/mp4", fileName: "student-audio.m4a" };
+    }
+    if (mime === "audio/mpeg" || mime === "audio/mp3") {
+      return { mimeType: "audio/mpeg", fileName: "student-audio.mp3" };
+    }
+    if (mime === "audio/ogg") {
+      return { mimeType: "audio/ogg", fileName: "student-audio.ogg" };
+    }
+    if (mime === "audio/webm") {
+      return { mimeType: "audio/webm", fileName: "student-audio.webm" };
+    }
+    if (mime.startsWith("audio/")) {
+      const ext = mime.replace("audio/", "") || "webm";
+      return { mimeType: mime, fileName: `student-audio.${ext}` };
+    }
+  }
+  return guessAudioMetaFromUrl(fallbackUrl || audioInput);
+}
+
 function isClearlyInappropriate(moderationResult: any): boolean {
   const categories = moderationResult?.categories || {};
   const categoryScores = moderationResult?.category_scores || {};
@@ -63,15 +87,22 @@ function isClearlyInappropriate(moderationResult: any): boolean {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  function fail(
+    status: number,
+    reason: "missing_openai_key" | "invalid_audio_payload" | "demo_limit_reached" | "transcription_failed" | "grading_failed",
+    message: string,
+    isDemoMode: boolean,
+  ) {
+    console.error("demo analyze failed", { reason, status, isDemoMode });
+    return res.status(status).json({ error: reason, message });
+  }
+
   // Security note: OPENAI_API_KEY must stay server-only in Vercel env vars.
   // Never expose this key to browser bundles, React components, or client env vars (e.g. VITE_*).
   const openAiApiKey = process.env.OPENAI_API_KEY?.trim();
 
   if (!openAiApiKey) {
-    console.error("ANALYZE CONFIG ERROR: Missing OPENAI_API_KEY");
-    return res.status(500).json({
-      error: "AI analysis is temporarily unavailable: server is missing OPENAI_API_KEY.",
-    });
+    return fail(500, "missing_openai_key", "AI analysis is temporarily unavailable: server is missing OPENAI_API_KEY.", false);
   }
 
   try {
@@ -85,6 +116,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       prompt_image_url,
       promptImage,
       transcriptText,
+      assignmentType,
+      assignment_type,
+      activityType,
+      activity_type,
       isDemoMode,
       demo,
       audioDurationSeconds,
@@ -95,6 +130,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const finalPromptText = promptText || prompt_text || prompt;
     const finalPromptImageUrl = promptImageUrl || prompt_image_url || promptImage || null;
     const finalTranscriptText = typeof transcriptText === "string" ? transcriptText.trim() : "";
+    const finalActivityType = assignmentType || assignment_type || activityType || activity_type || null;
 
     if (demoMode) {
       const ip = getClientIp(req);
@@ -103,14 +139,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const usage = demoUsageByIp.get(ip);
       const current = usage && usage.date === today ? usage : { date: today, count: 0, lastAt: 0 };
       if (current.count >= DEMO_MAX_ATTEMPTS_PER_DAY) {
-        return res.status(429).json({ error: "Demo limit reached" });
+        return fail(429, "demo_limit_reached", "Demo limit reached", demoMode);
       }
       if (current.lastAt && now - current.lastAt < DEMO_MIN_SUBMIT_INTERVAL_MS) {
-        return res.status(429).json({ error: "Demo limit reached" });
+        return fail(429, "demo_limit_reached", "Demo limit reached", demoMode);
       }
       demoUsageByIp.set(ip, { date: today, count: current.count + 1, lastAt: now });
       if (typeof audioDurationSeconds === "number" && audioDurationSeconds > DEMO_MAX_AUDIO_SECONDS) {
-        return res.status(400).json({ error: "Demo recordings are limited to 90 seconds." });
+        return res.status(400).json({ error: "invalid_audio_payload", message: "Demo recordings are limited to 90 seconds." });
       }
       if (finalTranscriptText.length > DEMO_MAX_TRANSCRIPT_CHARS) {
         return res.status(400).json({ error: "Demo text is too long." });
@@ -132,13 +168,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let transcript = finalTranscriptText;
     if (!transcript) {
-      const audioRes = await fetch(finalAudioUrl);
+      if (typeof finalAudioUrl !== "string" || !finalAudioUrl.trim()) {
+        return fail(400, "invalid_audio_payload", "Missing or invalid audioUrl", demoMode);
+      }
+
+      let audioRes: Response;
+      try {
+        audioRes = await fetch(finalAudioUrl);
+      } catch (audioFetchErr) {
+        console.error("AUDIO FETCH ERROR:", audioFetchErr);
+        return fail(400, "invalid_audio_payload", "Could not read audio payload", demoMode);
+      }
       if (!audioRes.ok) {
-        return res.status(400).json({ error: "Could not download audio file" });
+        return fail(400, "invalid_audio_payload", "Could not download audio file", demoMode);
       }
 
       const audioBuffer = await audioRes.arrayBuffer();
-      const { mimeType, fileName } = guessAudioMetaFromUrl(finalAudioUrl);
+      if (!audioBuffer.byteLength) {
+        return fail(400, "invalid_audio_payload", "Audio payload is empty", demoMode);
+      }
+      const { mimeType, fileName } = guessAudioMeta(finalAudioUrl, finalAudioUrl);
 
       const formData = new FormData();
       formData.append("file", new Blob([audioBuffer], { type: mimeType }), fileName);
@@ -160,9 +209,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           status: transcriptionRes.status,
           statusText: transcriptionRes.statusText,
         });
-        return res.status(502).json({
-          error: "AI transcription failed. Please try again in a moment.",
-        });
+        return fail(502, "transcription_failed", "AI transcription failed. Please try again in a moment.", demoMode);
       }
       transcript = String(transcriptionJson.text || "").trim();
     }
@@ -216,7 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? [
           {
             type: "text",
-            text: `Prompt: ${finalPromptText}\nStudent answer: ${transcript}\n\nEvaluate task completion against BOTH the prompt text and this image. Reward relevant visible details. Do not invent invisible details. Light inferences are okay only when strongly supported by visible evidence.`,
+            text: `Activity type: ${finalActivityType || "unknown"}\nPrompt: ${finalPromptText}\nStudent answer: ${transcript}\n\nEvaluate task completion against BOTH the prompt text and this image. Reward relevant visible details. Do not invent invisible details. Light inferences are okay only when strongly supported by visible evidence.`,
           },
           {
             type: "image_url",
@@ -225,7 +272,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
           },
         ]
-      : `Prompt: ${finalPromptText}\nStudent answer: ${transcript}`;
+      : `Activity type: ${finalActivityType || "unknown"}\nPrompt: ${finalPromptText}\nStudent answer: ${transcript}`;
 
     const gradingRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -259,9 +306,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status: gradingRes.status,
         statusText: gradingRes.statusText,
       });
-      return res.status(502).json({
-        error: "AI grading failed. Please try again in a moment.",
-      });
+      return fail(502, "grading_failed", "AI grading failed. Please try again in a moment.", demoMode);
     }
 
     let score = 3;
