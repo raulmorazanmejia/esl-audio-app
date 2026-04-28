@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { supabase } from "../lib/supabase";
 import ReliableAudioPlayer from "./ReliableAudioPlayer";
 import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
+import { parseExternalActivityData, serializeExternalActivityData } from "../lib/externalLinks";
 
 type PromptRow = {
   id: string;
@@ -840,12 +841,14 @@ export default function StudentView() {
         id: activity.id,
         prompt_text: activity.title,
         assignment_type: activity.type,
-        external_url: activity.externalUrl || null,
+        external_url: activity.externalLinks?.[0]?.url || activity.externalUrl || null,
         class_name: DEMO_CLASS_NAME,
         suggested_time: activity.suggestedTime || null,
         prompt_image_path: null,
         prompt_image_url: activity.imageUrl?.trim() || (activity.id.includes("picture") ? DEMO_IMAGE_CARD : null),
-        example_text: activity.prompt || activity.title,
+        example_text: activity.type === "external_link"
+          ? serializeExternalActivityData(activity.prompt || activity.title, activity.externalLinks?.length ? activity.externalLinks : (activity.externalUrl ? [{ title: "Open activity", url: activity.externalUrl }] : []))
+          : (activity.prompt || activity.title),
         is_active: true,
       } satisfies PromptRow));
   }, [demoConfig.activities]);
@@ -870,6 +873,7 @@ export default function StudentView() {
   }, [activeFeedbackProfile]);
   const demoUnavailable = isDemoMode && !demoConfig.demoEnabled;
   const demoHeroImageUrl = demoConfig.heroImageUrl?.trim() || welcomeHeroImageUrl;
+  const externalActivityData = useMemo(() => parseExternalActivityData(activePrompt?.example_text, activePrompt?.external_url), [activePrompt?.example_text, activePrompt?.external_url]);
 
   const setModeInUrl = useCallback((mode: "student" | "demo") => {
     if (typeof window === "undefined") return;
@@ -2409,22 +2413,20 @@ export default function StudentView() {
           <div style={{ ...styles.card, border: "1px solid #93c5fd", background: "#eff6ff" }}>
             <div style={{ ...styles.infoText, marginBottom: "10px" }}>This activity opens in a separate tab (Google Forms or another external tool).</div>
             <div style={{ display: "grid", gap: "10px" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const url = activePrompt?.external_url?.trim();
-                  if (!url) {
-                    setErrorMessage("This external assignment is missing a URL. Please ask your teacher.");
-                    return;
-                  }
-                  window.open(url, "_blank", "noopener,noreferrer");
-                }}
-                disabled={!activePrompt?.external_url}
-                style={{ ...styles.primaryButton, minHeight: "56px", width: "100%" }}
-                className="student-primary-btn"
-              >
-                Open activity
-              </button>
+              {externalActivityData.externalLinks.map((link) => (
+                <button
+                  key={`${activePrompt?.id || "prompt"}-${link.url}-${link.title}`}
+                  type="button"
+                  onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+                  style={{ ...styles.primaryButton, minHeight: "56px", width: "100%" }}
+                  className="student-primary-btn"
+                >
+                  {link.title}
+                </button>
+              ))}
+              {!externalActivityData.externalLinks.length ? (
+                <div style={{ ...styles.infoText, color: "#b91c1c" }}>This external assignment is missing a link. Please ask your teacher.</div>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void markExternalActivityCompleted()}

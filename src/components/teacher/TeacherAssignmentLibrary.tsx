@@ -1,5 +1,6 @@
 import React from "react";
 import { AssignmentActivityType, PromptRow } from "../TeacherDashboardTypes";
+import { ExternalActivityLink, parseExternalActivityData } from "../../lib/externalLinks";
 
 type Props = {
   totalPromptCount: number;
@@ -11,12 +12,16 @@ type Props = {
   newAssignmentType: AssignmentActivityType;
   newInstructions: string;
   newExternalUrl: string;
+  newExternalLinks: ExternalActivityLink[];
   newPromptImagePreviewUrl: string;
   setNewPrompt: (value: string) => void;
   setNewSuggestedTime: (value: string) => void;
   setNewAssignmentType: (value: AssignmentActivityType) => void;
   setNewInstructions: (value: string) => void;
   setNewExternalUrl: (value: string) => void;
+  onExternalLinkChange: (index: number, patch: Partial<ExternalActivityLink>) => void;
+  onAddExternalLink: () => void;
+  onRemoveExternalLink: (index: number) => void;
   onPromptImageChange: (file: File | null) => void;
   onClearPromptImage: () => void;
   onSavePrompt: () => void;
@@ -272,7 +277,23 @@ export default function TeacherAssignmentLibrary(props: Props) {
 
                 <input value={props.newSuggestedTime} onChange={(e) => props.setNewSuggestedTime(e.target.value)} placeholder={suggestedTimePlaceholder} style={inputStyle} />
 
-                {showExternalUrl ? <input value={props.newExternalUrl} onChange={(e) => props.setNewExternalUrl(e.target.value)} placeholder="External URL (required)" style={inputStyle} /> : null}
+                {showExternalUrl ? (
+                  <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 10, display: "grid", gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>Links</div>
+                    {props.newExternalLinks.map((link, index) => (
+                      <div key={`library-external-link-${index}`} style={{ display: "grid", gap: 6, gridTemplateColumns: "1fr 1fr auto" }}>
+                        <input value={link.title} onChange={(e) => props.onExternalLinkChange(index, { title: e.target.value })} placeholder="Link title" style={inputStyle} />
+                        <input value={link.url} onChange={(e) => props.onExternalLinkChange(index, { url: e.target.value })} placeholder="https://example.com/form" style={inputStyle} />
+                        <button type="button" onClick={() => props.onRemoveExternalLink(index)} style={{ minHeight: 42, borderRadius: 12, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontWeight: 800, padding: "0 10px" }}>
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={props.onAddExternalLink} style={{ minHeight: 38, borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700 }}>
+                      Add another link
+                    </button>
+                  </div>
+                ) : null}
 
                 {showImageUpload ? (
                   <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 10 }}>
@@ -326,7 +347,11 @@ export default function TeacherAssignmentLibrary(props: Props) {
 
                       <div style={{ fontSize: 13, color: "#475569", marginTop: 8 }}>{instructionsPreview(prompt.example_text)}</div>
                       {prompt.suggested_time ? <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>Suggested time: {prompt.suggested_time}</div> : null}
-                      {prompt.external_url ? <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>External URL: {prompt.external_url}</div> : null}
+                      {prompt.assignment_type === "external_link" ? (
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                          Links: {parseExternalActivityData(prompt.example_text, prompt.external_url).externalLinks.map((link) => link.title).join(", ") || "No links"}
+                        </div>
+                      ) : null}
 
                       <div style={{ marginTop: 10, borderTop: "1px dashed #e2e8f0", paddingTop: 10 }}>
                         <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 700, marginBottom: 6 }}>Assign to class</div>
