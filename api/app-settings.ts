@@ -3,11 +3,45 @@ import { createClient } from "@supabase/supabase-js";
 
 const WRITEABLE_KEYS = new Set(["demo_config", "student_welcome_image_url"]);
 
+type AppSettingsServerConfig = {
+  url: string;
+  serviceRoleKey: string;
+};
+
+type MissingServerConfig = {
+  config: null;
+  missingEnvVar: string;
+};
+
+type PresentServerConfig = {
+  config: AppSettingsServerConfig;
+  missingEnvVar: null;
+};
+
+function getAppSettingsServerConfig(): MissingServerConfig | PresentServerConfig {
+  const supabaseUrl = process.env.SUPABASE_URL?.trim();
+  const viteSupabaseUrl = process.env.VITE_SUPABASE_URL?.trim();
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+
+  if (!serviceRoleKey) {
+    return { config: null, missingEnvVar: "SUPABASE_SERVICE_ROLE_KEY" };
+  }
+
+  if (supabaseUrl) {
+    return { config: { url: supabaseUrl, serviceRoleKey }, missingEnvVar: null };
+  }
+
+  if (viteSupabaseUrl) {
+    return { config: { url: viteSupabaseUrl, serviceRoleKey }, missingEnvVar: null };
+  }
+
+  return { config: null, missingEnvVar: "SUPABASE_URL or VITE_SUPABASE_URL" };
+}
+
 function getServiceSupabase() {
-  const url = process.env.SUPABASE_URL?.trim() || process.env.VITE_SUPABASE_URL?.trim();
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !serviceKey) return null;
-  return createClient(url, serviceKey, { auth: { persistSession: false } });
+  const { config } = getAppSettingsServerConfig();
+  if (!config) return null;
+  return createClient(config.url, config.serviceRoleKey, { auth: { persistSession: false } });
 }
 
 function getBearerToken(req: VercelRequest): string {
@@ -48,10 +82,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json({ error: "Method not allowed" });
     }
 
+    const serverConfig = getAppSettingsServerConfig();
     const supabaseAdmin = getServiceSupabase();
     if (!supabaseAdmin) {
-      console.error("APP_SETTINGS CONFIG ERROR: Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-      return res.status(500).json({ error: "Settings service is unavailable." });
+      const missingEnvVar = serverConfig.missingEnvVar || "SUPABASE_SERVICE_ROLE_KEY";
+      console.error("APP_SETTINGS CONFIG ERROR", { missingEnvVar });
+      return res.status(500).json({ error: "Server app settings configuration missing", missingEnvVar });
     }
 
     const token = getBearerToken(req);
@@ -89,6 +125,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { error: writeError } = await supabaseAdmin.from("app_settings").upsert({ key: normalizedKey, value: nextValue }, { onConflict: "key" });
 
     if (writeError) {
+      if (process.env.NODE_ENV !== "production") {
+        console.error("app-settings write failed", { error: writeError, key: normalizedKey });
+      }
       console.error("APP_SETTINGS WRITE ERROR:", writeError);
       return res.status(500).json({ error: "Could not save settings." });
     }

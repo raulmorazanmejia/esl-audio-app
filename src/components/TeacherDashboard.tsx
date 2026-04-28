@@ -620,8 +620,17 @@ async function saveAppSettingViaApi(key: string, value: unknown) {
   if (!response.ok) {
     let message = "Could not save settings.";
     try {
-      const payload = (await response.json()) as { error?: string };
-      if (payload.error) message = payload.error;
+      const payload = (await response.json()) as { error?: string; message?: string; missingEnvVar?: string };
+      if (payload?.error) {
+        message = payload.error;
+        if (payload.missingEnvVar) {
+          message = `${payload.error} (${payload.missingEnvVar})`;
+        }
+      } else if (payload?.message) {
+        message = payload.message;
+      } else if (payload && typeof payload === "object") {
+        message = JSON.stringify(payload);
+      }
     } catch {
       // no-op
     }
