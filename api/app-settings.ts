@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { getTeacherConfig, verifyTeacherToken } from "./teacher-auth";
 
 const WRITEABLE_KEYS = new Set(["demo_config", "student_welcome_image_url", "student_feedback_profile"]);
 
@@ -50,6 +51,12 @@ function getBearerToken(req: VercelRequest): string {
   return authHeader.slice("Bearer ".length).trim();
 }
 
+function isValidTeacherApiToken(token: string): boolean {
+  const configResult = getTeacherConfig();
+  if (!configResult.ok) return false;
+  return verifyTeacherToken(token, configResult.config);
+}
+
 function isAllowedTeacherEmail(email?: string | null): boolean {
   const allowedCsv = process.env.TEACHER_ALLOWED_EMAILS?.trim() || "";
   if (!allowedCsv) return true;
@@ -95,17 +102,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: "Unauthorized. Missing bearer token." });
     }
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabaseAdmin.auth.getUser(token);
+    let isAuthorized = isValidTeacherApiToken(token);
 
-    if (userError || !user) {
-      return res.status(401).json({ error: "Unauthorized. Invalid auth token." });
+    if (!isAuthorized) {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabaseAdmin.auth.getUser(token);
+
+      if (userError || !user) {
+        return res.status(401).json({ error: "Unauthorized. Invalid auth token." });
+      }
+
+      if (!isAllowedTeacherEmail(user.email)) {
+        return res.status(403).json({ error: "Forbidden." });
+      }
+
+      isAuthorized = true;
     }
 
-    if (!isAllowedTeacherEmail(user.email)) {
-      return res.status(403).json({ error: "Forbidden." });
+    if (!isAuthorized) {
+      return res.status(401).json({ error: "Unauthorized. Invalid auth token." });
     }
 
     const payloadError = getInvalidPayloadResponse(req.body);
