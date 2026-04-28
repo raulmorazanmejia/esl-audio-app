@@ -856,6 +856,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const [isStandaloneMode, setIsStandaloneMode] = useState(false);
   const [showIosInstallPanel, setShowIosInstallPanel] = useState(false);
   const [isCodeFieldFocused, setIsCodeFieldFocused] = useState(false);
+  const [openedExternalLinks, setOpenedExternalLinks] = useState<string[]>([]);
   const [demoSubmissionIndex, setDemoSubmissionIndex] = useState<Record<string, SubmissionRow>>({});
   const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
   const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
@@ -926,6 +927,12 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const demoUnavailable = isDemoMode && !demoConfig.demoEnabled;
   const demoHeroImageUrl = demoConfig.heroImageUrl?.trim() || welcomeHeroImageUrl;
   const externalActivityData = useMemo(() => parseExternalActivityData(activePrompt?.example_text, activePrompt?.external_url), [activePrompt?.example_text, activePrompt?.external_url]);
+  const externalInstructions = useMemo(() => {
+    const parsedInstructions = externalActivityData.instructions.trim();
+    if (parsedInstructions) return parsedInstructions;
+    return activePrompt?.prompt_text?.trim() || "";
+  }, [activePrompt?.prompt_text, externalActivityData.instructions]);
+  const hasOpenedAnExternalLink = openedExternalLinks.length > 0;
 
   const setModeInUrl = useCallback((mode: "student" | "demo") => {
     if (typeof window === "undefined") return;
@@ -1477,6 +1484,15 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   useEffect(() => {
     setShowFullTranscript(false);
   }, [submissionForActivePrompt?.id]);
+
+  useEffect(() => {
+    setOpenedExternalLinks([]);
+  }, [activePrompt?.id]);
+
+  const openExternalLink = useCallback((url: string) => {
+    window.open(url, "_blank", "noopener,noreferrer");
+    setOpenedExternalLinks((current) => (current.includes(url) ? current : [...current, url]));
+  }, []);
 
   async function startRecording() {
     setErrorMessage("");
@@ -2539,9 +2555,11 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         </div>
 
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
-        <div style={styles.promptCard}>
-          {activePrompt?.example_text || activePrompt?.prompt_text || "Select an activity above"}
-        </div>
+        {!isExternalAssignment ? (
+          <div style={styles.promptCard}>
+            {activePrompt?.example_text || activePrompt?.prompt_text || "Select an activity above"}
+          </div>
+        ) : null}
         {activePrompt?.suggested_time ? (
           <div style={{ textAlign: "center" }}>
             <div style={styles.suggestedTimeBadge}>Suggested time: {activePrompt.suggested_time}</div>
@@ -2550,13 +2568,14 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
         {isExternalAssignment ? (
           <div style={{ ...styles.card, border: "1px solid #93c5fd", background: "#eff6ff" }}>
-            <div style={{ ...styles.infoText, marginBottom: "10px" }}>This activity opens in a separate tab (Google Forms or another external tool).</div>
+            {externalInstructions ? <div style={{ ...styles.infoText, marginBottom: "10px" }}>{externalInstructions}</div> : null}
+            <div style={styles.subtleHelper}>This activity opens in a separate tab (Google Forms or another external tool).</div>
             <div style={{ display: "grid", gap: "10px" }}>
               {externalActivityData.externalLinks.map((link) => (
                 <button
                   key={`${activePrompt?.id || "prompt"}-${link.url}-${link.title}`}
                   type="button"
-                  onClick={() => window.open(link.url, "_blank", "noopener,noreferrer")}
+                  onClick={() => openExternalLink(link.url)}
                   style={{ ...styles.primaryButton, minHeight: "56px", width: "100%" }}
                   className="student-primary-btn"
                 >
@@ -2569,7 +2588,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               <button
                 type="button"
                 onClick={() => void markExternalActivityCompleted()}
-                disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt}
+                disabled={isSubmitting || hasSubmittedActivePrompt || !rosterStudent || !activePrompt || (!hasOpenedAnExternalLink && externalActivityData.externalLinks.length > 0)}
                 style={{ ...styles.secondaryButton, minHeight: "50px", width: "100%" }}
               >
                 {hasSubmittedActivePrompt ? "Completed" : isSubmitting ? "Saving..." : "Mark as completed"}
