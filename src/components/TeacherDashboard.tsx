@@ -599,7 +599,7 @@ function extractStoragePathFromPublicUrl(publicUrl: string, bucket: string): str
   return publicUrl.slice(markerIndex + marker.length).split("?")[0];
 }
 
-async function saveAppSettingViaApi(key: string, value: string | null) {
+async function saveAppSettingViaApi(key: string, value: unknown) {
   const {
     data: { session },
   } = await supabase.auth.getSession();
@@ -807,11 +807,13 @@ export default function TeacherDashboard() {
     setDemoConfigError("");
     setDemoConfigSuccess("");
     try {
-      await saveAppSettingViaApi(DEMO_CONFIG_SETTING_KEY, JSON.stringify(nextConfig));
+      await saveAppSettingViaApi(DEMO_CONFIG_SETTING_KEY, nextConfig);
       setDemoConfig(nextConfig);
       setDemoConfigSuccess(successMessage);
+      return true;
     } catch (error: any) {
       setDemoConfigError(error?.message || "Could not save demo configuration.");
+      return false;
     } finally {
       setIsSavingDemoConfig(false);
     }
@@ -1998,7 +2000,12 @@ export default function TeacherDashboard() {
         data: { publicUrl },
       } = supabase.storage.from(APP_ASSETS_BUCKET).getPublicUrl(filePath);
       const prevImage = demoConfig.activities.find((activity) => activity.id === activityId)?.imageUrl || "";
-      await handleDemoActivityChange(activityId, { imageUrl: publicUrl });
+      const nextActivities = demoConfig.activities.map((activity) => (activity.id === activityId ? { ...activity, imageUrl: publicUrl } : activity));
+      const saved = await persistDemoConfig({ ...demoConfig, activities: nextActivities }, "Demo activity updated.");
+      if (!saved) {
+        setDemoConfigError("Image uploaded, but settings could not be saved.");
+        return;
+      }
       const previousPath = prevImage ? extractStoragePathFromPublicUrl(prevImage, APP_ASSETS_BUCKET) : "";
       if (previousPath && previousPath !== filePath) {
         await supabase.storage.from(APP_ASSETS_BUCKET).remove([previousPath]);
