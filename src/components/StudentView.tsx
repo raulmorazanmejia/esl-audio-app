@@ -69,7 +69,7 @@ const MAX_AUDIO_RECORDING_SECONDS = 5 * 60;
 const DEMO_MAX_AUDIO_RECORDING_SECONDS = 90;
 const DEMO_MAX_ATTEMPTS_PER_DAY = 3;
 const DEMO_MAX_TRANSCRIPT_CHARS = 700;
-const DEMO_MIN_SUBMIT_INTERVAL_MS = 20_000;
+const DEMO_SERVER_HARD_FLOOR_MS = 3_000;
 const DEMO_USAGE_STORAGE_KEY = "esl_demo_usage_v1";
 const DEMO_MODE_QUERY_VALUE = "demo";
 const DEMO_CLASS_NAME = "demo-class";
@@ -93,6 +93,13 @@ function formatRecordingTime(totalSeconds: number) {
 
 function getTodayIsoDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function getRequiredDemoCooldownMs(attemptsToday: number) {
+  if (attemptsToday <= 0) return 0;
+  if (attemptsToday === 1) return 5_000;
+  if (attemptsToday === 2) return 15_000;
+  return Number.MAX_SAFE_INTEGER;
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {
@@ -798,7 +805,7 @@ export default function StudentView() {
         is_active: true,
       } satisfies PromptRow));
   }, [demoConfig.activities]);
-  const demoUnavailable = isDemoMode && !demoConfig.enabled;
+  const demoUnavailable = isDemoMode && !demoConfig.demoEnabled;
   const demoHeroImageUrl = demoConfig.heroImageUrl?.trim() || welcomeHeroImageUrl;
 
   const setModeInUrl = useCallback((mode: "student" | "demo") => {
@@ -810,8 +817,17 @@ export default function StudentView() {
   }, []);
 
   const enterDemoMode = useCallback(() => {
-    if (!demoConfig.enabled) {
-      setErrorMessage("Demo mode is currently unavailable.");
+    if (!demoConfig.demoEnabled) {
+      setIsDemoMode(true);
+      setModeInUrl("demo");
+      setStudentCode("");
+      setRosterStudent(null);
+      setAssignedPrompts([]);
+      setSelectedPromptId(null);
+      setStatusMessage("");
+      setVideoStatusMessage("");
+      setErrorMessage("");
+      setVideoErrorMessage("");
       return;
     }
     setIsDemoMode(true);
@@ -834,7 +850,7 @@ export default function StudentView() {
     setVideoStatusMessage("");
     setVideoErrorMessage("");
     setTextResponse("");
-  }, [demoConfig.enabled, demoPrompts, setModeInUrl]);
+  }, [demoConfig.demoEnabled, demoPrompts, setModeInUrl]);
 
   const exitDemoMode = useCallback(() => {
     setIsDemoMode(false);
@@ -921,7 +937,7 @@ export default function StudentView() {
 
   useEffect(() => {
     if (!isDemoMode) return;
-    if (!demoConfig.enabled) {
+    if (!demoConfig.demoEnabled) {
       setRosterStudent(null);
       setAssignedPrompts([]);
       return;
@@ -934,7 +950,7 @@ export default function StudentView() {
     });
     setStudentCode(DEMO_STUDENT_CODE);
     setAssignedPrompts(demoPrompts);
-  }, [demoConfig.enabled, demoPrompts, isDemoMode]);
+  }, [demoConfig.demoEnabled, demoPrompts, isDemoMode]);
 
   useEffect(() => {
     if (getIsDemoModeFromUrl()) {
@@ -946,11 +962,11 @@ export default function StudentView() {
     try {
       const raw = window.localStorage.getItem(DEMO_USAGE_STORAGE_KEY);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as { date?: string; attempts?: number; lastSubmitAt?: number };
+      const parsed = JSON.parse(raw) as { date?: string; attemptsToday?: number; lastAttemptTimestamp?: number; attempts?: number; lastSubmitAt?: number };
       const today = getTodayIsoDate();
       if (parsed.date !== today) return;
-      setDemoAttemptsToday(typeof parsed.attempts === "number" ? parsed.attempts : 0);
-      setLastDemoSubmitAt(typeof parsed.lastSubmitAt === "number" ? parsed.lastSubmitAt : 0);
+      setDemoAttemptsToday(typeof parsed.attemptsToday === "number" ? parsed.attemptsToday : typeof parsed.attempts === "number" ? parsed.attempts : 0);
+      setLastDemoSubmitAt(typeof parsed.lastAttemptTimestamp === "number" ? parsed.lastAttemptTimestamp : typeof parsed.lastSubmitAt === "number" ? parsed.lastSubmitAt : 0);
     } catch {
       // ignore local storage parse errors
     }
@@ -1407,7 +1423,7 @@ export default function StudentView() {
     try {
       window.localStorage.setItem(
         DEMO_USAGE_STORAGE_KEY,
-        JSON.stringify({ date: getTodayIsoDate(), attempts: nextAttempts, lastSubmitAt: nextLastSubmitAt }),
+        JSON.stringify({ date: getTodayIsoDate(), attemptsToday: nextAttempts, lastAttemptTimestamp: nextLastSubmitAt }),
       );
     } catch {
       // ignore storage write errors
@@ -1420,8 +1436,14 @@ export default function StudentView() {
       setErrorMessage("Demo limit reached for today. Please try again later.");
       return false;
     }
-    if (lastDemoSubmitAt && now - lastDemoSubmitAt < DEMO_MIN_SUBMIT_INTERVAL_MS) {
-      setErrorMessage("Please wait a little before trying another demo submission.");
+    if (lastDemoSubmitAt && now - lastDemoSubmitAt < DEMO_SERVER_HARD_FLOOR_MS) {
+      setErrorMessage(`Please wait ${Math.ceil((DEMO_SERVER_HARD_FLOOR_MS - (now - lastDemoSubmitAt)) / 1000)} seconds before trying again.`);
+      return false;
+    }
+    const requiredCooldownMs = getRequiredDemoCooldownMs(demoAttemptsToday);
+    if (requiredCooldownMs > 0 && now - lastDemoSubmitAt < requiredCooldownMs) {
+      const remainingMs = requiredCooldownMs - (now - lastDemoSubmitAt);
+      setErrorMessage(`Please wait ${Math.ceil(remainingMs / 1000)} seconds before trying again.`);
       return false;
     }
     return true;
@@ -1723,6 +1745,7 @@ export default function StudentView() {
 
   async function submitVideoResponse() {
     if (isDemoMode) {
+      if (!validateDemoAttemptOrShowError()) return;
       if (!activePrompt?.id) {
         setVideoErrorMessage("Select an assignment first.");
         return;
@@ -1757,6 +1780,7 @@ export default function StudentView() {
         student_code: DEMO_STUDENT_CODE,
       };
       saveDemoSubmission(demoSubmission);
+      persistDemoUsage(demoAttemptsToday + 1, Date.now());
       setVideoStatusMessage("Demo complete.");
       return;
     }
@@ -1934,6 +1958,7 @@ export default function StudentView() {
 
   async function markExternalActivityCompleted() {
     if (isDemoMode) {
+      if (!validateDemoAttemptOrShowError()) return;
       const now = new Date().toISOString();
       const demoSubmission: SubmissionRow = {
         id: `demo-external-${Date.now()}`,
@@ -1964,6 +1989,7 @@ export default function StudentView() {
         student_code: DEMO_STUDENT_CODE,
       };
       saveDemoSubmission(demoSubmission);
+      persistDemoUsage(demoAttemptsToday + 1, Date.now());
       setStatusMessage("Demo complete.");
       return;
     }
@@ -2038,10 +2064,10 @@ export default function StudentView() {
 
   return (
     <div style={styles.page} className="student-entry-page">
-      <div style={styles.shell} className="student-fade-in student-entry-shell">
+      <div style={{ ...styles.shell, maxWidth: isDemoMode ? "640px" : styles.shell.maxWidth }} className="student-fade-in student-entry-shell">
         {isDemoMode ? (
           <div style={{ marginBottom: "10px", fontSize: "12px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            Demo mode
+            Demo showcase
           </div>
         ) : null}
         {!rosterStudent && !isDemoMode ? (
@@ -2083,7 +2109,7 @@ export default function StudentView() {
             <button type="button" onClick={() => void lookupStudent()} style={{ ...styles.actionButton, marginTop: "14px" }} className="student-primary-btn student-entry-continue">
               {isFinding ? "Checking..." : "Continue"}
             </button>
-            {demoConfig.enabled ? (
+            {demoConfig.demoEnabled ? (
               <button
                 type="button"
                 onClick={enterDemoMode}
@@ -2120,17 +2146,20 @@ export default function StudentView() {
 
         {!rosterStudent && isDemoMode ? (
           <>
-            <div style={styles.heroMediaFrame}>
-              <img src={demoHeroImageUrl} alt="Demo preview" style={styles.heroImage} />
-              <div style={styles.heroImageOverlay} />
-            </div>
             {demoUnavailable ? (
-              <div style={{ ...styles.recordingAlert, borderColor: "#fecaca", background: "#fff7f7", color: "#b91c1c" }}>
-                <div style={{ ...styles.recordingAlertHeader, fontSize: "20px" }}>Demo mode is currently unavailable.</div>
-                <button type="button" onClick={exitDemoMode} style={{ ...styles.secondaryButton, marginTop: 10 }}>Go to student login</button>
+              <div style={{ ...styles.card, maxWidth: 640, margin: "0 auto", border: "1px solid #e2e8f0", borderRadius: 16, padding: 24, textAlign: "center" }}>
+                <div style={{ ...styles.sectionTitle, marginTop: 0, marginBottom: 8, fontSize: 32 }}>Demo temporarily unavailable</div>
+                <div style={{ ...styles.helperText, marginTop: 0, marginBottom: 16 }}>Please check back later.</div>
+                <button type="button" onClick={exitDemoMode} style={{ ...styles.secondaryButton, minHeight: 44 }}>
+                  Go to student login
+                </button>
               </div>
             ) : (
               <>
+                <div style={styles.heroMediaFrame}>
+                  <img src={demoHeroImageUrl} alt="Demo preview" style={styles.heroImage} />
+                  <div style={styles.heroImageOverlay} />
+                </div>
                 <div style={styles.heroTitle}>{demoConfig.welcomeTitle}</div>
                 <div style={styles.heroSubtitle}>{demoConfig.welcomeSubtitle}</div>
                 <button type="button" onClick={enterDemoMode} disabled={isLoadingDemoConfig} style={{ ...styles.actionButton, marginTop: 8 }}>
@@ -2147,11 +2176,12 @@ export default function StudentView() {
           </div>
         ) : null}
 
-        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px", fontSize: "30px", letterSpacing: "0.01em" }}>{isDemoMode ? "Demo activities" : "Choose an assignment"}</div> : null}
+        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px", fontSize: "30px", letterSpacing: "0.01em" }}>{isDemoMode ? "Try ESL Hub" : "Choose an assignment"}</div> : null}
+        {rosterStudent && !selectedPromptId && isDemoMode ? <div style={{ ...styles.helperText, marginTop: 0, marginBottom: 8, textAlign: "center" }}>Complete a sample activity and see how it works.</div> : null}
 
         {rosterStudent && !selectedPromptId ? (
           hasVisiblePrompts ? (
-            <div style={styles.taskList}>
+            <div style={{ ...styles.taskList, maxWidth: 640, margin: "0 auto", gap: 16 }}>
               {assignedPrompts.map((prompt) => {
                 const promptText = prompt.prompt_text?.trim() || "";
                 const assignmentType = getAssignmentType(prompt);
@@ -2166,8 +2196,10 @@ export default function StudentView() {
                     style={{
                       ...styles.taskButton,
                       borderColor: isDemoMode ? "#cbd5e1" : "#dbe3f0",
-                      boxShadow: isDemoMode ? "0 8px 18px rgba(99, 102, 241, 0.08)" : "0 8px 18px rgba(15, 23, 42, 0.06)",
-                      background: isDemoMode ? "#f8fafc" : "#ffffff",
+                      boxShadow: isDemoMode ? "0 10px 24px rgba(15, 23, 42, 0.08)" : "0 8px 18px rgba(15, 23, 42, 0.06)",
+                      background: isDemoMode ? "#ffffff" : "#ffffff",
+                      borderRadius: isDemoMode ? 16 : styles.taskButton.borderRadius,
+                      padding: isDemoMode ? "20px" : styles.taskButton.padding,
                     }}
                   >
                     <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
@@ -2181,7 +2213,7 @@ export default function StudentView() {
                         {prompt.suggested_time ? <div style={styles.taskMeta}>Suggested time: {prompt.suggested_time}</div> : null}
                         {isDemoMode ? <div style={styles.taskMeta}>{prompt.example_text || "Sample instructions"}</div> : null}
                       </div>
-                      {isDemoMode ? <div style={{ ...styles.secondaryButton, minHeight: 36, padding: "0 10px", display: "flex", alignItems: "center" }}>Start</div> : null}
+                      {isDemoMode ? <div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>Start activity</div> : null}
                     </div>
                   </button>
                 );
@@ -2370,8 +2402,8 @@ export default function StudentView() {
             <div style={{ ...styles.recordingHelper, fontSize: "15px", fontWeight: 600, color: "#4338ca" }}>
               {isDemoMode
                 ? demoConfig.aiFeedbackEnabled
-                  ? "Demo AI feedback is limited for public preview use."
-                  : "Demo complete. In a real class, feedback would appear here."
+                  ? "Nice work. Try another activity."
+                  : "Nice work. Try another activity."
                 : "You can review your feedback below."}
             </div>
             {isDemoMode ? (

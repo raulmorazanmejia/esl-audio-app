@@ -13,7 +13,7 @@ export type DemoActivityConfig = {
 };
 
 export type DemoConfig = {
-  enabled: boolean;
+  demoEnabled: boolean;
   aiFeedbackEnabled: boolean;
   welcomeTitle: string;
   welcomeSubtitle: string;
@@ -24,10 +24,10 @@ export type DemoConfig = {
 export const DEMO_CONFIG_SETTING_KEY = "demo_config";
 
 export const DEFAULT_DEMO_CONFIG: DemoConfig = {
-  enabled: true,
+  demoEnabled: true,
   aiFeedbackEnabled: false,
   welcomeTitle: "Try ESL Hub",
-  welcomeSubtitle: "Choose a sample activity and see how it works.",
+  welcomeSubtitle: "Complete a sample activity and see how it works.",
   heroImageUrl: "",
   activities: [
     {
@@ -74,7 +74,7 @@ export const DEFAULT_DEMO_CONFIG: DemoConfig = {
 const VALID_TYPES = new Set<DemoActivityType>(["audio_response", "text_response", "external_link", "video_response"]);
 
 export function normalizeDemoConfig(input: unknown): DemoConfig {
-  const source = (input && typeof input === "object" ? input : {}) as Partial<DemoConfig> & { activities?: unknown };
+  const source = (input && typeof input === "object" ? input : {}) as Partial<DemoConfig> & { enabled?: boolean; activities?: unknown };
   const baseActivities = Array.isArray(source.activities) ? source.activities : [];
 
   const normalizedActivities = baseActivities
@@ -98,7 +98,7 @@ export function normalizeDemoConfig(input: unknown): DemoConfig {
     .sort((a, b) => a.order - b.order);
 
   return {
-    enabled: source.enabled !== false,
+    demoEnabled: source.demoEnabled ?? source.enabled !== false,
     aiFeedbackEnabled: source.aiFeedbackEnabled === true,
     welcomeTitle: String(source.welcomeTitle ?? DEFAULT_DEMO_CONFIG.welcomeTitle),
     welcomeSubtitle: String(source.welcomeSubtitle ?? DEFAULT_DEMO_CONFIG.welcomeSubtitle),
