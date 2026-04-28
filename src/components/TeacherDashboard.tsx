@@ -638,6 +638,14 @@ async function saveAppSettingViaApi(key: string, value: unknown) {
   }
 }
 
+function demoActivityTypeLabel(type: DemoConfig["activities"][number]["type"], hasImage: boolean) {
+  if (type === "external_link") return "External link";
+  if (type === "video_response") return "Video response";
+  if (type === "text_response") return "Text response";
+  if (type === "audio_response" && hasImage) return "Describe a picture";
+  return "Speaking / Audio response";
+}
+
 export default function TeacherDashboard() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -2294,60 +2302,73 @@ export default function TeacherDashboard() {
             ) : null}
 
             {teacherScreen === "demo" ? (
-              <section style={{ display: "grid", gap: 14 }}>
-                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 18 }}>
+              <section style={{ display: "grid", gap: 16 }}>
+                <div style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)", padding: 20 }}>
                   <div style={styles.settingsLabel}>Demo status</div>
-                  <h2 style={{ ...styles.settingsTitle, marginBottom: 6 }}>Public demo access</h2>
-                  <p style={{ ...styles.settingsDescription, marginBottom: 12 }}>Use this link to let people try ESL Hub without a class code.</p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 10 }}>
-                    <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>Enable public demo</div>
-                    <button type="button" onClick={() => void handleToggleDemoEnabled()} disabled={isSavingDemoConfig || isLoadingDemoConfig} style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}>
-                      {demoConfig.demoEnabled ? "Disable public demo" : "Enable public demo"}
-                    </button>
-                    <div style={{ fontSize: 13, color: demoConfig.demoEnabled ? "#065f46" : "#b45309", fontWeight: 700 }}>
-                      {demoConfig.demoEnabled ? "Public demo is on" : "Public demo is off"}
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 6 }}>Public demo control center</h2>
+                  <p style={{ ...styles.settingsDescription, marginBottom: 12 }}>Manage public access, AI demo feedback, and your shareable demo link from one place.</p>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", border: "1px solid #e2e8f0", borderRadius: 14, padding: "10px 12px", background: "#f8fafc" }}>
+                      <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>Public demo availability</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 13, color: demoConfig.demoEnabled ? "#065f46" : "#b45309", fontWeight: 700 }}>
+                          {demoConfig.demoEnabled ? "Live" : "Paused"}
+                        </div>
+                        <button type="button" onClick={() => void handleToggleDemoEnabled()} disabled={isSavingDemoConfig || isLoadingDemoConfig} style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}>
+                          {demoConfig.demoEnabled ? "Pause demo" : "Enable demo"}
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between", border: "1px solid #e2e8f0", borderRadius: 14, padding: "10px 12px", background: "#f8fafc" }}>
+                      <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>AI demo feedback</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 13, color: demoConfig.aiFeedbackEnabled ? "#065f46" : "#b45309", fontWeight: 700 }}>
+                          {demoConfig.aiFeedbackEnabled ? "Enabled (daily limits active)" : "Disabled"}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void persistDemoConfig({ ...demoConfig, aiFeedbackEnabled: !demoConfig.aiFeedbackEnabled }, `Demo AI feedback ${demoConfig.aiFeedbackEnabled ? "disabled" : "enabled"}.`)}
+                          disabled={isSavingDemoConfig || isLoadingDemoConfig}
+                          style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}
+                        >
+                          {demoConfig.aiFeedbackEnabled ? "Turn AI off" : "Turn AI on"}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, color: "#475569", marginBottom: 8 }}>Public demo link: {window.location.origin}/?mode=demo</div>
-                  <button type="button" onClick={() => void handleCopyDemoLink()} style={styles.secondaryButton}>
-                    {hasCopiedDemoLink ? "Copied" : "Copy demo link"}
-                  </button>
-                  <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <div style={{ fontSize: 13, color: "#334155", fontWeight: 700 }}>Enable AI demo feedback</div>
-                    <button
-                      type="button"
-                      onClick={() => void persistDemoConfig({ ...demoConfig, aiFeedbackEnabled: !demoConfig.aiFeedbackEnabled }, `Demo AI feedback ${demoConfig.aiFeedbackEnabled ? "disabled" : "enabled"}.`)}
-                      disabled={isSavingDemoConfig || isLoadingDemoConfig}
-                      style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}
-                    >
-                      {demoConfig.aiFeedbackEnabled ? "Disable demo AI feedback" : "Enable demo AI feedback"}
+                  <div style={{ marginTop: 12, border: "1px dashed #cbd5e1", borderRadius: 14, background: "#ffffff", padding: 12 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800, marginBottom: 6 }}>Public demo link</div>
+                    <div style={{ fontSize: 13, color: "#475569", marginBottom: 8, wordBreak: "break-all" }}>{window.location.origin}/?mode=demo</div>
+                    <button type="button" onClick={() => void handleCopyDemoLink()} style={styles.secondaryButton}>
+                      {hasCopiedDemoLink ? "Copied" : "Copy demo link"}
                     </button>
-                    <div style={{ fontSize: 13, color: demoConfig.aiFeedbackEnabled ? "#065f46" : "#b45309", fontWeight: 700 }}>
-                      {demoConfig.aiFeedbackEnabled ? "AI feedback enabled with daily limits" : "AI feedback disabled"}
-                    </div>
                   </div>
                 </div>
 
-                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 18 }}>
+                <div style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)", padding: 20 }}>
                   <div style={styles.settingsLabel}>Demo branding</div>
-                  <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Landing copy</h2>
-                  <input value={demoConfig.welcomeTitle} onChange={(e) => void handleDemoConfigFieldChange("welcomeTitle", e.target.value)} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, marginBottom: 8 }} placeholder="Welcome title" />
-                  <input value={demoConfig.welcomeSubtitle} onChange={(e) => void handleDemoConfigFieldChange("welcomeSubtitle", e.target.value)} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, marginBottom: 8 }} placeholder="Welcome subtitle" />
-                  <input value={demoConfig.heroImageUrl || ""} onChange={(e) => void handleDemoConfigFieldChange("heroImageUrl", e.target.value)} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Optional hero image URL" />
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 6 }}>Landing message</h2>
+                  <p style={{ ...styles.settingsDescription, marginBottom: 10 }}>Edit the copy and hero image URL students see before they launch the demo.</p>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <input value={demoConfig.welcomeTitle} onChange={(e) => void handleDemoConfigFieldChange("welcomeTitle", e.target.value)} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Welcome title" />
+                    <input value={demoConfig.welcomeSubtitle} onChange={(e) => void handleDemoConfigFieldChange("welcomeSubtitle", e.target.value)} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Welcome subtitle" />
+                    <input value={demoConfig.heroImageUrl || ""} onChange={(e) => void handleDemoConfigFieldChange("heroImageUrl", e.target.value)} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Optional hero image URL" />
+                  </div>
                 </div>
 
-                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 18 }}>
-                  <div style={styles.settingsLabel}>Demo activities</div>
-                  <h2 style={{ ...styles.settingsTitle, marginBottom: 10 }}>Activity cards</h2>
+                <div style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)", padding: 20 }}>
+                  <div style={styles.settingsLabel}>Activity configuration</div>
+                  <h2 style={{ ...styles.settingsTitle, marginBottom: 6 }}>Demo activity cards</h2>
+                  <p style={{ ...styles.settingsDescription, marginBottom: 12 }}>Adjust visibility, order, prompts, and images so the demo mirrors your product quality.</p>
                   <div style={{ display: "grid", gap: 10 }}>
                     {[...demoConfig.activities].sort((a, b) => a.order - b.order).map((activity) => (
                       <div key={activity.id} style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: 12, background: "#f8fafc" }}>
                         <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap" }}>
-                          <div style={{ display: "grid", gap: 4 }}>
+                          <div style={{ display: "grid", gap: 5 }}>
                             <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 16 }}>{activity.title}</div>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12 }}>
-                              <span style={{ ...styles.promptBadge, background: "#fff" }}>{activity.type.replace("_", " ")}</span>
-                              <span style={{ color: "#64748b" }}>{activity.suggestedTime || "No time set"}</span>
+                              <span style={{ ...styles.promptBadge, background: "#fff" }}>{demoActivityTypeLabel(activity.type, Boolean(activity.imageUrl))}</span>
+                              <span style={{ color: "#64748b" }}>{activity.suggestedTime || "No suggested time"}</span>
                             </div>
                             <div style={{ color: "#475569", fontSize: 13 }}>{activity.prompt.slice(0, 140) || "No prompt yet."}</div>
                           </div>
@@ -2365,8 +2386,8 @@ export default function TeacherDashboard() {
                         </div>
                         {activeDemoEditId === activity.id ? (
                           <div style={{ marginTop: 10, borderTop: "1px solid #dbe3f0", paddingTop: 10, display: "grid", gap: 8 }}>
-                            <input value={activity.title} onChange={(e) => void handleDemoActivityChange(activity.id, { title: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Title" />
-                            <input value={activity.suggestedTime} onChange={(e) => void handleDemoActivityChange(activity.id, { suggestedTime: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Suggested time" />
+                            <input value={activity.title} onChange={(e) => void handleDemoActivityChange(activity.id, { title: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Card title" />
+                            <input value={activity.suggestedTime} onChange={(e) => void handleDemoActivityChange(activity.id, { suggestedTime: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="Suggested time (example: 1 minute)" />
                             <textarea value={activity.prompt} onChange={(e) => void handleDemoActivityChange(activity.id, { prompt: e.target.value })} disabled={isSavingDemoConfig} style={{ ...styles.rosterInput, minHeight: 90, padding: 10 }} placeholder="Prompt / instructions" />
                             {activity.type === "external_link" ? (
                               <input value={activity.externalUrl || ""} onChange={(e) => void handleDemoActivityChange(activity.id, { externalUrl: e.target.value })} disabled={isSavingDemoConfig} style={styles.rosterInput} placeholder="External URL" />
@@ -2387,8 +2408,9 @@ export default function TeacherDashboard() {
                   </div>
                 </div>
 
-                <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
-                  <div style={styles.settingsLabel}>Reset</div>
+                <div style={{ background: "#fff", borderRadius: 22, border: "1px solid #e2e8f0", boxShadow: "0 10px 26px rgba(15, 23, 42, 0.05)", padding: 18 }}>
+                  <div style={styles.settingsLabel}>Reset defaults</div>
+                  <p style={{ ...styles.settingsDescription, marginBottom: 8 }}>Restore demo copy, activities, and visibility settings to the ESL Hub defaults.</p>
                   <button type="button" onClick={() => void handleResetDemoDefaults()} disabled={isSavingDemoConfig} style={clampButton(isSavingDemoConfig, { ...styles.secondaryButton, borderColor: "#fecaca", color: "#b91c1c" })}>
                     Reset demo defaults
                   </button>
