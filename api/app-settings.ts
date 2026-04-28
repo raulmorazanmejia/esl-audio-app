@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
-const WRITEABLE_KEYS = new Set(["demo_config", "student_welcome_image_url"]);
+const WRITEABLE_KEYS = new Set(["demo_config", "student_welcome_image_url", "student_feedback_profile"]);
 
 type AppSettingsServerConfig = {
   url: string;

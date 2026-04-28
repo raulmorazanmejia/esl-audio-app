@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import ReliableAudioPlayer from "./ReliableAudioPlayer";
-import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, parseDemoConfigValue } from "../lib/demoConfig";
+import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
 
 type PromptRow = {
   id: string;
@@ -129,7 +129,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 
 const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments!inner(class_name, is_visible)";
 const SUBMISSION_SELECT =
-  "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, teacher_score, teacher_comment, student_code";
+  "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, ai_strengths, ai_improvements, ai_picture_accuracy, ai_grammar_feedback, ai_score_reason, ai_model_answer, teacher_score, teacher_comment, student_code";
 
 const DEFAULT_WELCOME_IMAGE =
   "data:image/svg+xml;utf8," +
@@ -158,6 +158,7 @@ const DEFAULT_WELCOME_IMAGE =
 
 const ENV_STUDENT_WELCOME_IMAGE_URL = (import.meta.env.VITE_STUDENT_WELCOME_IMAGE_URL?.trim() || "") as string;
 const STUDENT_WELCOME_IMAGE_SETTING_KEY = "student_welcome_image_url";
+const STUDENT_FEEDBACK_PROFILE_SETTING_KEY = "student_feedback_profile";
 const DEMO_IMAGE_CARD =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(`
@@ -805,6 +806,7 @@ export default function StudentView() {
   const [demoSubmissionIndex, setDemoSubmissionIndex] = useState<Record<string, SubmissionRow>>({});
   const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
   const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
+  const [studentFeedbackProfile, setStudentFeedbackProfile] = useState<FeedbackProfile>("student_friendly");
   const [demoAttemptsToday, setDemoAttemptsToday] = useState(0);
   const [lastDemoSubmitAt, setLastDemoSubmitAt] = useState(0);
   const deferredInstallPromptRef = useRef<any>(null);
@@ -847,6 +849,25 @@ export default function StudentView() {
         is_active: true,
       } satisfies PromptRow));
   }, [demoConfig.activities]);
+  const activeFeedbackProfile: FeedbackProfile = isDemoMode ? demoConfig.feedbackProfile : studentFeedbackProfile;
+  const feedbackSectionLabels = useMemo(() => {
+    if (activeFeedbackProfile === "academic_demo") {
+      return {
+        strengths: "What you did well",
+        picture: "Accuracy",
+        grammar: "Language feedback",
+        improvements: "What to improve",
+        model: "Suggested model response",
+      };
+    }
+    return {
+      strengths: "What you did well",
+      picture: "Picture accuracy",
+      grammar: "Grammar to fix",
+      improvements: activeFeedbackProfile === "student_friendly" ? "Try this next" : "What to improve",
+      model: "Better example",
+    };
+  }, [activeFeedbackProfile]);
   const demoUnavailable = isDemoMode && !demoConfig.demoEnabled;
   const demoHeroImageUrl = demoConfig.heroImageUrl?.trim() || welcomeHeroImageUrl;
 
@@ -1017,15 +1038,20 @@ export default function StudentView() {
   useEffect(() => {
     let isMounted = true;
     const loadWelcomeImageSetting = async () => {
-      const [welcomeSetting, demoSetting] = await Promise.all([
+      const [welcomeSetting, demoSetting, studentFeedbackSetting] = await Promise.all([
         supabase.from("app_settings").select("value").eq("key", STUDENT_WELCOME_IMAGE_SETTING_KEY).maybeSingle(),
         supabase.from("app_settings").select("value").eq("key", DEMO_CONFIG_SETTING_KEY).maybeSingle(),
+        supabase.from("app_settings").select("value").eq("key", STUDENT_FEEDBACK_PROFILE_SETTING_KEY).maybeSingle(),
       ]);
       if (!isMounted) return;
       const welcomeValue = (welcomeSetting.data as { value?: string | null } | null)?.value?.trim() ?? "";
       setStudentWelcomeImageUrl(welcomeValue || null);
       const demoValue = (demoSetting.data as { value?: string | null } | null)?.value ?? "";
       setDemoConfig(parseDemoConfigValue(demoValue));
+      const profileRaw = (studentFeedbackSetting.data as { value?: string | null } | null)?.value?.trim();
+      const nextProfile: FeedbackProfile =
+        profileRaw === "student_friendly" || profileRaw === "balanced" || profileRaw === "strict" ? profileRaw : "student_friendly";
+      setStudentFeedbackProfile(nextProfile);
       setIsLoadingDemoConfig(false);
     };
     setIsLoadingDemoConfig(true);
@@ -1517,6 +1543,8 @@ export default function StudentView() {
           isDemoMode,
           demo: isDemoMode,
           audioDurationSeconds: recordedDurationSeconds,
+          feedbackProfile: activeFeedbackProfile,
+          feedback_profile: activeFeedbackProfile,
         }),
       });
 
@@ -1709,6 +1737,12 @@ export default function StudentView() {
         transcript: ai.transcript ?? null,
         ai_score: ai.score ?? null,
         ai_comment: ai.comment ?? null,
+        ai_strengths: ai.strengths ?? null,
+        ai_improvements: ai.improvements ?? null,
+        ai_picture_accuracy: ai.pictureAccuracy ?? null,
+        ai_grammar_feedback: ai.grammarFeedback ?? null,
+        ai_score_reason: ai.scoreReason ?? null,
+        ai_model_answer: ai.modelAnswer ?? null,
       };
 
       const { data, error } = await supabase
@@ -1719,15 +1753,7 @@ export default function StudentView() {
 
       if (error) throw error;
 
-      const nextSubmission: SubmissionRow = {
-        ...(data as SubmissionRow),
-        ai_strengths: ai.strengths ?? null,
-        ai_improvements: ai.improvements ?? null,
-        ai_picture_accuracy: ai.pictureAccuracy ?? null,
-        ai_grammar_feedback: ai.grammarFeedback ?? null,
-        ai_score_reason: ai.scoreReason ?? null,
-        ai_model_answer: ai.modelAnswer ?? null,
-      };
+      const nextSubmission: SubmissionRow = data as SubmissionRow;
       setSubmissionForActivePrompt(nextSubmission);
       await fetchCompletedPromptKeys(code);
       await fetchSubmissionStatuses(code);
@@ -2651,7 +2677,7 @@ export default function StudentView() {
                 </div>
                 {aiStrengths.length ? (
                   <div style={{ marginTop: 10 }}>
-                    <div style={styles.feedbackPanelLabel}>What you did well</div>
+                    <div style={styles.feedbackPanelLabel}>{feedbackSectionLabels.strengths}</div>
                     <ul style={{ margin: "8px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
                       {aiStrengths.map((item, index) => (
                         <li key={`strength-${index}`}>{item}</li>
@@ -2661,7 +2687,7 @@ export default function StudentView() {
                 ) : null}
                 {aiPictureAccuracy ? (
                   <div style={{ marginTop: 10 }}>
-                    <div style={styles.feedbackPanelLabel}>Picture accuracy</div>
+                    <div style={styles.feedbackPanelLabel}>{feedbackSectionLabels.picture}</div>
                     {aiPictureAccuracy?.correct?.length ? (
                       <div style={{ marginTop: 8 }}>
                         <div style={{ ...styles.feedbackPanelLabel, textTransform: "none", letterSpacing: "normal" }}>Correct</div>
@@ -2698,7 +2724,7 @@ export default function StudentView() {
                 ) : null}
                 {aiGrammarFeedback.length ? (
                   <div style={{ marginTop: 10 }}>
-                    <div style={styles.feedbackPanelLabel}>Grammar to fix</div>
+                    <div style={styles.feedbackPanelLabel}>{feedbackSectionLabels.grammar}</div>
                     <ul style={{ margin: "8px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
                       {aiGrammarFeedback.map((item, index) => (
                         <li key={`grammar-${index}`}>{item}</li>
@@ -2708,7 +2734,7 @@ export default function StudentView() {
                 ) : null}
                 {aiImprovements.length ? (
                   <div style={{ marginTop: 10 }}>
-                    <div style={styles.feedbackPanelLabel}>What to improve</div>
+                    <div style={styles.feedbackPanelLabel}>{feedbackSectionLabels.improvements}</div>
                     <ul style={{ margin: "8px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
                       {aiImprovements.map((item, index) => (
                         <li key={`improve-${index}`}>{item}</li>
@@ -2718,7 +2744,7 @@ export default function StudentView() {
                 ) : null}
                 {aiModelAnswer ? (
                   <div style={{ marginTop: 10 }}>
-                    <div style={styles.feedbackPanelLabel}>Better example</div>
+                    <div style={styles.feedbackPanelLabel}>{feedbackSectionLabels.model}</div>
                     <div style={styles.feedbackPanelText}>{aiModelAnswer}</div>
                   </div>
                 ) : null}
