@@ -4,7 +4,7 @@ const SAFE_INAPPROPRIATE_MESSAGE =
   "This response could not be accepted because it contains inappropriate language. Please record again using classroom-appropriate English.";
 const TEACHER_FLAG_MARKER = "Flagged for inappropriate language.";
 const DEMO_MAX_ATTEMPTS_PER_DAY = 3;
-const DEMO_MIN_SUBMIT_INTERVAL_MS = 20_000;
+const DEMO_MIN_SUBMIT_INTERVAL_MS = 3_000;
 const DEMO_MAX_TRANSCRIPT_CHARS = 700;
 const DEMO_MAX_AUDIO_SECONDS = 90;
 const demoUsageByIp = new Map<string, { date: string; count: number; lastAt: number }>();
@@ -103,10 +103,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const usage = demoUsageByIp.get(ip);
       const current = usage && usage.date === today ? usage : { date: today, count: 0, lastAt: 0 };
       if (current.count >= DEMO_MAX_ATTEMPTS_PER_DAY) {
-        return res.status(429).json({ error: "Demo limit reached for today. Please try again later." });
+        return res.status(429).json({ error: "Demo limit reached" });
       }
       if (current.lastAt && now - current.lastAt < DEMO_MIN_SUBMIT_INTERVAL_MS) {
-        return res.status(429).json({ error: "Please wait before submitting again." });
+        return res.status(429).json({ error: "Demo limit reached" });
       }
       demoUsageByIp.set(ip, { date: today, count: current.count + 1, lastAt: now });
       if (typeof audioDurationSeconds === "number" && audioDurationSeconds > DEMO_MAX_AUDIO_SECONDS) {

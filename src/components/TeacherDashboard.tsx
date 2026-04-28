@@ -1929,7 +1929,7 @@ export default function TeacherDashboard() {
   }
 
   async function handleToggleDemoEnabled() {
-    await persistDemoConfig({ ...demoConfig, enabled: !demoConfig.enabled }, `Demo mode ${demoConfig.enabled ? "disabled" : "enabled"}.`);
+    await persistDemoConfig({ ...demoConfig, demoEnabled: !demoConfig.demoEnabled }, `Public demo ${demoConfig.demoEnabled ? "disabled" : "enabled"}.`);
   }
 
   async function handleDemoConfigFieldChange(field: "welcomeTitle" | "welcomeSubtitle" | "heroImageUrl", value: string) {
@@ -2285,10 +2285,10 @@ export default function TeacherDashboard() {
                   <p style={{ ...styles.settingsDescription, marginBottom: 12 }}>Use this link to let people try ESL Hub without a class code.</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 10 }}>
                     <button type="button" onClick={() => void handleToggleDemoEnabled()} disabled={isSavingDemoConfig || isLoadingDemoConfig} style={clampButton(isSavingDemoConfig || isLoadingDemoConfig, styles.secondaryButton)}>
-                      {demoConfig.enabled ? "Disable demo mode" : "Enable demo mode"}
+                      {demoConfig.demoEnabled ? "Disable public demo" : "Enable public demo"}
                     </button>
-                    <div style={{ fontSize: 13, color: demoConfig.enabled ? "#065f46" : "#b45309", fontWeight: 700 }}>
-                      {demoConfig.enabled ? "Demo mode enabled" : "Demo mode disabled"}
+                    <div style={{ fontSize: 13, color: demoConfig.demoEnabled ? "#065f46" : "#b45309", fontWeight: 700 }}>
+                      {demoConfig.demoEnabled ? "Public demo is on" : "Public demo is off"}
                     </div>
                   </div>
                   <div style={{ fontSize: 13, color: "#475569", marginBottom: 8 }}>Public demo link: {window.location.origin}/?mode=demo</div>
