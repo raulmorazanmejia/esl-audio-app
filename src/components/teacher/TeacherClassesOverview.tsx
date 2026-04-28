@@ -75,7 +75,7 @@ export default function TeacherClassesOverview({
         <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", fontWeight: 700, marginBottom: 8 }}>Activity tools</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button type="button" onClick={onOpenAssignmentLibrary} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#334155", fontWeight: 700, padding: "0 12px" }}>
-            Create activity
+            Open activity library
           </button>
           <button
             type="button"
@@ -90,7 +90,7 @@ export default function TeacherClassesOverview({
           </button>
         </div>
         <div style={{ fontSize: 12, color: "#64748b", marginTop: 8, wordBreak: "break-all" }}>Student entry: {studentEntryUrl}</div>
-        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>Use this link for sharing or generating a QR code with your preferred tool.</div>
+        <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 4 }}>Share this link directly or generate a QR code with your preferred tool.</div>
       </div>
 
       {rosterError ? <div style={{ fontSize: 14, color: "#dc2626", fontWeight: 700, marginBottom: 10 }}>{rosterError}</div> : null}
@@ -101,8 +101,8 @@ export default function TeacherClassesOverview({
             <div style={{ fontSize: 19, fontWeight: 800, color: "#0f172a", marginBottom: 8 }}>{row.className}</div>
             <div style={{ display: "grid", gap: 4, fontSize: 13, color: "#64748b" }}>
               <div>{row.studentCount} student{row.studentCount === 1 ? "" : "s"}</div>
-              <div>{row.needsReviewCount} needing review</div>
-              <div>{row.promptCount} assigned assignment{row.promptCount === 1 ? "" : "s"}</div>
+              <div>{row.needsReviewCount} awaiting feedback</div>
+              <div>{row.promptCount} assigned activit{row.promptCount === 1 ? "y" : "ies"}</div>
             </div>
           </button>
         ))}

@@ -714,11 +714,11 @@ function getAssignmentType(prompt?: PromptRow | null) {
 }
 
 function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
-  if (type === "video_response") return "Video";
-  if (type === "text_response") return "Text";
+  if (type === "video_response") return "Video response";
+  if (type === "text_response") return "Text response";
   if (type === "multiple_choice") return "Quiz";
-  if (type === "external_link") return "External";
-  return "Audio";
+  if (type === "external_link") return "External link";
+  return "Speaking / audio";
 }
 
 export default function StudentView() {
@@ -1799,7 +1799,7 @@ export default function StudentView() {
       };
       saveDemoSubmission(demoSubmission);
       persistDemoUsage(demoAttemptsToday + 1, Date.now());
-      setVideoStatusMessage("Demo complete.");
+      setVideoStatusMessage("Nice — your demo response is ready.");
       return;
     }
     const code = studentCode.trim();
@@ -2014,7 +2014,7 @@ export default function StudentView() {
       };
       saveDemoSubmission(demoSubmission);
       persistDemoUsage(demoAttemptsToday + 1, Date.now());
-      setStatusMessage("Demo complete.");
+      setStatusMessage("Nice — your demo result is ready.");
       return;
     }
     const code = studentCode.trim();
@@ -2440,7 +2440,7 @@ export default function StudentView() {
               {isDemoMode
                 ? showAiDemoFeedback
                   ? "This is instant AI feedback on your speaking."
-                  : "AI demo feedback is currently off for this public demo."
+                  : "AI demo feedback is currently off for this demo."
                 : "You can review your feedback below."}
             </div>
             {isDemoMode ? (
@@ -2509,7 +2509,7 @@ export default function StudentView() {
           {submissionForActivePrompt ? (
             <>
               <div style={styles.feedbackHeader}>
-                <div style={styles.feedbackTitle}>{showAiDemoFeedback ? "AI demo feedback" : "Your feedback"}</div>
+                <div style={styles.feedbackTitle}>{showAiDemoFeedback ? "AI demo feedback" : isDemoMode ? "Your demo result" : "Your feedback"}</div>
                 {primaryFeedbackScore !== null && primaryFeedbackScore !== undefined ? (
                   <div style={styles.scoreBadge}>Score: {primaryFeedbackScore} / 5</div>
                 ) : null}
@@ -2540,7 +2540,7 @@ export default function StudentView() {
               )}
 
               <div style={styles.feedbackPanel}>
-                <div style={styles.feedbackPanelLabel}>{showAiDemoFeedback ? "AI demo feedback" : "Feedback"}</div>
+                <div style={styles.feedbackPanelLabel}>{showAiDemoFeedback ? "AI demo feedback" : isDemoMode ? "Demo feedback" : "Feedback"}</div>
                 <div style={styles.feedbackHighlight}>
                   <div style={styles.feedbackPanelText}>
                     {primaryFeedbackComment || "No written feedback yet."}
