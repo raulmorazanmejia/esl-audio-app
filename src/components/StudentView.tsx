@@ -47,8 +47,10 @@ type SubmissionRow = {
   ai_comment: string | null;
   ai_strengths?: string[] | null;
   ai_improvements?: string[] | null;
-  ai_picture_accuracy?: string | null;
+  ai_picture_accuracy?: { correct?: string[]; missing?: string[]; incorrect?: string[] } | string | null;
   ai_grammar_feedback?: string[] | null;
+  ai_score_reason?: string | null;
+  ai_model_answer?: string | null;
   teacher_score: number | null;
   teacher_comment: string | null;
   student_code: string | null;
@@ -67,8 +69,10 @@ type AnalyzeResponse = {
   comment?: string | null;
   strengths?: string[];
   improvements?: string[];
-  pictureAccuracy?: string;
+  pictureAccuracy?: { correct?: string[]; missing?: string[]; incorrect?: string[] };
   grammarFeedback?: string[];
+  scoreReason?: string;
+  modelAnswer?: string;
   flagged?: boolean;
   error?: string;
 };
@@ -727,6 +731,31 @@ function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
   if (type === "multiple_choice") return "Quiz";
   if (type === "external_link") return "External link";
   return "Speaking / audio";
+}
+
+function normalizePictureAccuracy(
+  value: SubmissionRow["ai_picture_accuracy"] | AnalyzeResponse["pictureAccuracy"] | null | undefined
+): { correct: string[]; missing: string[]; incorrect: string[] } | null {
+  const raw = typeof value === "string" ? (() => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  })() : value;
+
+  if (!raw || typeof raw !== "object") return null;
+  const readList = (input: any) =>
+    Array.isArray(input)
+      ? input.filter((item) => typeof item === "string").map((item) => item.trim()).filter(Boolean)
+      : [];
+  const normalized = {
+    correct: readList((raw as any).correct),
+    missing: readList((raw as any).missing),
+    incorrect: readList((raw as any).incorrect),
+  };
+  if (!normalized.correct.length && !normalized.missing.length && !normalized.incorrect.length) return null;
+  return normalized;
 }
 
 export default function StudentView() {
@@ -1566,8 +1595,10 @@ export default function StudentView() {
       let demoTranscript: string | null = null;
       let demoStrengths: string[] | null = null;
       let demoImprovements: string[] | null = null;
-      let demoPictureAccuracy: string | null = null;
+      let demoPictureAccuracy: { correct?: string[]; missing?: string[]; incorrect?: string[] } | null = null;
       let demoGrammarFeedback: string[] | null = null;
+      let demoScoreReason: string | null = null;
+      let demoModelAnswer: string | null = null;
       if (demoConfig.aiFeedbackEnabled) {
         try {
           const dataUrl = await blobToDataUrl(recordedBlob);
@@ -1584,6 +1615,8 @@ export default function StudentView() {
           demoImprovements = ai.improvements ?? null;
           demoPictureAccuracy = ai.pictureAccuracy ?? null;
           demoGrammarFeedback = ai.grammarFeedback ?? null;
+          demoScoreReason = ai.scoreReason ?? null;
+          demoModelAnswer = ai.modelAnswer ?? null;
         } catch (error: any) {
           setErrorMessage(DEMO_AI_UNAVAILABLE_MESSAGE);
           setStatusMessage("");
@@ -1622,6 +1655,8 @@ export default function StudentView() {
         ai_improvements: demoImprovements,
         ai_picture_accuracy: demoPictureAccuracy,
         ai_grammar_feedback: demoGrammarFeedback,
+        ai_score_reason: demoScoreReason,
+        ai_model_answer: demoModelAnswer,
         teacher_score: null,
         teacher_comment: null,
         student_code: DEMO_STUDENT_CODE,
@@ -1690,6 +1725,8 @@ export default function StudentView() {
         ai_improvements: ai.improvements ?? null,
         ai_picture_accuracy: ai.pictureAccuracy ?? null,
         ai_grammar_feedback: ai.grammarFeedback ?? null,
+        ai_score_reason: ai.scoreReason ?? null,
+        ai_model_answer: ai.modelAnswer ?? null,
       };
       setSubmissionForActivePrompt(nextSubmission);
       await fetchCompletedPromptKeys(code);
@@ -1941,8 +1978,10 @@ export default function StudentView() {
       let demoComment = DEMO_NON_AI_MESSAGE;
       let demoStrengths: string[] | null = null;
       let demoImprovements: string[] | null = null;
-      let demoPictureAccuracy: string | null = null;
+      let demoPictureAccuracy: { correct?: string[]; missing?: string[]; incorrect?: string[] } | null = null;
       let demoGrammarFeedback: string[] | null = null;
+      let demoScoreReason: string | null = null;
+      let demoModelAnswer: string | null = null;
       if (demoConfig.aiFeedbackEnabled) {
         const ai = await analyzeAudio("", promptText, activePrompt?.prompt_image_url ?? null, writtenResponse);
         if (ai.error) {
@@ -1957,6 +1996,8 @@ export default function StudentView() {
         demoImprovements = ai.improvements ?? null;
         demoPictureAccuracy = ai.pictureAccuracy ?? null;
         demoGrammarFeedback = ai.grammarFeedback ?? null;
+        demoScoreReason = ai.scoreReason ?? null;
+        demoModelAnswer = ai.modelAnswer ?? null;
       }
       const demoSubmission: SubmissionRow = {
         id: `demo-text-${Date.now()}`,
@@ -1986,6 +2027,8 @@ export default function StudentView() {
         ai_improvements: demoImprovements,
         ai_picture_accuracy: demoPictureAccuracy,
         ai_grammar_feedback: demoGrammarFeedback,
+        ai_score_reason: demoScoreReason,
+        ai_model_answer: demoModelAnswer,
         teacher_score: null,
         teacher_comment: null,
         student_code: DEMO_STUDENT_CODE,
@@ -2116,8 +2159,10 @@ export default function StudentView() {
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
   const aiStrengths = submissionForActivePrompt?.ai_strengths?.filter(Boolean) || [];
   const aiImprovements = submissionForActivePrompt?.ai_improvements?.filter(Boolean) || [];
-  const aiPictureAccuracy = submissionForActivePrompt?.ai_picture_accuracy?.trim() || "";
+  const aiPictureAccuracy = normalizePictureAccuracy(submissionForActivePrompt?.ai_picture_accuracy);
   const aiGrammarFeedback = submissionForActivePrompt?.ai_grammar_feedback?.filter(Boolean) || [];
+  const aiScoreReason = submissionForActivePrompt?.ai_score_reason?.trim() || "";
+  const aiModelAnswer = submissionForActivePrompt?.ai_model_answer?.trim() || "";
   const latestTranscript = submissionForActivePrompt?.text_response || submissionForActivePrompt?.transcript || "";
   const showAiDemoFeedback = isDemoMode && (submissionForActivePrompt?.ai_score !== null || Boolean(submissionForActivePrompt?.transcript) || Boolean(submissionForActivePrompt?.ai_comment && submissionForActivePrompt.ai_comment !== DEMO_NON_AI_MESSAGE));
   const shouldClampTranscript = latestTranscript.length > 280;
@@ -2566,6 +2611,12 @@ export default function StudentView() {
                   <div style={styles.scoreBadge}>Score: {primaryFeedbackScore} / 5</div>
                 ) : null}
               </div>
+              {aiScoreReason ? (
+                <div style={styles.feedbackPanel}>
+                  <div style={styles.feedbackPanelLabel}>Score reason</div>
+                  <div style={styles.feedbackPanelText}>{aiScoreReason}</div>
+                </div>
+              ) : null}
               {isExternalAssignment ? (
                 <div style={styles.feedbackPanel}>
                   <div style={styles.feedbackPanelLabel}>Completion</div>
@@ -2608,20 +2659,41 @@ export default function StudentView() {
                     </ul>
                   </div>
                 ) : null}
-                {aiImprovements.length ? (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={styles.feedbackPanelLabel}>What to improve</div>
-                    <ul style={{ margin: "8px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
-                      {aiImprovements.map((item, index) => (
-                        <li key={`improve-${index}`}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
                 {aiPictureAccuracy ? (
                   <div style={{ marginTop: 10 }}>
                     <div style={styles.feedbackPanelLabel}>Picture accuracy</div>
-                    <div style={styles.feedbackPanelText}>{aiPictureAccuracy}</div>
+                    {aiPictureAccuracy?.correct?.length ? (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ ...styles.feedbackPanelLabel, textTransform: "none", letterSpacing: "normal" }}>Correct</div>
+                        <ul style={{ margin: "6px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
+                          {aiPictureAccuracy.correct.map((item, index) => (
+                            <li key={`picture-correct-${index}`}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {aiPictureAccuracy?.missing?.length ? (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ ...styles.feedbackPanelLabel, textTransform: "none", letterSpacing: "normal" }}>Missing</div>
+                        <ul style={{ margin: "6px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
+                          {aiPictureAccuracy.missing.map((item, index) => (
+                            <li key={`picture-missing-${index}`}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ ...styles.feedbackPanelLabel, textTransform: "none", letterSpacing: "normal" }}>Incorrect</div>
+                      {aiPictureAccuracy?.incorrect?.length ? (
+                        <ul style={{ margin: "6px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
+                          {aiPictureAccuracy.incorrect.map((item, index) => (
+                            <li key={`picture-incorrect-${index}`}>{item}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div style={styles.feedbackPanelText}>None</div>
+                      )}
+                    </div>
                   </div>
                 ) : null}
                 {aiGrammarFeedback.length ? (
@@ -2632,6 +2704,22 @@ export default function StudentView() {
                         <li key={`grammar-${index}`}>{item}</li>
                       ))}
                     </ul>
+                  </div>
+                ) : null}
+                {aiImprovements.length ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={styles.feedbackPanelLabel}>What to improve</div>
+                    <ul style={{ margin: "8px 0 0 18px", color: "#0f172a", lineHeight: 1.5 }}>
+                      {aiImprovements.map((item, index) => (
+                        <li key={`improve-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {aiModelAnswer ? (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={styles.feedbackPanelLabel}>Better example</div>
+                    <div style={styles.feedbackPanelText}>{aiModelAnswer}</div>
                   </div>
                 ) : null}
                 {showAiDemoFeedback ? <div style={{ ...styles.feedbackPanelLabel, textTransform: "none", letterSpacing: "normal", color: "#2563eb" }}>Powered by ESL Hub AI feedback</div> : null}
