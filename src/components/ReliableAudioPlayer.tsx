@@ -25,7 +25,7 @@ export default function ReliableAudioPlayer({ src, style }: ReliableAudioPlayerP
       key={resolvedSrc}
       controls
       playsInline
-      preload="metadata"
+      preload="none"
       src={resolvedSrc}
       onError={() => {
         if (retryCount < 1) {
