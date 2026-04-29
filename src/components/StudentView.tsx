@@ -1308,10 +1308,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       setCompletedPromptKeys([]);
       return;
     }
-    const { data, error } = await supabase
-      .from("student_submissions")
-      .select("prompt_id, prompt_text")
-      .eq("student_code", code);
+    const response = await fetch(`/api/student-submissions?studentCode=${encodeURIComponent(code)}`);
+    const payload = await response.json();
+    const error = !response.ok ? { message: payload?.error || "Failed to load submissions." } : null;
+    const data = payload?.data ?? [];
 
     if (error) {
       setCompletedPromptKeys([]);
@@ -1337,11 +1337,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       setSubmissionStatusIndex({});
       return;
     }
-    const { data, error } = await supabase
-      .from("student_submissions")
-      .select("prompt_id, prompt_text, feedback_audio_url, feedback_url, teacher_comment, teacher_score")
-      .eq("student_code", code)
-      .order("created_at", { ascending: false });
+    const response = await fetch(`/api/student-submissions?studentCode=${encodeURIComponent(code)}`);
+    const payload = await response.json();
+    const error = !response.ok ? { message: payload?.error || "Failed to load submissions." } : null;
+    const data = payload?.data ?? [];
     if (error) {
       setSubmissionStatusIndex({});
       return;
@@ -1439,15 +1438,13 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         return null;
       }
 
-      const baseQuery = supabase
-        .from("student_submissions")
-        .select(SUBMISSION_SELECT)
-        .eq("student_code", code)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      const query = promptId ? baseQuery.eq("prompt_id", promptId) : baseQuery.eq("prompt_text", promptText);
-      const { data, error } = await query.maybeSingle();
+      const params = new URLSearchParams({ studentCode: code });
+      if (promptId) params.set("promptId", promptId);
+      else params.set("promptText", promptText);
+      const response = await fetch(`/api/student-submissions?${params.toString()}`);
+      const payload = await response.json();
+      const error = !response.ok ? { message: payload?.error || "Failed to load submission." } : null;
+      const data = (payload?.data ?? [])[0] ?? null;
 
       if (error) {
         return null;
@@ -1855,11 +1852,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         ai_model_answer: ai.modelAnswer ?? null,
       };
 
-      const { data, error } = await supabase
-        .from("student_submissions")
-        .insert(payload)
-        .select(SUBMISSION_SELECT)
-        .single();
+      const response = await fetch("/api/student-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const result = await response.json();
+      const data = result?.data ?? null;
+      const error = response.ok ? null : { message: result?.error || "Could not save submission." };
 
       if (error) throw error;
 
@@ -2053,7 +2049,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         data: { publicUrl },
       } = supabase.storage.from("student-response-videos").getPublicUrl(filePath);
 
-      const { data, error } = await supabase.from("student_submissions").insert({
+      const response = await fetch("/api/student-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
         student_name: name,
         student_code: code,
         prompt_id: activePrompt.id,
@@ -2062,7 +2058,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         video_path: filePath,
         video_url: publicUrl,
         status: "submitted",
-      }).select(SUBMISSION_SELECT).single();
+      }) });
+      const result = await response.json();
+      const data = result?.data ?? null;
+      const error = response.ok ? null : { message: result?.error || "Could not save submission." };
       if (error) throw error;
 
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
@@ -2180,9 +2179,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     setErrorMessage("");
     setStatusMessage("Submitting...");
     try {
-      const { data, error } = await supabase
-        .from("student_submissions")
-        .insert({
+      const response = await fetch("/api/student-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           student_name: name,
           student_code: code,
           prompt_id: activePrompt.id,
@@ -2191,9 +2188,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           text_response: writtenResponse,
           transcript: writtenResponse,
           status: "submitted",
-        })
-        .select(SUBMISSION_SELECT)
-        .single();
+        }) });
+      const result = await response.json();
+      const data = result?.data ?? null;
+      const error = response.ok ? null : { message: result?.error || "Could not save submission." };
       if (error) throw error;
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
       await fetchCompletedPromptKeys(code);
@@ -2264,9 +2262,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     setErrorMessage("");
     setStatusMessage("Marking completed...");
     try {
-      const { data, error } = await supabase
-        .from("student_submissions")
-        .insert({
+      const response = await fetch("/api/student-submissions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           student_name: name,
           student_code: code,
           prompt_id: activePrompt.id,
@@ -2274,9 +2270,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           prompt_text: promptText,
           status: "completed",
           completion_marked_at: new Date().toISOString(),
-        })
-        .select(SUBMISSION_SELECT)
-        .single();
+        }) });
+      const result = await response.json();
+      const data = result?.data ?? null;
+      const error = response.ok ? null : { message: result?.error || "Could not save submission." };
       if (error) throw error;
       setSubmissionForActivePrompt((data as SubmissionRow) || null);
       await fetchCompletedPromptKeys(code);
