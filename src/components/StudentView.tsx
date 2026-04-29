@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import ReliableAudioPlayer from "./ReliableAudioPlayer";
+import LazyAudioPlayer from "./LazyAudioPlayer";
 import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
 import { parseExternalActivityData, serializeExternalActivityData } from "../lib/externalLinks";
 
@@ -2619,7 +2620,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
             </div>
             <div style={styles.portraitVideoPreview}>
               {recordedVideoUrl ? (
-                <video src={recordedVideoUrl} controls playsInline style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", backgroundColor: "#000" }} />
+                <video src={recordedVideoUrl} controls preload="none" playsInline style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", backgroundColor: "#000" }} />
               ) : (
                 <video ref={livePreviewVideoRef} autoPlay muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", backgroundColor: "#000" }} />
               )}
@@ -2930,7 +2931,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               <div style={styles.feedbackPanel}>
                 <div style={styles.feedbackPanelLabel}>Teacher audio feedback</div>
                 {teacherAudioUrl ? (
-                  <ReliableAudioPlayer src={teacherAudioUrl} style={{ width: "100%" }} />
+                  <LazyAudioPlayer src={teacherAudioUrl} style={{ width: "100%" }} label="Load teacher feedback audio" />
                 ) : (
                   <div style={{ ...styles.feedbackPanelText, color: "#64748b" }}>No teacher audio feedback yet.</div>
                 )}

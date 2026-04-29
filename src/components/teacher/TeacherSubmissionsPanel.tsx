@@ -1,5 +1,5 @@
-import React from "react";
-import ReliableAudioPlayer from "../ReliableAudioPlayer";
+import React, { useState } from "react";
+import LazyAudioPlayer from "../LazyAudioPlayer";
 import { DraftsById, SubmissionRow } from "../TeacherDashboardTypes";
 import TeacherAnalyticsPanel from "./TeacherAnalyticsPanel";
 
@@ -36,6 +36,13 @@ type Props = {
 
 export default function TeacherSubmissionsPanel(p: Props) {
   const studentFilterLabel = p.selectedStudentFilter ? `Showing submissions for ${p.selectedStudentFilter.name || "student"} (${p.selectedStudentFilter.code})` : "";
+
+  const [loadedMediaBySubmission, setLoadedMediaBySubmission] = useState<Record<string, boolean>>({});
+
+  const loadMedia = (submissionId: string) => {
+    setLoadedMediaBySubmission((prev) => (prev[submissionId] ? prev : { ...prev, [submissionId]: true }));
+  };
+
 
   return <section>
     <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 8 }}>Submissions</div>
@@ -95,13 +102,15 @@ export default function TeacherSubmissionsPanel(p: Props) {
             Marked completed by student {submission.completion_marked_at ? `on ${new Date(submission.completion_marked_at).toLocaleString()}` : ""}.
           </div>
         ) : submission.response_mode === "video" ? (submission.video_url
-          ? <video controls style={{ width: "100%" }}><source src={submission.video_url} /></video>
+          ? loadedMediaBySubmission[submission.id]
+            ? <video controls preload="none" playsInline style={{ width: "100%" }}><source src={submission.video_url} /></video>
+            : <button type="button" onClick={() => loadMedia(submission.id)} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 10px" }}>Load video</button>
           : <div style={{ fontSize: 13, color: "#64748b" }}>No video.</div>) : submission.response_mode === "text" ? (
           <div style={{ fontSize: 14, color: "#334155", border: "1px solid #e2e8f0", borderRadius: 10, background: "#f8fafc", padding: 10, whiteSpace: "pre-wrap" }}>
             {submission.text_response || "No text response."}
           </div>
         ) : (submission.audio_url
-          ? <ReliableAudioPlayer src={submission.audio_url} style={{ width: "100%" }} />
+          ? <LazyAudioPlayer src={submission.audio_url} style={{ width: "100%" }} compact submissionIdForDebug={submission.id} />
           : <div style={{ fontSize: 13, color: "#64748b" }}>No audio.</div>)}
         <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)} style={{ minHeight: 34, marginTop: 8, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 10px" }}>{isExpanded ? "Hide details" : "View details"}</button>
         {isExpanded && draft ? <>
