@@ -385,6 +385,9 @@ Rules:
 - Score must be an integer 1-5.
 - Feedback profile for tone: ${activeFeedbackProfile}.
 - Keep feedback specific, practical, short, and teacher-like (not robotic, not generic praise).
+- Use warm, supportive wording while staying accurate.
+- Avoid harsh phrases like "This is incorrect" and prefer "There is a small mistake...".
+- Prefer "You can improve by..." over "You need to...".
 - comment must be 1-2 sentences, never more than 2.
 - comment sentence structure:
   1) overall evaluation
