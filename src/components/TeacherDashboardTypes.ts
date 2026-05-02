@@ -14,7 +14,7 @@ export type PromptRow = {
 };
 
 export type AssignmentResponseMode = "audio" | "video" | "text" | "multiple_choice" | "guided_speaking";
-export type AssignmentActivityType = "audio_response" | "video_response" | "text_response" | "external_link" | "guided_speaking" | "multiple_choice";
+export type AssignmentActivityType = "audio_response" | "video_response" | "text_response" | "external_link" | "guided_speaking" | "multiple_choice" | "lesson";
 
 export type PromptAssignmentRow = {
   id: string;
