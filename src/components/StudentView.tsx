@@ -830,6 +830,27 @@ function normalizePictureAccuracy(
   return normalized;
 }
 
+type LessonBlock = {
+  type: "intro" | "notes" | "external_links" | "speaking" | "text_response";
+  title: string;
+  content?: string;
+  instructions?: string;
+  prompt?: string;
+  suggestedTime?: string;
+  links?: { title: string; url: string }[];
+};
+
+function parseLessonBlocks(value?: string | null): LessonBlock[] {
+  if (!value) return [];
+  try {
+    const data = JSON.parse(value);
+    if (!Array.isArray(data)) return [];
+    return data.filter((b) => b && typeof b === "object" && typeof b.type === "string" && typeof b.title === "string");
+  } catch {
+    return [];
+  }
+}
+
 type StudentViewProps = {
   onEntryStateChange?: (isEntryState: boolean) => void;
 };
@@ -881,6 +902,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const [showIosInstallPanel, setShowIosInstallPanel] = useState(false);
   const [isCodeFieldFocused, setIsCodeFieldFocused] = useState(false);
   const [openedExternalLinks, setOpenedExternalLinks] = useState<string[]>([]);
+  const [lessonStepIndex, setLessonStepIndex] = useState(0);
+  const [completedLessonSteps, setCompletedLessonSteps] = useState<number[]>([]);
   const [demoSubmissionIndex, setDemoSubmissionIndex] = useState<Record<string, SubmissionRow>>({});
   const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
   const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
@@ -1519,6 +1542,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
   useEffect(() => {
     setOpenedExternalLinks([]);
+    setLessonStepIndex(0);
+    setCompletedLessonSteps([]);
   }, [activePrompt?.id]);
 
   const openExternalLink = useCallback((url: string) => {
@@ -2601,7 +2626,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
         {!isExternalAssignment && !isLessonAssignment ? (
           <div style={styles.promptCard}>
-            {activePrompt?.example_text || activePrompt?.prompt_text || "Select an activity above"}
+            {isLessonAssignment ? (activeLessonBlock?.content || activeLessonBlock?.prompt || activeLessonBlock?.instructions || activeLessonBlock?.title || "Select a step") : (activePrompt?.example_text || activePrompt?.prompt_text || "Select an activity above")}
           </div>
         ) : null}
         {activePrompt?.suggested_time ? (
@@ -2857,6 +2882,17 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         {rosterStudent && !activePrompt ? <div style={styles.helperText}>Select an activity above to get started.</div> : null}
         {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent && activePrompt && !isVideoAssignment && !isExternalAssignment && !isTextAssignment ? <div style={styles.helperText}>Record your answer to get feedback.</div> : null}
 
+
+        {isLessonAssignment && lessonBlocks.length ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => setLessonStepIndex((v) => Math.max(0, v - 1))} disabled={lessonStepIndex === 0} style={styles.backButton}>Back step</button>
+            <button type="button" onClick={() => {
+              setCompletedLessonSteps((c) => Array.from(new Set([...c, lessonStepIndex])));
+              setLessonStepIndex((v) => Math.min(lessonBlocks.length - 1, v + 1));
+            }} disabled={lessonStepIndex >= lessonBlocks.length - 1} style={styles.primaryButton}>Next step</button>
+            <div style={{ display: "flex", alignItems: "center", color: "#475569", fontWeight: 700 }}>Completed {completedLessonSteps.length}/{lessonBlocks.length}</div>
+          </div>
+        ) : null}
         {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
         ) : null}

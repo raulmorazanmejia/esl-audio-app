@@ -197,7 +197,21 @@ export default function TeacherPromptPanel(props: Props) {
             )) : <span style={{ fontSize: 12, color: "#64748b" }}>Unassigned</span>}
           </div> : null}
           {prompt.suggested_time ? <div style={{ fontSize: 12, color: "#64748b" }}>Suggested time: {prompt.suggested_time}</div> : null}
-          <div style={{ fontSize: 12, color: "#64748b" }}>Type: {prompt.assignment_type === "external_link" ? "External activity" : prompt.assignment_type === "video_response" ? "Video response" : prompt.assignment_type === "text_response" ? "Text response" : prompt.assignment_type === "lesson" ? "Lesson" : "Audio response"}</div>
+ <div style={{ fontSize: 12, color: "#64748b" }}>
+  Type: {
+    prompt.assignment_type === "lesson"
+      ? "Lesson"
+      : prompt.assignment_type === "external_link"
+      ? "External activity"
+      : prompt.assignment_type === "video_response"
+      ? "Video response"
+      : prompt.assignment_type === "audio_response"
+      ? "Audio response"
+      : prompt.assignment_type === "text_response"
+      ? "Text response"
+      : "Activity"
+  }
+</div>
           {prompt.assignment_type === "external_link" ? (
             <div style={{ fontSize: 12, color: "#64748b" }}>
               Links: {parseExternalActivityData(prompt.example_text, prompt.external_url).externalLinks.map((link) => link.title).join(", ") || "No links"}
