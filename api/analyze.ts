@@ -142,7 +142,25 @@ function normalizeCommentLength(value: string): string {
   if (!value?.trim()) return fallback;
   const sentences = splitSentences(value.trim());
   if (!sentences.length) return fallback;
-  return sentences.slice(0, 3).join(" ");
+  return sentences.slice(0, 2).join(" ");
+}
+
+
+function grammarItemLimitForProfile(profile: FeedbackProfile): number {
+  return profile === "student_friendly" ? 2 : 3;
+}
+
+function normalizeModelAnswer(value: string | undefined, score: number): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    if (score <= 3) return "Try this: I answered the prompt, but I can add more detail. I will use full sentences with correct grammar next time.";
+    return undefined;
+  }
+  const sentences = splitSentences(trimmed).slice(0, 4);
+  if (score <= 3) {
+    return sentences.slice(0, Math.max(2, sentences.length)).join(" ");
+  }
+  return sentences.join(" ");
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -367,7 +385,7 @@ Rules:
 - Score must be an integer 1-5.
 - Feedback profile for tone: ${activeFeedbackProfile}.
 - Keep feedback specific, practical, short, and teacher-like (not robotic, not generic praise).
-- comment must be 2-3 sentences, never more than 3.
+- comment must be 1-2 sentences, never more than 2.
 - comment sentence structure:
   1) overall evaluation
   2) key issue (detail, grammar, or accuracy)
@@ -383,7 +401,8 @@ Rules:
 - Grammar checks to consider every time: subject-verb agreement, verb tense, articles (a/an/the), plural nouns, word order, basic prepositions, sentence completeness, repeated/unclear phrasing.
 - scoreReason is required and must mention: task completion, detail, and grammar/clarity in one short explanation.
 - strengths/improvements should be short bullet-style items.
-- grammarFeedback should be 1-3 useful mini-teaching fixes, each with a correction + short pattern rule.
+- grammarFeedback should be concise mini-teaching fixes, each with a correction + short pattern rule.
+- grammarFeedback max items: student_friendly=2; academic_demo/balanced/strict=3.
 - If score is 1-3, modelAnswer is required (A1-A2 level, 2-4 short sentences). If score is 4-5, modelAnswer is optional.
 - Keep grammar corrections separate from pictureAccuracy.
 - Profile guidance:
@@ -473,22 +492,17 @@ ${isPictureActivity ? `For describe-a-picture tasks:
       strengths = sanitizeStringArray(parsed.strengths, 3);
       improvements = sanitizeStringArray(parsed.improvements, 3);
       pictureAccuracy = sanitizePictureAccuracy(parsed.pictureAccuracy);
-      grammarFeedback = sanitizeStringArray(parsed.grammarFeedback, 3);
-      scoreReason = typeof parsed.scoreReason === "string" ? parsed.scoreReason.trim() : undefined;
-      modelAnswer = typeof parsed.modelAnswer === "string" ? parsed.modelAnswer.trim() : undefined;
-      if (score <= 3 && !modelAnswer) {
-        modelAnswer = "Try adding one or two more clear sentences to fully answer the prompt.";
-      }
+      grammarFeedback = sanitizeStringArray(parsed.grammarFeedback, grammarItemLimitForProfile(activeFeedbackProfile));
+      scoreReason = typeof parsed.scoreReason === "string" ? splitSentences(parsed.scoreReason.trim())[0] : undefined;
+      modelAnswer = normalizeModelAnswer(typeof parsed.modelAnswer === "string" ? parsed.modelAnswer : undefined, score);
       if (!grammarFeedback?.length) {
-        grammarFeedback = ["Use complete sentences with subject + verb so your ideas are clear."];
+        grammarFeedback = sanitizeStringArray(["Use complete sentences with subject + verb so your ideas are clear."], grammarItemLimitForProfile(activeFeedbackProfile));
       }
       if (!scoreReason) {
         scoreReason = `Score ${score} because your answer ${score >= 3 ? "is related to the task" : "does not fully complete the task"}, has ${score >= 4 ? "good detail" : "limited detail"}, and needs ${score >= 4 ? "minor grammar polish" : "clearer grammar and sentence structure"}.`;
       }
     } catch (err) {
-      console.error("safe parse error", {
-        message: err instanceof Error ? err.message : "unknown_parse_error",
-      });
+      console.error("AI feedback parse fallback", { reason: err instanceof Error ? err.message : "unknown_parse_error" });
     }
 
     comment = normalizeCommentLength(comment);

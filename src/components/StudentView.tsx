@@ -914,7 +914,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         picture: "Accuracy",
         grammar: "Language feedback",
         improvements: "What to improve",
-        model: "Suggested model response",
+        model: "Better example",
       };
     }
     return {
@@ -2816,7 +2816,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               </div>
               {aiScoreReason ? (
                 <div style={styles.feedbackPanel}>
-                  <div style={styles.feedbackPanelLabel}>Score reason</div>
+                  <div style={styles.feedbackPanelLabel}>Score + reason</div>
                   <div style={styles.feedbackPanelText}>{aiScoreReason}</div>
                 </div>
               ) : null}
