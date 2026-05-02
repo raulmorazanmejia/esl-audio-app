@@ -38,6 +38,7 @@ export default function TeacherSubmissionsPanel(p: Props) {
   const studentFilterLabel = p.selectedStudentFilter ? `Showing submissions for ${p.selectedStudentFilter.name || "student"} (${p.selectedStudentFilter.code})` : "";
 
   const [loadedMediaBySubmission, setLoadedMediaBySubmission] = useState<Record<string, boolean>>({});
+  const [historyStudentCode, setHistoryStudentCode] = useState<string | null>(null);
 
   const loadMedia = (submissionId: string) => {
     setLoadedMediaBySubmission((prev) => (prev[submissionId] ? prev : { ...prev, [submissionId]: true }));
@@ -66,6 +67,14 @@ export default function TeacherSubmissionsPanel(p: Props) {
     incorrectVisualRate > 0.4 ? "Students are making incorrect observations in the picture." : "",
     strongObjectRate > 0.4 ? "Most students correctly identify objects." : "",
   ].filter(Boolean).slice(0, 3);
+  const historySubmissions = historyStudentCode
+    ? p.filteredSubmissions
+      .filter((submission) => (submission.student_code || submission.student_name) === historyStudentCode)
+      .slice()
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, 8)
+    : [];
+  const historyStudent = historySubmissions[0] || null;
 
   return <section>
     <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 8 }}>Submissions</div>
@@ -119,6 +128,7 @@ export default function TeacherSubmissionsPanel(p: Props) {
           <div style={{ fontSize: 12, fontWeight: 700, color: submission.status === "needs_review" ? "#b45309" : "#166534" }}>{submission.status?.replace("_", " ") || "submitted"}</div>
         </div>
         <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>{submission.prompt_text}</div>
+        <button type="button" onClick={() => setHistoryStudentCode((submission.student_code || submission.student_name) ?? null)} style={{ minHeight: 30, marginBottom: 6, borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 8px" }}>Student history</button>
         <div style={{ fontSize: 12, color: "#475569", marginBottom: 8 }}>
           {submission.prompt?.assignment_type === "external_link"
             ? "External activity completion"
@@ -166,6 +176,37 @@ export default function TeacherSubmissionsPanel(p: Props) {
         </> : null}
       </article>;
     })}
+    {historyStudentCode && historyStudent ? (
+      <aside style={{ position: "sticky", bottom: 8, border: "1px solid #bfdbfe", borderRadius: 12, background: "#f8fbff", padding: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+          <div style={{ fontWeight: 900, color: "#1e3a8a" }}>Student History</div>
+          <button type="button" onClick={() => setHistoryStudentCode(null)} style={{ minHeight: 28, borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff" }}>Close</button>
+        </div>
+        <div style={{ fontSize: 13, color: "#334155", marginBottom: 8 }}>
+          <strong>{historyStudent.student_name || historyStudent.student_code || "Student"}</strong> · {historyStudent.student_code || "No code"} · {p.selectedClassName}
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {historySubmissions.map((submission) => {
+            const score = getSubmissionScore(submission);
+            const badge = getStatusBadge(score);
+            return (
+              <div key={`history-${submission.id}`} style={{ border: "1px solid #dbeafe", borderRadius: 10, background: "#fff", padding: 8 }}>
+                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 13 }}>{submission.prompt_text || "Untitled activity"}</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>{submission.created_at ? new Date(submission.created_at).toLocaleString() : "Unknown date"} · Score: {score}</div>
+                <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, border: `1px solid ${badge.border}`, background: badge.bg, color: badge.color }}>{badge.label}</span>
+                {submission.ai_comment ? <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>AI summary: {submission.ai_comment}</div> : null}
+                {submission.response_mode === "video" && submission.video_url ? (
+                  loadedMediaBySubmission[submission.id]
+                    ? <video controls preload="none" playsInline style={{ width: "100%", marginTop: 6 }}><source src={submission.video_url} /></video>
+                    : <button type="button" onClick={() => loadMedia(submission.id)} style={{ minHeight: 30, marginTop: 6, borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700 }}>Load video</button>
+                ) : null}
+                {submission.response_mode !== "video" && submission.audio_url ? <div style={{ marginTop: 6 }}><LazyAudioPlayer src={submission.audio_url} style={{ width: "100%" }} compact submissionIdForDebug={submission.id} /></div> : null}
+              </div>
+            );
+          })}
+        </div>
+      </aside>
+    ) : null}
 
   </section>;
 }

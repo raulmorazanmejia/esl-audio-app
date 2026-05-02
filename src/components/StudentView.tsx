@@ -22,6 +22,16 @@ type PromptRow = {
     is_visible: boolean;
   }[];
 };
+type LessonBlock = {
+  type: "instructions" | "external_links" | "speaking" | "text_response";
+  title: string;
+  content?: string;
+  instructions?: string;
+  links?: { title: string; url: string }[];
+  prompt?: string;
+  suggestedTime?: string;
+  imageUrl?: string;
+};
 
 type SubmissionRow = {
   id: string;
@@ -784,6 +794,17 @@ function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
   return "Speaking / audio";
 }
 
+function parseLessonBlocks(value: string | null | undefined): LessonBlock[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || !Array.isArray(parsed.lessonBlocks)) return [];
+    return parsed.lessonBlocks.filter((block: LessonBlock) => block && typeof block.type === "string");
+  } catch {
+    return [];
+  }
+}
+
 function normalizePictureAccuracy(
   value: SubmissionRow["ai_picture_accuracy"] | AnalyzeResponse["pictureAccuracy"] | null | undefined
 ): { correct: string[]; missing: string[]; incorrect: string[] } | null {
@@ -909,10 +930,15 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const isVideoAssignment = activeAssignmentType === "video_response";
   const isExternalAssignment = activeAssignmentType === "external_link";
   const isTextAssignment = activeAssignmentType === "text_response";
+  const lessonBlocks = useMemo(() => parseLessonBlocks(activePrompt?.example_text), [activePrompt?.example_text]);
   const isLessonAssignment = activeAssignmentType === "lesson";
-  const lessonBlocks = useMemo(() => (isLessonAssignment ? parseLessonBlocks(activePrompt?.example_text) : []), [isLessonAssignment, activePrompt?.example_text]);
-  const activeLessonBlock = lessonBlocks[lessonStepIndex] || null;
-  const lessonProgressLabel = `Step ${Math.min(lessonStepIndex + 1, Math.max(lessonBlocks.length,1))} of ${lessonBlocks.length || 1}`;
+  const [lessonStep, setLessonStep] = useState(0);
+  const [lessonLocalDone, setLessonLocalDone] = useState<Record<number, boolean>>({});
+  const lessonActiveBlock = lessonBlocks[lessonStep];
+  useEffect(() => {
+    setLessonStep(0);
+    setLessonLocalDone({});
+  }, [activePrompt?.id]);
   const welcomeHeroImageUrl = useMemo(() => {
     return studentWelcomeImageUrl?.trim() || ENV_STUDENT_WELCOME_IMAGE_URL || DEFAULT_WELCOME_IMAGE;
   }, [studentWelcomeImageUrl]);
@@ -2591,14 +2617,14 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
         <div style={{ ...styles.sectionTitle, fontSize: "28px", marginTop: "10px", letterSpacing: "0.01em" }}>{activePrompt?.prompt_text || "Activity"}</div>
         <div style={styles.activityProgressWrap}>
-          <div style={styles.activityProgressLabel}>{isLessonAssignment ? lessonProgressLabel : "Task 1 of 1"}</div>
+          <div style={styles.activityProgressLabel}>{isLessonAssignment && lessonBlocks.length ? `Step ${lessonStep + 1} of ${lessonBlocks.length}` : "Task 1 of 1"}</div>
           <div style={styles.activityProgressTrack}>
-            <div style={styles.activityProgressFill} />
+            <div style={{ ...styles.activityProgressFill, width: isLessonAssignment && lessonBlocks.length ? `${((lessonStep + 1) / lessonBlocks.length) * 100}%` : styles.activityProgressFill.width }} />
           </div>
         </div>
 
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
-        {!isExternalAssignment ? (
+        {!isExternalAssignment && !isLessonAssignment ? (
           <div style={styles.promptCard}>
             {isLessonAssignment ? (activeLessonBlock?.content || activeLessonBlock?.prompt || activeLessonBlock?.instructions || activeLessonBlock?.title || "Select a step") : (activePrompt?.example_text || activePrompt?.prompt_text || "Select an activity above")}
           </div>
@@ -2609,7 +2635,24 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           </div>
         ) : null}
 
-        {isExternalAssignment ? (
+        {isLessonAssignment ? (
+          <div style={{ ...styles.card, border: "1px solid #cbd5e1", background: "#f8fafc" }}>
+            {lessonActiveBlock ? (
+              <>
+                <div style={{ ...styles.cardTitle, marginBottom: 8 }}>{lessonActiveBlock.title || "Lesson step"}</div>
+                {lessonActiveBlock.content ? <div style={{ ...styles.infoText, marginBottom: 8, whiteSpace: "pre-wrap" }}>{lessonActiveBlock.content}</div> : null}
+                {lessonActiveBlock.instructions ? <div style={{ ...styles.infoText, marginBottom: 8 }}>{lessonActiveBlock.instructions}</div> : null}
+                {lessonActiveBlock.prompt ? <div style={{ ...styles.promptCard, fontSize: 18, padding: 14 }}>{lessonActiveBlock.prompt}</div> : null}
+                {lessonActiveBlock.links?.length ? <div style={{ display: "grid", gap: 8 }}>{lessonActiveBlock.links.map((link) => <button key={link.url} type="button" onClick={() => openExternalLink(link.url)} style={{ ...styles.secondaryButton, width: "100%" }}>{link.title}</button>)}</div> : null}
+                {(lessonActiveBlock.type === "speaking" || lessonActiveBlock.type === "text_response") ? <label style={{ display: "inline-flex", gap: 8, marginTop: 10, fontSize: 13 }}><input type="checkbox" checked={Boolean(lessonLocalDone[lessonStep])} onChange={(e) => setLessonLocalDone((prev) => ({ ...prev, [lessonStep]: e.target.checked }))} /> Mark this response step complete</label> : null}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 12 }}>
+                  <button type="button" onClick={() => setLessonStep((s) => Math.max(0, s - 1))} disabled={lessonStep === 0} style={styles.secondaryButton}>Back</button>
+                  <button type="button" onClick={() => setLessonStep((s) => Math.min(lessonBlocks.length - 1, s + 1))} disabled={!lessonBlocks.length || lessonStep >= lessonBlocks.length - 1} style={styles.primaryButton}>Next</button>
+                </div>
+              </>
+            ) : <div style={styles.infoText}>This lesson is missing block data. Ask your teacher to update it.</div>}
+          </div>
+        ) : isExternalAssignment ? (
           <div style={{ ...styles.card, border: "1px solid #93c5fd", background: "#eff6ff" }}>
             {externalInstructions ? <div style={{ ...styles.infoText, marginBottom: "10px" }}>{externalInstructions}</div> : null}
             <div style={styles.subtleHelper}>This activity opens in a separate tab (Google Forms or another external tool).</div>
