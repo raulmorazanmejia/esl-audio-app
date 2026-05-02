@@ -2386,6 +2386,7 @@ export default function TeacherDashboard() {
               <section style={{ background: "#fff", borderRadius: 20, border: "1px solid #e2e8f0", padding: 16 }}>
                 <TeacherSubmissionsPanel
                   selectedClassName={selectedClassName || ""}
+                  classOptions={classNameOptions}
                   reviewFilter={reviewFilter}
                   setReviewFilter={setReviewFilter}
                   onRefreshSubmissions={() => void handleRefreshSubmissions()}

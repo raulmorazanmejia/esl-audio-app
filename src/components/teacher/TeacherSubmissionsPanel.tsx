@@ -7,6 +7,7 @@ type SubmissionViewMode = "by_student" | "by_submission";
 
 type Props = {
   selectedClassName: string;
+  classOptions: string[];
   reviewFilter: "all" | "needs_review" | "reviewed";
   setReviewFilter: (v: "all" | "needs_review" | "reviewed") => void;
   onRefreshSubmissions: () => void;
@@ -51,7 +52,13 @@ export default function TeacherSubmissionsPanel(p: Props) {
   const needsReview = (submission: SubmissionRow) => !(submission.teacher_comment || submission.feedback_audio_url || submission.feedback_url);
   const activityTypeLabel = (submission: SubmissionRow) => submission.prompt?.assignment_type === "external_link" ? "External activity" : submission.response_mode === "video" ? "Video response" : submission.response_mode === "text" ? "Text response" : "Audio response";
 
-  const classOptions = useMemo(() => Array.from(new Set(p.filteredSubmissions.map(getClassName))).sort((a, b) => a.localeCompare(b)), [p.filteredSubmissions]);
+  const unresolvedClassExists = useMemo(() => p.filteredSubmissions.some((submission) => !p.getSubmissionClassName(submission)), [p.filteredSubmissions, p.getSubmissionClassName]);
+  const classOptions = useMemo(() => {
+    const knownClasses = p.classOptions.filter((c) => c.trim().length > 0);
+    const options = Array.from(new Set(knownClasses)).sort((a, b) => a.localeCompare(b));
+    if (unresolvedClassExists) options.push("Unassigned / Unknown class");
+    return options;
+  }, [p.classOptions, unresolvedClassExists]);
   const classFiltered = useMemo(() => classFilter === "__all_classes__" ? p.filteredSubmissions : p.filteredSubmissions.filter((s) => getClassName(s) === classFilter), [p.filteredSubmissions, classFilter]);
 
   const students = useMemo(() => {
@@ -74,7 +81,7 @@ export default function TeacherSubmissionsPanel(p: Props) {
   const renderSubmission = (submission: SubmissionRow, compact = false) => {
     const draft = p.drafts[submission.id];
     const isExpanded = Boolean(p.expandedSubmissionIds[submission.id]);
-    return <article key={submission.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, marginTop: compact ? 8 : 0, marginBottom: compact ? 0 : 8, background: "#fff" }}>
+    return <article key={submission.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, marginTop: compact ? 8 : 0, marginBottom: compact ? 0 : 10, background: compact ? "#ffffff" : "#f8fafc" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
         <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{submission.prompt_text || "Untitled assignment"}</div>
         <div style={{ fontSize: 11, fontWeight: 800, color: needsReview(submission) ? "#b45309" : "#166534" }}>{needsReview(submission) ? "Needs review" : "Reviewed"}</div>
@@ -82,8 +89,8 @@ export default function TeacherSubmissionsPanel(p: Props) {
       <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{activityTypeLabel(submission)} · {submission.created_at ? new Date(submission.created_at).toLocaleString() : "Unknown date"} · Score: {getSubmissionScore(submission)}</div>
       {submission.prompt?.assignment_type === "external_link" ? <div style={{ fontSize: 12, marginTop: 8 }}>Completed {submission.completion_marked_at ? `on ${new Date(submission.completion_marked_at).toLocaleString()}` : ""}</div> : submission.response_mode === "video" ? (submission.video_url ? loadedMediaBySubmission[submission.id] ? <video controls preload="none" playsInline style={{ width: "100%", marginTop: 8 }}><source src={submission.video_url} /></video> : <button type="button" onClick={() => loadMedia(submission.id)} style={{ marginTop: 8 }}>Load video</button> : <div style={{ fontSize: 12, marginTop: 8 }}>No video.</div>) : submission.response_mode === "text" ? <div style={{ fontSize: 13, marginTop: 8, border: "1px solid #e2e8f0", borderRadius: 8, padding: 8 }}>{submission.text_response || "No text response."}</div> : submission.audio_url ? <div style={{ marginTop: 8 }}><LazyAudioPlayer src={submission.audio_url} style={{ width: "100%" }} compact submissionIdForDebug={submission.id} /></div> : <div style={{ fontSize: 12, marginTop: 8 }}>No audio.</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-        <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)}>{isExpanded ? "Hide details" : "View details"}</button>
-        <button type="button" onClick={() => setHistoryStudentCode((submission.student_code || submission.student_name) ?? null)}>Student history</button>
+        <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700 }}>{isExpanded ? "Hide details" : "View details"}</button>
+        <button type="button" onClick={() => setHistoryStudentCode((submission.student_code || submission.student_name) ?? null)} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700 }}>Student history</button>
       </div>
       {isExpanded && draft ? <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
         <input type="range" min={1} max={5} value={draft.score} onChange={(e) => p.updateDraft(submission.id, { score: Number(e.target.value), savedMessage: "", error: "" })} />
@@ -99,11 +106,20 @@ export default function TeacherSubmissionsPanel(p: Props) {
 
   return <section>
     <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 8 }}>Submissions</div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}><span style={{ fontSize: 12, fontWeight: 700 }}>View:</span><button type="button" onClick={() => setViewMode("by_student")}>By student</button><button type="button" onClick={() => setViewMode("by_submission")}>By submission</button></div>
-      <button type="button" onClick={() => p.setReviewFilter("all")}>All</button><button type="button" onClick={() => p.setReviewFilter("needs_review")}>Needs review</button><button type="button" onClick={() => p.setReviewFilter("reviewed")}>Reviewed</button><button type="button" onClick={p.onRefreshSubmissions} disabled={p.isLoadingSubmissions}>{p.isLoadingSubmissions ? "Refreshing..." : "Refresh"}</button>
-      <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}><option value="__all_classes__">All classes</option>{classOptions.map((c) => <option key={c} value={c}>{c}</option>)}</select>
-      <select value={p.submissionPromptFilter} onChange={(e) => p.setSubmissionPromptFilter(e.target.value)}><option value="__all_prompts__">All assignments</option>{p.submissionPromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+    <div style={{ display: "grid", gap: 10, marginBottom: 10, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 14, padding: 10 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>View</span><div style={{ display: "inline-flex", gap: 4, border: "1px solid #cbd5e1", borderRadius: 999, padding: 3, background: "#fff" }}><button type="button" onClick={() => setViewMode("by_student")} style={{ border: "none", borderRadius: 999, padding: "6px 10px", fontSize: 12, fontWeight: 800, background: viewMode === "by_student" ? "#0f172a" : "transparent", color: viewMode === "by_student" ? "#fff" : "#334155" }}>By student</button><button type="button" onClick={() => setViewMode("by_submission")} style={{ border: "none", borderRadius: 999, padding: "6px 10px", fontSize: 12, fontWeight: 800, background: viewMode === "by_submission" ? "#0f172a" : "transparent", color: viewMode === "by_submission" ? "#fff" : "#334155" }}>By submission</button></div></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 12, fontWeight: 800, color: "#475569" }}>Status</span><div style={{ display: "inline-flex", gap: 4, border: "1px solid #cbd5e1", borderRadius: 999, padding: 3, background: "#fff" }}>{(["all", "needs_review", "reviewed"] as const).map((filter) => <button key={filter} type="button" onClick={() => p.setReviewFilter(filter)} style={{ border: "none", borderRadius: 999, padding: "6px 10px", fontSize: 12, fontWeight: 800, background: p.reviewFilter === filter ? "#0f172a" : "transparent", color: p.reviewFilter === filter ? "#fff" : "#334155" }}>{filter === "all" ? "All" : filter === "needs_review" ? "Needs review" : "Reviewed"}</button>)}</div></div>
+        <button type="button" onClick={p.onRefreshSubmissions} disabled={p.isLoadingSubmissions} style={{ marginLeft: "auto", border: "1px solid #cbd5e1", background: "#fff", borderRadius: 999, padding: "8px 14px", fontSize: 12, fontWeight: 800, color: "#334155" }}>{p.isLoadingSubmissions ? "Refreshing..." : "Refresh"}</button>
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <label style={{ display: "grid", gap: 4, fontSize: 12, fontWeight: 700, color: "#475569" }}>Class
+          <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{ minHeight: 34, borderRadius: 999, border: "1px solid #cbd5e1", background: "#fff", padding: "0 12px", fontSize: 12, color: "#0f172a" }}><option value="__all_classes__">All classes</option>{classOptions.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+        </label>
+        <label style={{ display: "grid", gap: 4, fontSize: 12, fontWeight: 700, color: "#475569" }}>Assignment
+          <select value={p.submissionPromptFilter} onChange={(e) => p.setSubmissionPromptFilter(e.target.value)} style={{ minHeight: 34, borderRadius: 999, border: "1px solid #cbd5e1", background: "#fff", padding: "0 12px", fontSize: 12, color: "#0f172a" }}><option value="__all_prompts__">All assignments</option>{p.submissionPromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+        </label>
+      </div>
     </div>
     {p.selectedStudentFilter ? <div>{studentFilterLabel} <button type="button" onClick={p.onClearStudentFilter}>Clear</button></div> : null}
     {p.submissionsSuccess ? <div style={{ color: "#166534" }}>{p.submissionsSuccess}</div> : null}
@@ -112,10 +128,10 @@ export default function TeacherSubmissionsPanel(p: Props) {
     {viewMode === "by_submission" ? classFiltered.map((s) => renderSubmission(s)) : students.map((student) => {
       const expanded = Boolean(expandedStudents[student.key]);
       const status = student.needsReviewCount > 0 ? "Needs review" : student.reviewedCount === student.submissions.length ? "Reviewed" : "Submitted";
-      return <div key={student.key} style={{ border: "1px solid #cbd5e1", borderRadius: 12, padding: 10, marginBottom: 10, background: "#f8fafc" }}>
+      return <div key={student.key} style={{ border: "1px solid #dbe3f0", borderRadius: 14, padding: 12, marginBottom: 10, background: "#f8fafc", boxShadow: "0 4px 10px rgba(15, 23, 42, 0.04)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-          <div><div style={{ fontWeight: 900, fontSize: 16 }}>{student.code}</div><div style={{ fontSize: 12, color: "#475569" }}>{student.className} · {student.submissions.length} submissions · {student.needsReviewCount} need review · {student.reviewedCount} reviewed · latest {student.latest?.created_at ? new Date(student.latest.created_at).toLocaleString() : "Unknown"}</div><div style={{ fontSize: 12, color: "#64748b" }}>Strongest: {student.strongest ?? "-"} · Weakest: {student.weakest ?? "-"}</div></div>
-          <div><span style={{ fontSize: 11, fontWeight: 800 }}>{status}</span> <button type="button" onClick={() => setExpandedStudents((prev) => ({ ...prev, [student.key]: !expanded }))}>{expanded ? "Collapse" : "Expand"}</button></div>
+          <div><div style={{ fontWeight: 900, fontSize: 17, color: "#0f172a" }}>{student.code}</div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}><span style={{ fontSize: 11, borderRadius: 999, border: "1px solid #cbd5e1", padding: "3px 8px", fontWeight: 800, color: "#334155", background: "#fff" }}>{student.className}</span><span style={{ fontSize: 11, borderRadius: 999, border: "1px solid #cbd5e1", padding: "3px 8px", fontWeight: 800, color: status === "Needs review" ? "#92400e" : "#166534", background: "#fff" }}>{status}</span></div><div style={{ fontSize: 12, color: "#475569", marginTop: 6 }}>{student.submissions.length} submissions · {student.needsReviewCount} need review · latest {student.latest?.created_at ? new Date(student.latest.created_at).toLocaleString() : "Unknown"}</div></div>
+          <div><button type="button" onClick={() => setExpandedStudents((prev) => ({ ...prev, [student.key]: !expanded }))} style={{ border: "1px solid #cbd5e1", borderRadius: 999, padding: "7px 12px", fontSize: 12, fontWeight: 800, background: "#fff" }}>{expanded ? "Collapse" : "Expand"}</button></div>
         </div>
         {expanded ? <div style={{ marginTop: 8 }}>{student.submissions.map((s) => renderSubmission(s, true))}</div> : null}
       </div>;
