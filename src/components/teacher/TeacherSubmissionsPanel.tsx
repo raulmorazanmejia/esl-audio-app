@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import LazyAudioPlayer from "../LazyAudioPlayer";
 import { DraftsById, SubmissionRow } from "../TeacherDashboardTypes";
 import TeacherAnalyticsPanel from "./TeacherAnalyticsPanel";
+
+type SubmissionViewMode = "by_student" | "by_submission";
 
 type Props = {
   selectedClassName: string;
@@ -32,181 +34,92 @@ type Props = {
   submissionAnalytics: any;
   submissionsSuccess: string;
   submissionsError: string;
+  getSubmissionClassName: (submission: SubmissionRow) => string;
 };
 
 export default function TeacherSubmissionsPanel(p: Props) {
-  const studentFilterLabel = p.selectedStudentFilter ? `Showing submissions for ${p.selectedStudentFilter.name || "student"} (${p.selectedStudentFilter.code})` : "";
-
   const [loadedMediaBySubmission, setLoadedMediaBySubmission] = useState<Record<string, boolean>>({});
   const [historyStudentCode, setHistoryStudentCode] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<SubmissionViewMode>("by_student");
+  const [classFilter, setClassFilter] = useState<string>("__all_classes__");
+  const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({});
 
-  const loadMedia = (submissionId: string) => {
-    setLoadedMediaBySubmission((prev) => (prev[submissionId] ? prev : { ...prev, [submissionId]: true }));
-  };
-
+  const loadMedia = (submissionId: string) => setLoadedMediaBySubmission((prev) => (prev[submissionId] ? prev : { ...prev, [submissionId]: true }));
+  const studentFilterLabel = p.selectedStudentFilter ? `Showing submissions for ${p.selectedStudentFilter.name || "student"} (${p.selectedStudentFilter.code})` : "";
   const getSubmissionScore = (submission: SubmissionRow) => submission.teacher_score ?? submission.ai_score ?? 0;
-  const getStatusBadge = (score: number) => {
-    if (score <= 2) return { label: "🔴 Needs attention", bg: "#fef2f2", border: "#fecaca", color: "#991b1b" };
-    if (score === 3) return { label: "🟡 Average", bg: "#fffbeb", border: "#fde68a", color: "#92400e" };
-    return { label: "🟢 Strong", bg: "#f0fdf4", border: "#bbf7d0", color: "#166534" };
+  const getClassName = (submission: SubmissionRow) => p.getSubmissionClassName(submission) || "Unassigned / Unknown class";
+  const needsReview = (submission: SubmissionRow) => !(submission.teacher_comment || submission.feedback_audio_url || submission.feedback_url);
+  const activityTypeLabel = (submission: SubmissionRow) => submission.prompt?.assignment_type === "external_link" ? "External activity" : submission.response_mode === "video" ? "Video response" : submission.response_mode === "text" ? "Text response" : "Audio response";
+
+  const classOptions = useMemo(() => Array.from(new Set(p.filteredSubmissions.map(getClassName))).sort((a, b) => a.localeCompare(b)), [p.filteredSubmissions]);
+  const classFiltered = useMemo(() => classFilter === "__all_classes__" ? p.filteredSubmissions : p.filteredSubmissions.filter((s) => getClassName(s) === classFilter), [p.filteredSubmissions, classFilter]);
+
+  const students = useMemo(() => {
+    const grouped = new Map<string, { key: string; code: string; name: string; className: string; submissions: SubmissionRow[] }>();
+    classFiltered.forEach((s) => {
+      const code = s.student_code?.trim() || "Unknown";
+      const name = s.student_name?.trim() || "Student";
+      const key = `${code}__${name}`;
+      if (!grouped.has(key)) grouped.set(key, { key, code, name, className: getClassName(s), submissions: [] });
+      grouped.get(key)?.submissions.push(s);
+    });
+    return Array.from(grouped.values()).map((group) => {
+      const sorted = group.submissions.slice().sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      const reviewedCount = sorted.length - sorted.filter(needsReview).length;
+      const scores = sorted.map(getSubmissionScore);
+      return { ...group, submissions: sorted, needsReviewCount: sorted.filter(needsReview).length, reviewedCount, latest: sorted[0], strongest: scores.length ? Math.max(...scores) : null, weakest: scores.length ? Math.min(...scores) : null };
+    }).sort((a, b) => a.className.localeCompare(b.className) || a.code.localeCompare(b.code));
+  }, [classFiltered]);
+
+  const renderSubmission = (submission: SubmissionRow, compact = false) => {
+    const draft = p.drafts[submission.id];
+    const isExpanded = Boolean(p.expandedSubmissionIds[submission.id]);
+    return <article key={submission.id} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10, marginTop: compact ? 8 : 0, marginBottom: compact ? 0 : 8, background: "#fff" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{submission.prompt_text || "Untitled assignment"}</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: needsReview(submission) ? "#b45309" : "#166534" }}>{needsReview(submission) ? "Needs review" : "Reviewed"}</div>
+      </div>
+      <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{activityTypeLabel(submission)} · {submission.created_at ? new Date(submission.created_at).toLocaleString() : "Unknown date"} · Score: {getSubmissionScore(submission)}</div>
+      {submission.prompt?.assignment_type === "external_link" ? <div style={{ fontSize: 12, marginTop: 8 }}>Completed {submission.completion_marked_at ? `on ${new Date(submission.completion_marked_at).toLocaleString()}` : ""}</div> : submission.response_mode === "video" ? (submission.video_url ? loadedMediaBySubmission[submission.id] ? <video controls preload="none" playsInline style={{ width: "100%", marginTop: 8 }}><source src={submission.video_url} /></video> : <button type="button" onClick={() => loadMedia(submission.id)} style={{ marginTop: 8 }}>Load video</button> : <div style={{ fontSize: 12, marginTop: 8 }}>No video.</div>) : submission.response_mode === "text" ? <div style={{ fontSize: 13, marginTop: 8, border: "1px solid #e2e8f0", borderRadius: 8, padding: 8 }}>{submission.text_response || "No text response."}</div> : submission.audio_url ? <div style={{ marginTop: 8 }}><LazyAudioPlayer src={submission.audio_url} style={{ width: "100%" }} compact submissionIdForDebug={submission.id} /></div> : <div style={{ fontSize: 12, marginTop: 8 }}>No audio.</div>}
+      <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+        <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)}>{isExpanded ? "Hide details" : "View details"}</button>
+        <button type="button" onClick={() => setHistoryStudentCode((submission.student_code || submission.student_name) ?? null)}>Student history</button>
+      </div>
+      {isExpanded && draft ? <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+        <input type="range" min={1} max={5} value={draft.score} onChange={(e) => p.updateDraft(submission.id, { score: Number(e.target.value), savedMessage: "", error: "" })} />
+        <textarea value={draft.comment} onChange={(e) => p.updateDraft(submission.id, { comment: e.target.value, savedMessage: "", error: "" })} style={{ minHeight: 80 }} />
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button type="button" onClick={() => p.onSaveOverride(submission)}>Save override</button><button type="button" onClick={() => p.onStartTeacherRecording(submission.id)}>Start recording</button><button type="button" onClick={() => p.onStopTeacherRecording(submission.id)}>Stop recording</button><button type="button" onClick={() => p.onSaveTeacherAudio(submission)}>Save teacher audio</button><button type="button" onClick={() => p.onClearTeacherRecording(submission.id)}>Clear recording</button><button type="button" onClick={() => p.onDeleteSubmission(submission)} disabled={Boolean(p.deletingSubmissionById[submission.id])} style={{ color: "#b91c1c" }}>Delete submission</button>
+        </div>
+      </div> : null}
+    </article>;
   };
 
-  const insightSample = p.filteredSubmissions.filter((s) => (s.prompt?.assignment_type !== "external_link"));
-  const missingDetailRate = insightSample.filter((s) =>
-    [...(s.ai_improvements ?? []), s.ai_comment ?? ""].join(" ").toLowerCase().includes("detail")
-  ).length / (insightSample.length || 1);
-  const grammarMatches = insightSample.filter((s) => {
-    const text = [ ...(s.ai_grammar_feedback ?? []), ...(s.ai_improvements ?? []), s.ai_comment ?? "" ].join(" ").toLowerCase();
-    return text.includes("there is") || text.includes("there are") || text.includes("be verb") || text.includes("incomplete sentence");
-  }).length / (insightSample.length || 1);
-  const incorrectVisualRate = insightSample.filter((s) => (s.ai_picture_accuracy?.incorrect?.length ?? 0) > 0).length / (insightSample.length || 1);
-  const strongObjectRate = insightSample.filter((s) => (s.ai_picture_accuracy?.correct?.length ?? 0) > 0).length / (insightSample.length || 1);
-  const classInsights = [
-    missingDetailRate > 0.4 ? "Many students are missing details about actions." : "",
-    grammarMatches > 0.4 ? "Students are not using 'There is / There are' correctly." : "",
-    incorrectVisualRate > 0.4 ? "Students are making incorrect observations in the picture." : "",
-    strongObjectRate > 0.4 ? "Most students correctly identify objects." : "",
-  ].filter(Boolean).slice(0, 3);
-  const historySubmissions = historyStudentCode
-    ? p.filteredSubmissions
-      .filter((submission) => (submission.student_code || submission.student_name) === historyStudentCode)
-      .slice()
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-      .slice(0, 8)
-    : [];
-  const historyStudent = historySubmissions[0] || null;
+  const historySubmissions = historyStudentCode ? classFiltered.filter((s) => (s.student_code || s.student_name) === historyStudentCode).slice().sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()).slice(0, 8) : [];
 
   return <section>
     <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 8 }}>Submissions</div>
-
-    <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-      <button type="button" onClick={() => p.setReviewFilter("all")} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: p.reviewFilter === "all" ? "#0f172a" : "#fff", color: p.reviewFilter === "all" ? "#fff" : "#334155", fontWeight: 700, padding: "0 10px" }}>All</button>
-      <button type="button" onClick={() => p.setReviewFilter("needs_review")} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: p.reviewFilter === "needs_review" ? "#0f172a" : "#fff", color: p.reviewFilter === "needs_review" ? "#fff" : "#334155", fontWeight: 700, padding: "0 10px" }}>Needs review</button>
-      <button type="button" onClick={() => p.setReviewFilter("reviewed")} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: p.reviewFilter === "reviewed" ? "#0f172a" : "#fff", color: p.reviewFilter === "reviewed" ? "#fff" : "#334155", fontWeight: 700, padding: "0 10px" }}>Reviewed</button>
-      <button type="button" onClick={p.onRefreshSubmissions} disabled={p.isLoadingSubmissions} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 10px" }}>{p.isLoadingSubmissions ? "Refreshing..." : "Refresh"}</button>
+    <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}><span style={{ fontSize: 12, fontWeight: 700 }}>View:</span><button type="button" onClick={() => setViewMode("by_student")}>By student</button><button type="button" onClick={() => setViewMode("by_submission")}>By submission</button></div>
+      <button type="button" onClick={() => p.setReviewFilter("all")}>All</button><button type="button" onClick={() => p.setReviewFilter("needs_review")}>Needs review</button><button type="button" onClick={() => p.setReviewFilter("reviewed")}>Reviewed</button><button type="button" onClick={p.onRefreshSubmissions} disabled={p.isLoadingSubmissions}>{p.isLoadingSubmissions ? "Refreshing..." : "Refresh"}</button>
+      <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}><option value="__all_classes__">All classes</option>{classOptions.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+      <select value={p.submissionPromptFilter} onChange={(e) => p.setSubmissionPromptFilter(e.target.value)}><option value="__all_prompts__">All assignments</option>{p.submissionPromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}</select>
     </div>
-
-    <select value={p.submissionPromptFilter} onChange={(e) => p.setSubmissionPromptFilter(e.target.value)} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", padding: "0 8px", marginBottom: 8 }}>
-      <option value="__all_prompts__">All assignments</option>
-      {p.submissionPromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-    </select>
-
-    {p.selectedStudentFilter ? (
-      <div style={{ marginBottom: 10, padding: "8px 10px", border: "1px solid #bae6fd", borderRadius: 10, background: "#f0f9ff", display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#0c4a6e" }}>{studentFilterLabel}</div>
-        <button type="button" onClick={p.onClearStudentFilter} style={{ minHeight: 30, borderRadius: 8, border: "1px solid #bae6fd", background: "#fff", color: "#0c4a6e", fontWeight: 700, padding: "0 8px" }}>Clear</button>
-      </div>
-    ) : null}
-
-    {p.submissionsSuccess ? <div style={{ fontSize: 13, color: "#166534", marginBottom: 8 }}>{p.submissionsSuccess}</div> : null}
-    {p.submissionsError ? <div style={{ fontSize: 13, color: "#b91c1c", marginBottom: 8 }}>{p.submissionsError}</div> : null}
-
-    <TeacherAnalyticsPanel
-      selectedClassName={p.selectedClassName}
-      analyticsPromptFilter={p.analyticsPromptFilter}
-      setAnalyticsPromptFilter={p.setAnalyticsPromptFilter}
-      analyticsPromptOptions={p.analyticsPromptOptions}
-      submissionAnalytics={p.submissionAnalytics}
-    />
-    {classInsights.length ? (
-      <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 10, background: "#f8fafc", marginBottom: 10 }}>
-        <div style={{ fontWeight: 800, color: "#334155", marginBottom: 4 }}>Class Insights</div>
-        <ul style={{ margin: 0, paddingLeft: 18, color: "#475569", fontSize: 13, display: "grid", gap: 4 }}>
-          {classInsights.map((insight) => <li key={insight}>{insight}</li>)}
-        </ul>
-      </div>
-    ) : null}
-
-    {p.filteredSubmissions.length === 0 ? <div style={{ fontSize: 13, color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 12, background: "#f8fafc", padding: 10, marginBottom: 8 }}>{p.selectedStudentFilter ? "No submissions for the selected student and filter." : "No submissions for this class and filter selection."}</div> : null}
-
-    {p.filteredSubmissions.map((submission) => {
-      const draft = p.drafts[submission.id];
-      const isExpanded = Boolean(p.expandedSubmissionIds[submission.id]);
-      return <article key={submission.id} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 10, marginBottom: 8, background: "#fff" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", marginBottom: 4 }}>
-          <div style={{ fontWeight: 800, color: "#0f172a", fontSize: 15 }}>{submission.student_code || submission.student_name}</div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: submission.status === "needs_review" ? "#b45309" : "#166534" }}>{submission.status?.replace("_", " ") || "submitted"}</div>
+    {p.selectedStudentFilter ? <div>{studentFilterLabel} <button type="button" onClick={p.onClearStudentFilter}>Clear</button></div> : null}
+    {p.submissionsSuccess ? <div style={{ color: "#166534" }}>{p.submissionsSuccess}</div> : null}
+    {p.submissionsError ? <div style={{ color: "#b91c1c" }}>{p.submissionsError}</div> : null}
+    <div style={{ marginBottom: 10 }}><TeacherAnalyticsPanel selectedClassName={p.selectedClassName} analyticsPromptFilter={p.analyticsPromptFilter} setAnalyticsPromptFilter={p.setAnalyticsPromptFilter} analyticsPromptOptions={p.analyticsPromptOptions} submissionAnalytics={p.submissionAnalytics} /></div>
+    {viewMode === "by_submission" ? classFiltered.map((s) => renderSubmission(s)) : students.map((student) => {
+      const expanded = Boolean(expandedStudents[student.key]);
+      const status = student.needsReviewCount > 0 ? "Needs review" : student.reviewedCount === student.submissions.length ? "Reviewed" : "Submitted";
+      return <div key={student.key} style={{ border: "1px solid #cbd5e1", borderRadius: 12, padding: 10, marginBottom: 10, background: "#f8fafc" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <div><div style={{ fontWeight: 900, fontSize: 16 }}>{student.code}</div><div style={{ fontSize: 12, color: "#475569" }}>{student.className} · {student.submissions.length} submissions · {student.needsReviewCount} need review · {student.reviewedCount} reviewed · latest {student.latest?.created_at ? new Date(student.latest.created_at).toLocaleString() : "Unknown"}</div><div style={{ fontSize: 12, color: "#64748b" }}>Strongest: {student.strongest ?? "-"} · Weakest: {student.weakest ?? "-"}</div></div>
+          <div><span style={{ fontSize: 11, fontWeight: 800 }}>{status}</span> <button type="button" onClick={() => setExpandedStudents((prev) => ({ ...prev, [student.key]: !expanded }))}>{expanded ? "Collapse" : "Expand"}</button></div>
         </div>
-        <div style={{ fontSize: 13, color: "#64748b", marginBottom: 6 }}>{submission.prompt_text}</div>
-        <button type="button" onClick={() => setHistoryStudentCode((submission.student_code || submission.student_name) ?? null)} style={{ minHeight: 30, marginBottom: 6, borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 8px" }}>Student history</button>
-        <div style={{ fontSize: 12, color: "#475569", marginBottom: 8 }}>
-          {submission.prompt?.assignment_type === "external_link"
-            ? "External activity completion"
-            : submission.response_mode === "video"
-              ? "Video response"
-              : submission.response_mode === "text"
-                ? "Text response"
-                : "Audio response"}
-        </div>
-        <div style={{ marginBottom: 8 }}>
-          {(() => {
-            const badge = getStatusBadge(getSubmissionScore(submission));
-            return <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, border: `1px solid ${badge.border}`, background: badge.bg, color: badge.color }}>{badge.label}</span>;
-          })()}
-        </div>
-        {submission.prompt?.assignment_type === "external_link" ? (
-          <div style={{ fontSize: 13, color: "#0f766e", border: "1px solid #99f6e4", borderRadius: 10, background: "#f0fdfa", padding: 10 }}>
-            Marked completed by student {submission.completion_marked_at ? `on ${new Date(submission.completion_marked_at).toLocaleString()}` : ""}.
-          </div>
-        ) : submission.response_mode === "video" ? (submission.video_url
-          ? loadedMediaBySubmission[submission.id]
-            ? <video controls preload="none" playsInline style={{ width: "100%" }}><source src={submission.video_url} /></video>
-            : <button type="button" onClick={() => loadMedia(submission.id)} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 10px" }}>Load video</button>
-          : <div style={{ fontSize: 13, color: "#64748b" }}>No video.</div>) : submission.response_mode === "text" ? (
-          <div style={{ fontSize: 14, color: "#334155", border: "1px solid #e2e8f0", borderRadius: 10, background: "#f8fafc", padding: 10, whiteSpace: "pre-wrap" }}>
-            {submission.text_response || "No text response."}
-          </div>
-        ) : (submission.audio_url
-          ? <LazyAudioPlayer src={submission.audio_url} style={{ width: "100%" }} compact submissionIdForDebug={submission.id} />
-          : <div style={{ fontSize: 13, color: "#64748b" }}>No audio.</div>)}
-        <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)} style={{ minHeight: 34, marginTop: 8, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700, padding: "0 10px" }}>{isExpanded ? "Hide details" : "View details"}</button>
-        {isExpanded && draft ? <>
-          <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
-            <input type="range" min={1} max={5} value={draft.score} onChange={(e) => p.updateDraft(submission.id, { score: Number(e.target.value), savedMessage: "", error: "" })} />
-            <textarea value={draft.comment} onChange={(e) => p.updateDraft(submission.id, { comment: e.target.value, savedMessage: "", error: "" })} style={{ minHeight: 80, borderRadius: 10, border: "1px solid #dbe3f0", background: "#f8fafc", padding: 10 }} />
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              <button type="button" onClick={() => p.onSaveOverride(submission)} style={{ minHeight: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700 }}>Save override</button>
-              <button type="button" onClick={() => p.onStartTeacherRecording(submission.id)} style={{ minHeight: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700 }}>Start recording</button>
-              <button type="button" onClick={() => p.onStopTeacherRecording(submission.id)} style={{ minHeight: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700 }}>Stop recording</button>
-              <button type="button" onClick={() => p.onSaveTeacherAudio(submission)} style={{ minHeight: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700 }}>Save teacher audio</button>
-              <button type="button" onClick={() => p.onClearTeacherRecording(submission.id)} style={{ minHeight: 32, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700 }}>Clear recording</button>
-              <button type="button" onClick={() => p.onDeleteSubmission(submission)} disabled={Boolean(p.deletingSubmissionById[submission.id])} style={{ minHeight: 32, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontWeight: 700 }}>Delete submission</button>
-            </div>
-          </div>
-        </> : null}
-      </article>;
+        {expanded ? <div style={{ marginTop: 8 }}>{student.submissions.map((s) => renderSubmission(s, true))}</div> : null}
+      </div>;
     })}
-    {historyStudentCode && historyStudent ? (
-      <aside style={{ position: "sticky", bottom: 8, border: "1px solid #bfdbfe", borderRadius: 12, background: "#f8fbff", padding: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontWeight: 900, color: "#1e3a8a" }}>Student History</div>
-          <button type="button" onClick={() => setHistoryStudentCode(null)} style={{ minHeight: 28, borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff" }}>Close</button>
-        </div>
-        <div style={{ fontSize: 13, color: "#334155", marginBottom: 8 }}>
-          <strong>{historyStudent.student_name || historyStudent.student_code || "Student"}</strong> · {historyStudent.student_code || "No code"} · {p.selectedClassName}
-        </div>
-        <div style={{ display: "grid", gap: 8 }}>
-          {historySubmissions.map((submission) => {
-            const score = getSubmissionScore(submission);
-            const badge = getStatusBadge(score);
-            return (
-              <div key={`history-${submission.id}`} style={{ border: "1px solid #dbeafe", borderRadius: 10, background: "#fff", padding: 8 }}>
-                <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 13 }}>{submission.prompt_text || "Untitled activity"}</div>
-                <div style={{ fontSize: 12, color: "#64748b" }}>{submission.created_at ? new Date(submission.created_at).toLocaleString() : "Unknown date"} · Score: {score}</div>
-                <span style={{ display: "inline-block", marginTop: 4, fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, border: `1px solid ${badge.border}`, background: badge.bg, color: badge.color }}>{badge.label}</span>
-                {submission.ai_comment ? <div style={{ fontSize: 12, color: "#334155", marginTop: 4 }}>AI summary: {submission.ai_comment}</div> : null}
-                {submission.response_mode === "video" && submission.video_url ? (
-                  loadedMediaBySubmission[submission.id]
-                    ? <video controls preload="none" playsInline style={{ width: "100%", marginTop: 6 }}><source src={submission.video_url} /></video>
-                    : <button type="button" onClick={() => loadMedia(submission.id)} style={{ minHeight: 30, marginTop: 6, borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", fontWeight: 700 }}>Load video</button>
-                ) : null}
-                {submission.response_mode !== "video" && submission.audio_url ? <div style={{ marginTop: 6 }}><LazyAudioPlayer src={submission.audio_url} style={{ width: "100%" }} compact submissionIdForDebug={submission.id} /></div> : null}
-              </div>
-            );
-          })}
-        </div>
-      </aside>
-    ) : null}
-
+    {historySubmissions.length ? <aside><div style={{ fontWeight: 700 }}>Student History <button type="button" onClick={() => setHistoryStudentCode(null)}>Close</button></div>{historySubmissions.map((s) => <div key={`h-${s.id}`} style={{ fontSize: 12 }}>{s.prompt_text || "Untitled"} · {s.created_at ? new Date(s.created_at).toLocaleString() : "Unknown"}</div>)}</aside> : null}
   </section>;
 }

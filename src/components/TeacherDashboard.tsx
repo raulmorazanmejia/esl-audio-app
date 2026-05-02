@@ -2413,6 +2413,7 @@ export default function TeacherDashboard() {
                   submissionAnalytics={submissionAnalytics}
                   submissionsSuccess={submissionsSuccess}
                   submissionsError={submissionsError}
+                  getSubmissionClassName={getSubmissionClassName}
                 />
               </section>
             ) : null}
