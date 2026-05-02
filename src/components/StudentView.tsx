@@ -830,26 +830,6 @@ function normalizePictureAccuracy(
   return normalized;
 }
 
-type LessonBlock = {
-  type: "intro" | "notes" | "external_links" | "speaking" | "text_response";
-  title: string;
-  content?: string;
-  instructions?: string;
-  prompt?: string;
-  suggestedTime?: string;
-  links?: { title: string; url: string }[];
-};
-
-function parseLessonBlocks(value?: string | null): LessonBlock[] {
-  if (!value) return [];
-  try {
-    const data = JSON.parse(value);
-    if (!Array.isArray(data)) return [];
-    return data.filter((b) => b && typeof b === "object" && typeof b.type === "string" && typeof b.title === "string");
-  } catch {
-    return [];
-  }
-}
 
 type StudentViewProps = {
   onEntryStateChange?: (isEntryState: boolean) => void;
