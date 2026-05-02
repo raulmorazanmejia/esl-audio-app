@@ -8,7 +8,7 @@ import { parseExternalActivityData, serializeExternalActivityData } from "../lib
 type PromptRow = {
   id: string;
   prompt_text: string | null;
-  assignment_type: "audio_response" | "video_response" | "text_response" | "external_link" | "guided_speaking" | "multiple_choice" | null;
+  assignment_type: "audio_response" | "video_response" | "text_response" | "external_link" | "guided_speaking" | "multiple_choice" | "lesson" | null;
   external_url: string | null;
   class_name: string | null;
   suggested_time: string | null;
@@ -780,6 +780,7 @@ function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
   if (type === "text_response") return "Text response";
   if (type === "multiple_choice") return "Quiz";
   if (type === "external_link") return "External link";
+  if (type === "lesson") return "Lesson";
   return "Speaking / audio";
 }
 
@@ -806,6 +807,27 @@ function normalizePictureAccuracy(
   };
   if (!normalized.correct.length && !normalized.missing.length && !normalized.incorrect.length) return null;
   return normalized;
+}
+
+type LessonBlock = {
+  type: "intro" | "notes" | "external_links" | "speaking" | "text_response";
+  title: string;
+  content?: string;
+  instructions?: string;
+  prompt?: string;
+  suggestedTime?: string;
+  links?: { title: string; url: string }[];
+};
+
+function parseLessonBlocks(value?: string | null): LessonBlock[] {
+  if (!value) return [];
+  try {
+    const data = JSON.parse(value);
+    if (!Array.isArray(data)) return [];
+    return data.filter((b) => b && typeof b === "object" && typeof b.type === "string" && typeof b.title === "string");
+  } catch {
+    return [];
+  }
 }
 
 type StudentViewProps = {
@@ -859,6 +881,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const [showIosInstallPanel, setShowIosInstallPanel] = useState(false);
   const [isCodeFieldFocused, setIsCodeFieldFocused] = useState(false);
   const [openedExternalLinks, setOpenedExternalLinks] = useState<string[]>([]);
+  const [lessonStepIndex, setLessonStepIndex] = useState(0);
+  const [completedLessonSteps, setCompletedLessonSteps] = useState<number[]>([]);
   const [demoSubmissionIndex, setDemoSubmissionIndex] = useState<Record<string, SubmissionRow>>({});
   const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
   const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
@@ -885,6 +909,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const isVideoAssignment = activeAssignmentType === "video_response";
   const isExternalAssignment = activeAssignmentType === "external_link";
   const isTextAssignment = activeAssignmentType === "text_response";
+  const isLessonAssignment = activeAssignmentType === "lesson";
+  const lessonBlocks = useMemo(() => (isLessonAssignment ? parseLessonBlocks(activePrompt?.example_text) : []), [isLessonAssignment, activePrompt?.example_text]);
+  const activeLessonBlock = lessonBlocks[lessonStepIndex] || null;
+  const lessonProgressLabel = `Step ${Math.min(lessonStepIndex + 1, Math.max(lessonBlocks.length,1))} of ${lessonBlocks.length || 1}`;
   const welcomeHeroImageUrl = useMemo(() => {
     return studentWelcomeImageUrl?.trim() || ENV_STUDENT_WELCOME_IMAGE_URL || DEFAULT_WELCOME_IMAGE;
   }, [studentWelcomeImageUrl]);
@@ -1488,6 +1516,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
   useEffect(() => {
     setOpenedExternalLinks([]);
+    setLessonStepIndex(0);
+    setCompletedLessonSteps([]);
   }, [activePrompt?.id]);
 
   const openExternalLink = useCallback((url: string) => {
@@ -2561,7 +2591,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
         <div style={{ ...styles.sectionTitle, fontSize: "28px", marginTop: "10px", letterSpacing: "0.01em" }}>{activePrompt?.prompt_text || "Activity"}</div>
         <div style={styles.activityProgressWrap}>
-          <div style={styles.activityProgressLabel}>Task 1 of 1</div>
+          <div style={styles.activityProgressLabel}>{isLessonAssignment ? lessonProgressLabel : "Task 1 of 1"}</div>
           <div style={styles.activityProgressTrack}>
             <div style={styles.activityProgressFill} />
           </div>
@@ -2570,7 +2600,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         {activePrompt?.prompt_image_url ? <img src={activePrompt.prompt_image_url} alt="Assignment image" style={styles.promptImage} /> : null}
         {!isExternalAssignment ? (
           <div style={styles.promptCard}>
-            {activePrompt?.example_text || activePrompt?.prompt_text || "Select an activity above"}
+            {isLessonAssignment ? (activeLessonBlock?.content || activeLessonBlock?.prompt || activeLessonBlock?.instructions || activeLessonBlock?.title || "Select a step") : (activePrompt?.example_text || activePrompt?.prompt_text || "Select an activity above")}
           </div>
         ) : null}
         {activePrompt?.suggested_time ? (
@@ -2809,6 +2839,17 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         {rosterStudent && !activePrompt ? <div style={styles.helperText}>Select an activity above to get started.</div> : null}
         {!recordedBlob && !hasSubmittedActivePrompt && rosterStudent && activePrompt && !isVideoAssignment && !isExternalAssignment && !isTextAssignment ? <div style={styles.helperText}>Record your answer to get feedback.</div> : null}
 
+
+        {isLessonAssignment && lessonBlocks.length ? (
+          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => setLessonStepIndex((v) => Math.max(0, v - 1))} disabled={lessonStepIndex === 0} style={styles.backButton}>Back step</button>
+            <button type="button" onClick={() => {
+              setCompletedLessonSteps((c) => Array.from(new Set([...c, lessonStepIndex])));
+              setLessonStepIndex((v) => Math.min(lessonBlocks.length - 1, v + 1));
+            }} disabled={lessonStepIndex >= lessonBlocks.length - 1} style={styles.primaryButton}>Next step</button>
+            <div style={{ display: "flex", alignItems: "center", color: "#475569", fontWeight: 700 }}>Completed {completedLessonSteps.length}/{lessonBlocks.length}</div>
+          </div>
+        ) : null}
         {statusMessage ? (
           <div style={{ ...styles.message, color: "#64748b" }}>{statusMessage}</div>
         ) : null}
