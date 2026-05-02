@@ -43,6 +43,29 @@ export default function TeacherSubmissionsPanel(p: Props) {
     setLoadedMediaBySubmission((prev) => (prev[submissionId] ? prev : { ...prev, [submissionId]: true }));
   };
 
+  const getSubmissionScore = (submission: SubmissionRow) => submission.teacher_score ?? submission.ai_score ?? 0;
+  const getStatusBadge = (score: number) => {
+    if (score <= 2) return { label: "🔴 Needs attention", bg: "#fef2f2", border: "#fecaca", color: "#991b1b" };
+    if (score === 3) return { label: "🟡 Average", bg: "#fffbeb", border: "#fde68a", color: "#92400e" };
+    return { label: "🟢 Strong", bg: "#f0fdf4", border: "#bbf7d0", color: "#166534" };
+  };
+
+  const insightSample = p.filteredSubmissions.filter((s) => (s.prompt?.assignment_type !== "external_link"));
+  const missingDetailRate = insightSample.filter((s) =>
+    [...(s.ai_improvements ?? []), s.ai_comment ?? ""].join(" ").toLowerCase().includes("detail")
+  ).length / (insightSample.length || 1);
+  const grammarMatches = insightSample.filter((s) => {
+    const text = [ ...(s.ai_grammar_feedback ?? []), ...(s.ai_improvements ?? []), s.ai_comment ?? "" ].join(" ").toLowerCase();
+    return text.includes("there is") || text.includes("there are") || text.includes("be verb") || text.includes("incomplete sentence");
+  }).length / (insightSample.length || 1);
+  const incorrectVisualRate = insightSample.filter((s) => (s.ai_picture_accuracy?.incorrect?.length ?? 0) > 0).length / (insightSample.length || 1);
+  const strongObjectRate = insightSample.filter((s) => (s.ai_picture_accuracy?.correct?.length ?? 0) > 0).length / (insightSample.length || 1);
+  const classInsights = [
+    missingDetailRate > 0.4 ? "Many students are missing details about actions." : "",
+    grammarMatches > 0.4 ? "Students are not using 'There is / There are' correctly." : "",
+    incorrectVisualRate > 0.4 ? "Students are making incorrect observations in the picture." : "",
+    strongObjectRate > 0.4 ? "Most students correctly identify objects." : "",
+  ].filter(Boolean).slice(0, 3);
 
   return <section>
     <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 8 }}>Submissions</div>
@@ -76,6 +99,14 @@ export default function TeacherSubmissionsPanel(p: Props) {
       analyticsPromptOptions={p.analyticsPromptOptions}
       submissionAnalytics={p.submissionAnalytics}
     />
+    {classInsights.length ? (
+      <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 10, background: "#f8fafc", marginBottom: 10 }}>
+        <div style={{ fontWeight: 800, color: "#334155", marginBottom: 4 }}>Class Insights</div>
+        <ul style={{ margin: 0, paddingLeft: 18, color: "#475569", fontSize: 13, display: "grid", gap: 4 }}>
+          {classInsights.map((insight) => <li key={insight}>{insight}</li>)}
+        </ul>
+      </div>
+    ) : null}
 
     {p.filteredSubmissions.length === 0 ? <div style={{ fontSize: 13, color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 12, background: "#f8fafc", padding: 10, marginBottom: 8 }}>{p.selectedStudentFilter ? "No submissions for the selected student and filter." : "No submissions for this class and filter selection."}</div> : null}
 
@@ -96,6 +127,12 @@ export default function TeacherSubmissionsPanel(p: Props) {
               : submission.response_mode === "text"
                 ? "Text response"
                 : "Audio response"}
+        </div>
+        <div style={{ marginBottom: 8 }}>
+          {(() => {
+            const badge = getStatusBadge(getSubmissionScore(submission));
+            return <span style={{ display: "inline-block", fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, border: `1px solid ${badge.border}`, background: badge.bg, color: badge.color }}>{badge.label}</span>;
+          })()}
         </div>
         {submission.prompt?.assignment_type === "external_link" ? (
           <div style={{ fontSize: 13, color: "#0f766e", border: "1px solid #99f6e4", borderRadius: 10, background: "#f0fdfa", padding: 10 }}>

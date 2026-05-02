@@ -51,6 +51,9 @@ export type SubmissionRow = {
   transcript: string | null;
   ai_score: number | null;
   ai_comment: string | null;
+  ai_grammar_feedback?: string[] | null;
+  ai_improvements?: string[] | null;
+  ai_picture_accuracy?: { correct?: string[]; missing?: string[]; incorrect?: string[] } | null;
   teacher_score: number | null;
   teacher_comment: string | null;
   student_code: string | null;

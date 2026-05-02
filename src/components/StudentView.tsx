@@ -828,6 +828,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const [assignedPrompts, setAssignedPrompts] = useState<PromptRow[]>([]);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [submissionForActivePrompt, setSubmissionForActivePrompt] = useState<SubmissionRow | null>(null);
+  const [submissionHistoryForPrompt, setSubmissionHistoryForPrompt] = useState<SubmissionRow[]>([]);
   const [completedPromptKeys, setCompletedPromptKeys] = useState<string[]>([]);
   const [submissionStatusIndex, setSubmissionStatusIndex] = useState<Record<string, { hasSubmission: boolean; hasFeedback: boolean }>>({});
 
@@ -1445,7 +1446,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       const response = await fetch(`/api/student-submissions?${params.toString()}`);
       const payload = await response.json();
       const error = !response.ok ? { message: payload?.error || "Failed to load submission." } : null;
-      const data = (payload?.data ?? [])[0] ?? null;
+      const rows = (payload?.data ?? []) as SubmissionRow[];
+      const data = rows[0] ?? null;
 
       if (error) {
         return null;
@@ -1453,6 +1455,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
       const submission = (data as SubmissionRow | null) || null;
       setSubmissionForActivePrompt(submission);
+      setSubmissionHistoryForPrompt(rows);
       return submission;
     },
     [demoSubmissionIndex, isDemoMode]
@@ -2290,6 +2293,18 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
   const micLabel = isRecording ? "Stop recording" : "Start recording";
   const primaryFeedbackScore = submissionForActivePrompt?.teacher_score ?? submissionForActivePrompt?.ai_score;
+  const progressScores = submissionHistoryForPrompt
+    .slice(0, 3)
+    .map((row) => row.teacher_score ?? row.ai_score)
+    .filter((value): value is number => typeof value === "number")
+    .reverse();
+  const progressTrendLabel = useMemo(() => {
+    if (progressScores.length < 2) return "";
+    const delta = progressScores[progressScores.length - 1] - progressScores[0];
+    if (delta > 0) return "↑ improving";
+    if (delta < 0) return "↓ needs attention";
+    return "→ stable";
+  }, [progressScores]);
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
   const aiStrengths = submissionForActivePrompt?.ai_strengths?.filter(Boolean) || [];
   const aiImprovements = submissionForActivePrompt?.ai_improvements?.filter(Boolean) || [];
@@ -2814,6 +2829,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                   <div style={styles.scoreBadge}>Score: {primaryFeedbackScore} / 5</div>
                 ) : null}
               </div>
+              {progressScores.length >= 2 ? <div style={{ ...styles.feedbackPanelText, marginBottom: 8 }}>Progress: {progressScores.join(" → ")} {progressTrendLabel}</div> : null}
               {aiScoreReason ? (
                 <div style={styles.feedbackPanel}>
                   <div style={styles.feedbackPanelLabel}>Score + reason</div>
