@@ -4,6 +4,7 @@ import TeacherClassesOverview from "./teacher/TeacherClassesOverview";
 import TeacherClassDetail from "./teacher/TeacherClassDetail";
 import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
+import type { CategoryId as ActivityCategoryId } from "./teacher/TeacherAssignmentLibrary";
 import TeacherSubmissionsPanel from "./teacher/TeacherSubmissionsPanel";
 import { AssignmentActivityType, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
@@ -665,6 +666,7 @@ export default function TeacherDashboard() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [teacherScreen, setTeacherScreen] = useState<"dashboard" | "activities" | "classes" | "submissions" | "settings" | "demo">("dashboard");
+  const [activeActivityCategoryId, setActiveActivityCategoryId] = useState<ActivityCategoryId>("all");
   const [newClassName, setNewClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentCode, setNewStudentCode] = useState("");
@@ -915,6 +917,21 @@ export default function TeacherDashboard() {
 
   const unassignedPrompts = useMemo(() => {
     return sortedPrompts.filter((prompt) => !(prompt.prompt_assignments?.length));
+  }, [sortedPrompts]);
+
+  const activityCategoryCounts = useMemo(() => {
+    const next: Record<ActivityCategoryId, number> = { all: 0, speaking: 0, picture: 0, text: 0, external: 0, video: 0, ai_lessons: 0 };
+    sortedPrompts.forEach((prompt) => {
+      const hasImage = Boolean(prompt.prompt_image_url || prompt.prompt_image_path);
+      next.all += 1;
+      if (prompt.assignment_type === "audio_response" && !hasImage) next.speaking += 1;
+      else if (prompt.assignment_type === "audio_response" && hasImage) next.picture += 1;
+      else if (prompt.assignment_type === "text_response") next.text += 1;
+      else if (prompt.assignment_type === "external_link") next.external += 1;
+      else if (prompt.assignment_type === "video_response") next.video += 1;
+      else if (prompt.assignment_type === "guided_speaking" || prompt.assignment_type === "multiple_choice") next.ai_lessons += 1;
+    });
+    return next;
   }, [sortedPrompts]);
 
   const classNameOptions = useMemo(() => {
@@ -2116,26 +2133,68 @@ export default function TeacherDashboard() {
               { key: "demo", label: "Demo" },
               { key: "settings", label: "Settings" },
             ].map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setTeacherScreen(item.key as "dashboard" | "activities" | "classes" | "submissions" | "settings" | "demo")}
-                style={{
-                  width: "100%",
-                  textAlign: "left",
-                  minHeight: 42,
-                  borderRadius: 12,
-                  marginBottom: 8,
-                  border: "1px solid transparent",
-                  padding: "0 12px",
-                  fontWeight: 800,
-                  background: teacherScreen === item.key ? "#4f46e5" : "transparent",
-                  color: "#fff",
-                  cursor: "pointer",
-                }}
-              >
-                {item.label}
-              </button>
+              <div key={item.key}>
+                <button
+                  type="button"
+                  onClick={() => setTeacherScreen(item.key as "dashboard" | "activities" | "classes" | "submissions" | "settings" | "demo")}
+                  style={{
+                    width: "100%",
+                    textAlign: "left",
+                    minHeight: 42,
+                    borderRadius: 12,
+                    marginBottom: 8,
+                    border: "1px solid transparent",
+                    padding: "0 12px",
+                    fontWeight: 800,
+                    background: teacherScreen === item.key ? "#4f46e5" : "transparent",
+                    color: "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  {item.label}
+                </button>
+                {item.key === "activities" && teacherScreen === "activities" ? (
+                  <div style={{ margin: "-2px 0 10px 12px", display: "grid", gap: 4 }}>
+                    {[
+                      ["all", "All activities"],
+                      ["speaking", "Speaking / Audio"],
+                      ["picture", "Describe a picture"],
+                      ["text", "Text response"],
+                      ["external", "External link"],
+                      ["video", "Video response"],
+                      ["ai_lessons", "AI activities / Lessons"],
+                    ].map(([key, label]) => {
+                      const categoryKey = key as ActivityCategoryId;
+                      const isActive = activeActivityCategoryId === categoryKey;
+                      return (
+                        <button
+                          key={categoryKey}
+                          type="button"
+                          onClick={() => setActiveActivityCategoryId(categoryKey)}
+                          style={{
+                            width: "100%",
+                            minHeight: 30,
+                            borderRadius: 10,
+                            border: "1px solid transparent",
+                            background: isActive ? "rgba(148, 163, 184, 0.18)" : "transparent",
+                            color: "#dbeafe",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            padding: "0 8px",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <span>{label}</span>
+                          <span style={{ borderRadius: 999, border: "1px solid rgba(191,219,254,0.5)", padding: "1px 6px", fontSize: 11 }}>{activityCategoryCounts[categoryKey]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             ))}
           </aside>
 
@@ -2338,6 +2397,7 @@ export default function TeacherDashboard() {
                 removingPromptFromClassById={removingPromptFromClassById}
                 deletingPromptById={deletingPromptById}
                 onGoToClasses={() => setTeacherScreen("classes")}
+                activeCategoryId={activeActivityCategoryId}
               />
             ) : null}
 
