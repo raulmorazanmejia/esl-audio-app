@@ -12,6 +12,7 @@ import { ExternalActivityLink, isValidExternalUrl, serializeExternalActivityData
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, ai_grammar_feedback, ai_improvements, ai_picture_accuracy, teacher_score, teacher_comment, student_code, prompt:prompts(assignment_type)";
 const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
+type ActivityCategoryId = "all" | "speaking" | "picture" | "text" | "external" | "video";
 
 const styles = {
   page: {
@@ -640,6 +641,17 @@ function demoActivityTypeLabel(type: DemoConfig["activities"][number]["type"], h
   return "Speaking / Audio response";
 }
 
+function promptMatchesActivityCategory(categoryId: ActivityCategoryId, prompt: PromptRow) {
+  const hasImage = Boolean(prompt.prompt_image_url || prompt.prompt_image_path);
+  if (categoryId === "all") return true;
+  if (categoryId === "speaking") return prompt.assignment_type === "audio_response" && !hasImage;
+  if (categoryId === "picture") return prompt.assignment_type === "audio_response" && hasImage;
+  if (categoryId === "text") return prompt.assignment_type === "text_response";
+  if (categoryId === "external") return prompt.assignment_type === "external_link";
+  if (categoryId === "video") return prompt.assignment_type === "video_response";
+  return false;
+}
+
 export default function TeacherDashboard() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -665,6 +677,8 @@ export default function TeacherDashboard() {
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
   const [teacherScreen, setTeacherScreen] = useState<"dashboard" | "activities" | "classes" | "submissions" | "settings" | "demo">("dashboard");
+  const [isActivitiesSidebarOpen, setIsActivitiesSidebarOpen] = useState(true);
+  const [activeActivityCategoryId, setActiveActivityCategoryId] = useState<ActivityCategoryId>("all");
   const [newClassName, setNewClassName] = useState("");
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentCode, setNewStudentCode] = useState("");
@@ -915,6 +929,13 @@ export default function TeacherDashboard() {
 
   const unassignedPrompts = useMemo(() => {
     return sortedPrompts.filter((prompt) => !(prompt.prompt_assignments?.length));
+  }, [sortedPrompts]);
+  const activityCategoryCounts = useMemo(() => {
+    const ids: ActivityCategoryId[] = ["all", "speaking", "picture", "text", "external", "video"];
+    return ids.reduce<Record<ActivityCategoryId, number>>((acc, id) => {
+      acc[id] = sortedPrompts.filter((prompt) => promptMatchesActivityCategory(id, prompt)).length;
+      return acc;
+    }, { all: 0, speaking: 0, picture: 0, text: 0, external: 0, video: 0 });
   }, [sortedPrompts]);
 
   const classNameOptions = useMemo(() => {
@@ -2110,7 +2131,6 @@ export default function TeacherDashboard() {
             <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 18 }}>ESL Hub</div>
             {[
               { key: "dashboard", label: "Dashboard" },
-              { key: "activities", label: "Activities" },
               { key: "classes", label: "Classes" },
               { key: "submissions", label: "Submissions" },
               { key: "demo", label: "Demo" },
@@ -2137,6 +2157,26 @@ export default function TeacherDashboard() {
                 {item.label}
               </button>
             ))}
+            <button type="button" onClick={() => { setTeacherScreen("activities"); setIsActivitiesSidebarOpen((prev) => !prev); }} style={{ width: "100%", textAlign: "left", minHeight: 42, borderRadius: 12, marginBottom: 8, border: "1px solid transparent", padding: "0 12px", fontWeight: 800, background: teacherScreen === "activities" ? "#4f46e5" : "transparent", color: "#fff", cursor: "pointer" }}>
+              Activities {isActivitiesSidebarOpen ? "▾" : "▸"}
+            </button>
+            {isActivitiesSidebarOpen ? (
+              <div style={{ marginTop: -2, marginBottom: 8, display: "grid", gap: 6, paddingLeft: 10 }}>
+                {[
+                  { id: "all", label: "All" },
+                  { id: "speaking", label: "Speaking" },
+                  { id: "picture", label: "Picture" },
+                  { id: "text", label: "Text" },
+                  { id: "external", label: "External" },
+                  { id: "video", label: "Video" },
+                ].map((category) => (
+                  <button key={category.id} type="button" onClick={() => { setTeacherScreen("activities"); setActiveActivityCategoryId(category.id as ActivityCategoryId); }} style={{ width: "100%", minHeight: 32, borderRadius: 10, border: "1px solid rgba(148,163,184,0.35)", background: activeActivityCategoryId === category.id && teacherScreen === "activities" ? "rgba(99,102,241,0.32)" : "rgba(15,23,42,0.28)", color: "#fff", padding: "0 8px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
+                    <span style={{ fontSize: 12 }}>{category.label}</span>
+                    <span style={{ fontSize: 11, border: "1px solid rgba(203,213,225,0.45)", borderRadius: 999, padding: "1px 6px", background: "rgba(255,255,255,0.08)" }}>{activityCategoryCounts[category.id as ActivityCategoryId]}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </aside>
 
           <main>
@@ -2338,6 +2378,7 @@ export default function TeacherDashboard() {
                 removingPromptFromClassById={removingPromptFromClassById}
                 deletingPromptById={deletingPromptById}
                 onGoToClasses={() => setTeacherScreen("classes")}
+                selectedCategoryId={activeActivityCategoryId}
               />
             ) : null}
 

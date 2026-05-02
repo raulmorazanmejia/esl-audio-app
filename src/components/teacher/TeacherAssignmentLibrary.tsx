@@ -36,6 +36,7 @@ type Props = {
   removingPromptFromClassById: Record<string, boolean>;
   deletingPromptById: Record<string, boolean>;
   onGoToClasses: () => void;
+  selectedCategoryId: CategoryId;
 };
 
 type CategoryId = "speaking" | "picture" | "text" | "external" | "video" | "all";
@@ -144,9 +145,9 @@ function instructionsPreview(value?: string | null) {
 }
 
 export default function TeacherAssignmentLibrary(props: Props) {
-  const [activeCategoryId, setActiveCategoryId] = React.useState<CategoryId | null>(null);
   const [isCreatingInCategory, setIsCreatingInCategory] = React.useState(false);
 
+  const activeCategoryId = props.selectedCategoryId;
   const activeCategory = activityCategories.find((category) => category.id === activeCategoryId) ?? null;
   const categoryCounts = React.useMemo(() => {
     return activityCategories.reduce<Record<CategoryId, number>>((acc, category) => {
@@ -156,7 +157,6 @@ export default function TeacherAssignmentLibrary(props: Props) {
   }, [props.prompts]);
 
   const categoryPrompts = React.useMemo(() => {
-    if (!activeCategoryId) return [];
     return props.prompts.filter((prompt) => categoryMatchesPrompt(activeCategoryId, prompt));
   }, [activeCategoryId, props.prompts]);
 
@@ -201,51 +201,12 @@ export default function TeacherAssignmentLibrary(props: Props) {
         {props.promptSuccess ? <div style={{ fontSize: 13, color: "#166534", marginBottom: 10 }}>{props.promptSuccess}</div> : null}
         {props.promptError ? <div style={{ fontSize: 13, color: "#b91c1c", marginBottom: 10 }}>{props.promptError}</div> : null}
 
-        {!activeCategory ? (
+        {activeCategory ? (
           <>
-            <div style={{ fontWeight: 900, fontSize: 22 }}>Activity categories</div>
-            <div style={{ color: "#64748b", fontSize: 13, marginTop: 4, marginBottom: 12 }}>Choose a category to create and manage activities in the same workspace.</div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-              {activityCategories.map((category) => (
-                <button
-                  key={category.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveCategoryId(category.id);
-                    setIsCreatingInCategory(false);
-                  }}
-                  style={{ textAlign: "left", borderRadius: 14, border: "1px solid #e2e8f0", background: "#fff", padding: 12, cursor: "pointer" }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 18 }} aria-hidden="true">{category.icon}</span>
-                      <div style={{ fontWeight: 800, fontSize: 14, color: "#0f172a" }}>{category.title}</div>
-                    </div>
-                    <div style={{ fontSize: 12, color: "#334155", border: "1px solid #cbd5e1", borderRadius: 999, padding: "2px 8px", fontWeight: 700 }}>{categoryCounts[category.id]}</div>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>{category.description}</div>
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveCategoryId(null);
-                setIsCreatingInCategory(false);
-              }}
-              style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", padding: "0 10px", fontSize: 12, fontWeight: 700 }}
-            >
-              Back to categories
-            </button>
-
-            <div style={{ marginTop: 12, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
               <div>
                 <div style={{ fontWeight: 900, fontSize: 22 }}>{activeCategory.title}</div>
-                <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>{activeCategory.description}</div>
+                <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>{activeCategory.description} • {categoryCounts[activeCategory.id]} total</div>
               </div>
 
               {activeCategory.id !== "all" ? (
@@ -411,7 +372,7 @@ export default function TeacherAssignmentLibrary(props: Props) {
               </div>
             )}
           </>
-        )}
+        ) : null}
       </section>
     </>
   );
