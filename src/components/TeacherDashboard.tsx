@@ -1513,29 +1513,62 @@ export default function TeacherDashboard() {
 
   async function handleDeletePrompt(prompt: PromptRow) {
     if (deletingPromptById[prompt.id]) return;
-    const label = prompt.prompt_text?.trim() || "this prompt";
-    const confirmed = window.confirm(`Delete prompt "${label}"? This cannot be undone.`);
+    const confirmed = window.confirm("Delete this activity and all its submissions? This cannot be undone.");
     if (!confirmed) return;
 
     setPromptError("");
     setPromptSuccess("");
+    setSubmissionsError("");
+    setSubmissionsSuccess("");
     setDeletingPromptById((prev) => ({ ...prev, [prompt.id]: true }));
 
     try {
+      const { data: linkedSubmissions, error: submissionsFetchError } = await supabase
+        .from("student_submissions")
+        .select("id,audio_path,video_path,feedback_audio_path")
+        .eq("prompt_id", prompt.id);
+      if (submissionsFetchError) throw submissionsFetchError;
+
+      const studentAudioPaths = Array.from(new Set((linkedSubmissions ?? []).map((row) => row.audio_path).filter((value): value is string => Boolean(value))));
+      const studentVideoPaths = Array.from(new Set((linkedSubmissions ?? []).map((row) => row.video_path).filter((value): value is string => Boolean(value))));
+      const teacherAudioPaths = Array.from(new Set((linkedSubmissions ?? []).map((row) => row.feedback_audio_path).filter((value): value is string => Boolean(value))));
+
       if (prompt.prompt_image_path) {
         const { error: removeImageError } = await supabase.storage.from(PROMPT_IMAGES_BUCKET).remove([prompt.prompt_image_path]);
-        if (removeImageError) {
-          throw removeImageError;
-        }
+        if (removeImageError) console.error("Failed to delete activity image", removeImageError);
+      }
+      if (studentAudioPaths.length) {
+        const { error: removeStudentAudioError } = await supabase.storage.from("student-audio-oai").remove(studentAudioPaths);
+        if (removeStudentAudioError) console.error("Failed to delete student audio", removeStudentAudioError);
+      }
+      if (studentVideoPaths.length) {
+        const { error: removeStudentVideoError } = await supabase.storage.from("student-videos").remove(studentVideoPaths);
+        if (removeStudentVideoError) console.error("Failed to delete student video", removeStudentVideoError);
+      }
+      if (teacherAudioPaths.length) {
+        const { error: removeTeacherAudioError } = await supabase.storage.from("teacher-audio-oai").remove(teacherAudioPaths);
+        if (removeTeacherAudioError) console.error("Failed to delete teacher feedback audio", removeTeacherAudioError);
       }
 
-      const { error } = await supabase.from("prompts").delete().eq("id", prompt.id);
-      if (error) throw error;
+      const { error: deleteSubmissionsError } = await supabase.from("student_submissions").delete().eq("prompt_id", prompt.id);
+      if (deleteSubmissionsError) throw deleteSubmissionsError;
 
+      const { error: deletePromptError } = await supabase.from("prompts").delete().eq("id", prompt.id);
+      if (deletePromptError) throw deletePromptError;
+
+      if (submissionPromptFilter === prompt.id) {
+        setSubmissionPromptFilter("__all_prompts__");
+      }
+      if (analyticsPromptFilter === prompt.id) {
+        setAnalyticsPromptFilter("__all_prompts__");
+      }
       setPrompts((prev) => prev.filter((row) => row.id !== prompt.id));
-      setPromptSuccess("Prompt deleted.");
+      setSubmissions((prev) => prev.filter((row) => row.prompt_id !== prompt.id));
+      setPromptSuccess("Activity deleted.");
+      await fetchPrompts();
+      await fetchSubmissions();
     } catch (error: any) {
-      setPromptError(error?.message || "Could not delete prompt.");
+      setPromptError(error?.message || "Could not delete activity.");
     } finally {
       setDeletingPromptById((prev) => ({ ...prev, [prompt.id]: false }));
     }

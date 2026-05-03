@@ -256,7 +256,7 @@ export default function TeacherPromptPanel(props: Props) {
                 {isRemovingFromClass ? "Removing..." : `Remove from ${p.selectedClassName}`}
               </button>
             ) : null}
-            {isLibraryMode ? <button type="button" onClick={() => p.onDeletePrompt(prompt)} disabled={Boolean(p.deletingPromptById[prompt.id])} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>Delete permanently</button> : null}
+            {isLibraryMode ? <button type="button" onClick={() => p.onDeletePrompt(prompt)} disabled={Boolean(p.deletingPromptById[prompt.id])} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontSize: 13, fontWeight: 700, padding: "0 10px" }}>Delete activity</button> : null}
           </div>
         </div>;
       })}
