@@ -852,7 +852,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const [submissionForActivePrompt, setSubmissionForActivePrompt] = useState<SubmissionRow | null>(null);
   const [submissionHistoryForPrompt, setSubmissionHistoryForPrompt] = useState<SubmissionRow[]>([]);
   const [completedPromptKeys, setCompletedPromptKeys] = useState<string[]>([]);
-  const [submissionStatusIndex, setSubmissionStatusIndex] = useState<Record<string, { hasSubmission: boolean; hasFeedback: boolean }>>({});
+  const [submissionStatusIndex, setSubmissionStatusIndex] = useState<Record<string, { hasSubmission: boolean; hasFeedback: boolean; isValid: boolean }>>({});
+  const [submissionLoadError, setSubmissionLoadError] = useState("");
 
   const [isFinding, setIsFinding] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -903,7 +904,16 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     return assignedPrompts.find((prompt) => prompt.id === selectedPromptId) || null;
   }, [assignedPrompts, selectedPromptId]);
   const teacherAudioUrl = useMemo(() => currentTeacherAudio(submissionForActivePrompt), [submissionForActivePrompt]);
-  const hasSubmittedActivePrompt = Boolean(submissionForActivePrompt);
+  const hasValidSubmissionRecord = useMemo(() => {
+    const s = submissionForActivePrompt;
+    if (!s || typeof s.id !== "string" || !s.id.trim()) return false;
+    const t = getAssignmentType(activePrompt);
+    if (t === "video_response") return Boolean(s.video_path || s.video_url || s.created_at);
+    if (t === "text_response") return Boolean(s.text_response?.trim() || s.created_at);
+    if (t === "external_link") return Boolean(s.completion_marked_at || s.created_at);
+    return Boolean(s.audio_path || s.audio_url || s.transcript?.trim() || s.created_at);
+  }, [submissionForActivePrompt, activePrompt]);
+  const hasSubmittedActivePrompt = hasValidSubmissionRecord;
   const activeAssignmentType = getAssignmentType(activePrompt);
   const maxAudioRecordingSeconds = isDemoMode ? DEMO_MAX_AUDIO_RECORDING_SECONDS : MAX_AUDIO_RECORDING_SECONDS;
   const isVideoAssignment = activeAssignmentType === "video_response";
@@ -1380,7 +1390,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       setSubmissionStatusIndex({});
       return;
     }
-    const index: Record<string, { hasSubmission: boolean; hasFeedback: boolean }> = {};
+    const index: Record<string, { hasSubmission: boolean; hasFeedback: boolean; isValid: boolean }> = {};
     for (const row of (data ?? []) as Array<{
       prompt_id: string | null;
       prompt_text: string | null;
@@ -1390,10 +1400,11 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       teacher_score: number | null;
     }>) {
       const hasFeedback = Boolean(row.feedback_audio_url || row.feedback_url || row.teacher_comment || row.teacher_score !== null);
+      const isValid = Boolean(row.prompt_id || row.prompt_text);
       const promptId = row.prompt_id?.trim();
       const promptText = row.prompt_text?.trim();
-      if (promptId && !index[promptId]) index[promptId] = { hasSubmission: true, hasFeedback };
-      if (promptText && !index[`text:${promptText}`]) index[`text:${promptText}`] = { hasSubmission: true, hasFeedback };
+      if (promptId && !index[promptId]) index[promptId] = { hasSubmission: isValid, hasFeedback, isValid };
+      if (promptText && !index[`text:${promptText}`]) index[`text:${promptText}`] = { hasSubmission: isValid, hasFeedback, isValid };
     }
     setSubmissionStatusIndex(index);
   }
@@ -1483,10 +1494,12 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       const data = rows[0] ?? null;
 
       if (error) {
+        setSubmissionLoadError(error.message || "Failed to load submission");
         return null;
       }
 
       const submission = (data as SubmissionRow | null) || null;
+      setSubmissionLoadError("");
       setSubmissionForActivePrompt(submission);
       setSubmissionHistoryForPrompt(rows);
       return submission;
@@ -2341,10 +2354,10 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     return "→ stable";
   }, [progressScores]);
   const primaryFeedbackComment = submissionForActivePrompt?.teacher_comment || submissionForActivePrompt?.ai_comment;
-  const aiStrengths = submissionForActivePrompt?.ai_strengths?.filter(Boolean) || [];
-  const aiImprovements = submissionForActivePrompt?.ai_improvements?.filter(Boolean) || [];
+  const aiStrengths = (Array.isArray(submissionForActivePrompt?.ai_strengths) ? submissionForActivePrompt.ai_strengths : []).filter(Boolean);
+  const aiImprovements = (Array.isArray(submissionForActivePrompt?.ai_improvements) ? submissionForActivePrompt.ai_improvements : []).filter(Boolean);
   const aiPictureAccuracy = normalizePictureAccuracy(submissionForActivePrompt?.ai_picture_accuracy);
-  const aiGrammarFeedback = submissionForActivePrompt?.ai_grammar_feedback?.filter(Boolean) || [];
+  const aiGrammarFeedback = (Array.isArray(submissionForActivePrompt?.ai_grammar_feedback) ? submissionForActivePrompt.ai_grammar_feedback : []).filter(Boolean);
   const aiScoreReason = submissionForActivePrompt?.ai_score_reason?.trim() || "";
   const aiModelAnswer = submissionForActivePrompt?.ai_model_answer?.trim() || "";
   const latestTranscript = submissionForActivePrompt?.text_response || submissionForActivePrompt?.transcript || "";
@@ -2576,6 +2589,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
         {rosterStudent && selectedPromptId ? (
           <>
+        {submissionLoadError || (submissionForActivePrompt && !hasValidSubmissionRecord) ? <div style={{ ...styles.card, border: "1px solid #fecaca", background: "#fff7f7" }}><div style={{ ...styles.cardTitle, color: "#b91c1c" }}>Something went wrong with this submission.</div><div style={styles.infoText}>This activity looks completed, but the submission could not be loaded correctly.</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><button type="button" onClick={() => setSelectedPromptId(null)} style={styles.secondaryButton}>Go back to activities</button><button type="button" onClick={() => void findSubmissionForActivePrompt(studentCode.trim(), activePrompt?.id || "", activePrompt?.prompt_text || "")} style={styles.primaryButton}>Try again</button></div></div> : null}
         <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "4px", marginBottom: "4px" }}>
           <button type="button" onClick={changeCode} style={styles.changeCodeButton}>
             ← Change code
