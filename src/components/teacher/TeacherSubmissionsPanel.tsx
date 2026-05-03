@@ -35,7 +35,7 @@ type Props = {
   submissionAnalytics: any;
   submissionsSuccess: string;
   submissionsError: string;
-  getSubmissionClassName: (submission: SubmissionRow) => string;
+  getSubmissionClassName?: (submission: SubmissionRow) => string;
 };
 
 export default function TeacherSubmissionsPanel(p: Props) {
@@ -48,18 +48,22 @@ export default function TeacherSubmissionsPanel(p: Props) {
   const loadMedia = (submissionId: string) => setLoadedMediaBySubmission((prev) => (prev[submissionId] ? prev : { ...prev, [submissionId]: true }));
   const studentFilterLabel = p.selectedStudentFilter ? `Showing submissions for ${p.selectedStudentFilter.name || "student"} (${p.selectedStudentFilter.code})` : "";
   const getSubmissionScore = (submission: SubmissionRow) => submission.teacher_score ?? submission.ai_score ?? 0;
-  const getClassName = (submission: SubmissionRow) => p.getSubmissionClassName(submission) || "Unassigned / Unknown class";
+  const fallbackClassName = "Unassigned / Unknown class";
+  const safeSubmissions = Array.isArray(p.filteredSubmissions) ? p.filteredSubmissions : [];
+  const safeClassOptions = Array.isArray(p.classOptions) ? p.classOptions : [];
+  const safePromptOptions = Array.isArray(p.submissionPromptOptions) ? p.submissionPromptOptions : [];
+  const getClassName = (submission: SubmissionRow) => (typeof p.getSubmissionClassName === "function" ? p.getSubmissionClassName(submission) : fallbackClassName) || fallbackClassName;
   const needsReview = (submission: SubmissionRow) => !(submission.teacher_comment || submission.feedback_audio_url || submission.feedback_url);
   const activityTypeLabel = (submission: SubmissionRow) => submission.prompt?.assignment_type === "external_link" ? "External activity" : submission.response_mode === "video" ? "Video response" : submission.response_mode === "text" ? "Text response" : "Audio response";
 
-  const unresolvedClassExists = useMemo(() => p.filteredSubmissions.some((submission) => !p.getSubmissionClassName(submission)), [p.filteredSubmissions, p.getSubmissionClassName]);
+  const unresolvedClassExists = useMemo(() => safeSubmissions.some((submission) => !getClassName(submission)), [safeSubmissions]);
   const classOptions = useMemo(() => {
-    const knownClasses = p.classOptions.filter((c) => c.trim().length > 0);
+    const knownClasses = safeClassOptions.filter((c) => c.trim().length > 0);
     const options = Array.from(new Set(knownClasses)).sort((a, b) => a.localeCompare(b));
     if (unresolvedClassExists) options.push("Unassigned / Unknown class");
     return options;
-  }, [p.classOptions, unresolvedClassExists]);
-  const classFiltered = useMemo(() => classFilter === "__all_classes__" ? p.filteredSubmissions : p.filteredSubmissions.filter((s) => getClassName(s) === classFilter), [p.filteredSubmissions, classFilter]);
+  }, [safeClassOptions, unresolvedClassExists]);
+  const classFiltered = useMemo(() => classFilter === "__all_classes__" ? safeSubmissions : safeSubmissions.filter((s) => getClassName(s) === classFilter), [safeSubmissions, classFilter]);
 
   const students = useMemo(() => {
     const grouped = new Map<string, { key: string; code: string; name: string; className: string; submissions: SubmissionRow[] }>();
@@ -115,7 +119,7 @@ export default function TeacherSubmissionsPanel(p: Props) {
             <div style={{ borderRadius: 12, background: "#f8fafc", border: "1px solid #d7deea", padding: "0 12px", display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#94a3b8" }}>▾</span><select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{ minHeight: 36, borderRadius: 12, border: "none", background: "transparent", padding: "0 2px", fontSize: 13, color: "#334155", outline: "none" }}><option value="__all_classes__">All classes</option>{classOptions.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
           </label>
           <label style={{ display: "grid", gap: 4, fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Activity
-            <div style={{ borderRadius: 12, background: "#f8fafc", border: "1px solid #d7deea", padding: "0 12px", display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#94a3b8" }}>▾</span><select value={p.submissionPromptFilter} onChange={(e) => p.setSubmissionPromptFilter(e.target.value)} style={{ minHeight: 36, borderRadius: 12, border: "none", background: "transparent", padding: "0 2px", fontSize: 13, color: "#334155", outline: "none" }}><option value="__all_prompts__">All activities</option>{p.submissionPromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+            <div style={{ borderRadius: 12, background: "#f8fafc", border: "1px solid #d7deea", padding: "0 12px", display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#94a3b8" }}>▾</span><select value={p.submissionPromptFilter} onChange={(e) => p.setSubmissionPromptFilter(e.target.value)} style={{ minHeight: 36, borderRadius: 12, border: "none", background: "transparent", padding: "0 2px", fontSize: 13, color: "#334155", outline: "none" }}><option value="__all_prompts__">All activities</option>{safePromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
           </label>
           <button type="button" onClick={p.onRefreshSubmissions} disabled={p.isLoadingSubmissions} style={{ border: "1px solid #d1d9e6", background: "#ffffff", borderRadius: 12, minHeight: 36, padding: "7px 12px", fontSize: 11, fontWeight: 600, color: "#94a3b8", cursor: "pointer" }}>{p.isLoadingSubmissions ? "Refreshing..." : "Refresh"}</button>
         </div>

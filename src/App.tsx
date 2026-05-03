@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import StudentView from "./components/StudentView";
 import TeacherDashboard from "./components/TeacherDashboard";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 import { clearTeacherSession, getTeacherSessionStatus } from "./lib/teacherAuth";
 
 function getModeFromUrl(): "student" | "teacher" {
@@ -53,7 +54,14 @@ export default function App() {
         body: JSON.stringify({ email: emailInput.trim(), password: passwordInput }),
       });
 
-      const payload = (await response.json()) as { error?: string; authenticated?: boolean };
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; authenticated?: boolean };
+
+      if (response.status === 401) {
+        setHasTeacherSession(false);
+        setAuthError(payload?.error || "Teacher session expired. Please sign in again.");
+        setIsSigningIn(false);
+        return;
+      }
 
       if (!response.ok || !payload?.authenticated) {
         setAuthError(payload?.error || "Incorrect email or password");
@@ -147,7 +155,7 @@ export default function App() {
         </div>
       ) : null}
 
-      {view === "student" && <StudentView onEntryStateChange={setIsStudentEntryState} />}
+      {view === "student" && <AppErrorBoundary area="student" onGoBack={() => window.history.back()}><StudentView onEntryStateChange={setIsStudentEntryState} /></AppErrorBoundary>}
 
       {view === "teacher" && !hasTeacherSession && (
         <div
