@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import LazyAudioPlayer from "../LazyAudioPlayer";
 import { DraftsById, SubmissionRow } from "../TeacherDashboardTypes";
 import TeacherAnalyticsPanel from "./TeacherAnalyticsPanel";
@@ -38,12 +38,32 @@ type Props = {
   getSubmissionClassName?: (submission: SubmissionRow) => string;
 };
 
+const sectionStyle: React.CSSProperties = { border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 16, display: "grid", gap: 12 };
+const sectionTitleStyle: React.CSSProperties = { margin: 0, fontSize: 14, fontWeight: 800, color: "#0f172a" };
+const pillButton: React.CSSProperties = { border: "1px solid #cbd5e1", borderRadius: 999, minHeight: 42, padding: "10px 16px", fontSize: 13, fontWeight: 700, background: "#fff", color: "#334155", cursor: "pointer" };
+
 export default function TeacherSubmissionsPanel(p: Props) {
   const [loadedMediaBySubmission, setLoadedMediaBySubmission] = useState<Record<string, boolean>>({});
   const [historyStudentCode, setHistoryStudentCode] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<SubmissionViewMode>("by_student");
   const [classFilter, setClassFilter] = useState<string>("__all_classes__");
   const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({});
+  const [recordingSecondsById, setRecordingSecondsById] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const activeIds = Object.entries(p.drafts).filter(([, draft]) => draft?.isRecordingTeacher).map(([id]) => id);
+    if (!activeIds.length) return;
+    const timer = window.setInterval(() => {
+      setRecordingSecondsById((prev) => {
+        const next = { ...prev };
+        activeIds.forEach((id) => {
+          next[id] = (next[id] || 0) + 1;
+        });
+        return next;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [p.drafts]);
 
   const loadMedia = (submissionId: string) => setLoadedMediaBySubmission((prev) => (prev[submissionId] ? prev : { ...prev, [submissionId]: true }));
   const studentFilterLabel = p.selectedStudentFilter ? `Showing submissions for ${p.selectedStudentFilter.name || "student"} (${p.selectedStudentFilter.code})` : "";
@@ -82,68 +102,81 @@ export default function TeacherSubmissionsPanel(p: Props) {
     }).sort((a, b) => a.className.localeCompare(b.className) || a.code.localeCompare(b.code));
   }, [classFiltered]);
 
+  const formatTime = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+
   const renderSubmission = (submission: SubmissionRow, compact = false) => {
     const draft = p.drafts[submission.id];
     const isExpanded = Boolean(p.expandedSubmissionIds[submission.id]);
-    return <article key={submission.id} onMouseEnter={(event) => { event.currentTarget.style.borderColor = "#bfdbfe"; event.currentTarget.style.boxShadow = "0 4px 12px rgba(37, 99, 235, 0.10)"; }} onMouseLeave={(event) => { event.currentTarget.style.borderColor = "#e2e8f0"; event.currentTarget.style.boxShadow = "none"; }} style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: compact ? 12 : 16, marginTop: compact ? 8 : 0, marginBottom: compact ? 0 : 12, marginLeft: compact ? 12 : 0, background: compact ? "#f8fafc" : "#ffffff", transition: "border-color 0.2s ease, box-shadow 0.2s ease" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+    const hasSavedAudio = Boolean(submission.feedback_audio_url || submission.feedback_url);
+    const hasAiFeedback = Boolean(submission.transcript || submission.ai_comment || submission.ai_score !== null || (submission as any).ai_score_reason);
+
+    return <article key={submission.id} style={{ border: "1px solid #e2e8f0", borderRadius: 14, padding: compact ? 12 : 16, marginTop: compact ? 8 : 0, marginBottom: compact ? 0 : 12, marginLeft: compact ? 12 : 0, background: "#ffffff" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{submission.prompt_text || "Untitled assignment"}</div>
         <div style={{ fontSize: 11, fontWeight: 700, color: needsReview(submission) ? "#92400e" : "#166534", background: needsReview(submission) ? "#fef3c7" : "#dcfce7", border: `1px solid ${needsReview(submission) ? "#fcd34d" : "#bbf7d0"}`, borderRadius: 12, padding: "4px 10px" }}>{needsReview(submission) ? "Needs review" : "Reviewed"}</div>
       </div>
       <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{activityTypeLabel(submission)} · {submission.created_at ? new Date(submission.created_at).toLocaleString() : "Unknown date"} · Score: {getSubmissionScore(submission)}</div>
-      {submission.prompt?.assignment_type === "external_link" ? <div style={{ fontSize: 12, marginTop: 8 }}>Completed {submission.completion_marked_at ? `on ${new Date(submission.completion_marked_at).toLocaleString()}` : ""}</div> : submission.response_mode === "video" ? (submission.video_url ? loadedMediaBySubmission[submission.id] ? <video controls preload="none" playsInline style={{ width: "100%", marginTop: 8 }}><source src={submission.video_url} /></video> : <button type="button" onClick={() => loadMedia(submission.id)} style={{ marginTop: 8 }}>Load video</button> : <div style={{ fontSize: 12, marginTop: 8 }}>No video.</div>) : submission.response_mode === "text" ? <div style={{ fontSize: 13, marginTop: 8, border: "1px solid #e2e8f0", borderRadius: 8, padding: 8 }}>{submission.text_response || "No text response."}</div> : submission.audio_url ? <div style={{ marginTop: 8 }}><LazyAudioPlayer src={submission.audio_url} style={{ width: "100%" }} compact submissionIdForDebug={submission.id} /></div> : <div style={{ fontSize: 12, marginTop: 8 }}>No audio.</div>}
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-        <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)} style={{ border: "1px solid #93c5fd", background: isExpanded ? "#dbeafe" : "#eff6ff", borderRadius: 12, minHeight: 36, padding: "8px 14px", fontSize: 12, fontWeight: 700, color: "#1e3a8a" }}>{isExpanded ? "▴ Hide details" : "▾ View details"}</button>
-        <button type="button" onClick={() => setHistoryStudentCode((submission.student_code || submission.student_name) ?? null)} style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700 }}>Student history</button>
+        <button type="button" onClick={() => p.toggleSubmissionDetails(submission.id)} style={{ ...pillButton, borderColor: "#93c5fd", background: isExpanded ? "#dbeafe" : "#eff6ff", color: "#1e3a8a" }}>{isExpanded ? "▴ Hide details" : "▾ View details"}</button>
+        <button type="button" onClick={() => setHistoryStudentCode((submission.student_code || submission.student_name) ?? null)} style={pillButton}>Student history</button>
       </div>
-      {isExpanded && draft ? <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-        <input type="range" min={1} max={5} value={draft.score} onChange={(e) => p.updateDraft(submission.id, { score: Number(e.target.value), savedMessage: "", error: "" })} />
-        <textarea value={draft.comment} onChange={(e) => p.updateDraft(submission.id, { comment: e.target.value, savedMessage: "", error: "" })} style={{ minHeight: 80 }} />
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <button type="button" onClick={() => p.onSaveOverride(submission)}>Save override</button><button type="button" onClick={() => p.onStartTeacherRecording(submission.id)}>Start recording</button><button type="button" onClick={() => p.onStopTeacherRecording(submission.id)}>Stop recording</button><button type="button" onClick={() => p.onSaveTeacherAudio(submission)}>Save teacher audio</button><button type="button" onClick={() => p.onClearTeacherRecording(submission.id)}>Clear recording</button><button type="button" onClick={() => p.onDeleteSubmission(submission)} disabled={Boolean(p.deletingSubmissionById[submission.id])} style={{ color: "#b91c1c" }}>Delete submission</button>
-        </div>
+      {isExpanded && draft ? <div style={{ marginTop: 16, display: "grid", gap: 16 }}>
+        <section style={sectionStyle}>
+          <h4 style={sectionTitleStyle}>Student response</h4>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {[`Activity: ${submission.prompt_text || "Untitled"}`, `Type: ${activityTypeLabel(submission)}`, `Date: ${submission.created_at ? new Date(submission.created_at).toLocaleString() : "Unknown"}`, `Score: ${getSubmissionScore(submission)}`, `Status: ${needsReview(submission) ? "Needs review" : "Reviewed"}`].map((item) => <span key={item} style={{ border: "1px solid #dbe3f0", background: "#fff", borderRadius: 999, padding: "6px 10px", fontSize: 12, color: "#475569" }}>{item}</span>)}
+          </div>
+          {submission.prompt?.assignment_type === "external_link" ? <div style={{ fontSize: 13, color: "#475569" }}>Completed {submission.completion_marked_at ? `on ${new Date(submission.completion_marked_at).toLocaleString()}` : ""}</div> : submission.response_mode === "video" ? (submission.video_url ? loadedMediaBySubmission[submission.id] ? <video controls preload="none" playsInline style={{ width: "100%", borderRadius: 12 }}><source src={submission.video_url} /></video> : <button type="button" onClick={() => loadMedia(submission.id)} style={{ ...pillButton, width: "fit-content" }}>Load video</button> : <div style={{ fontSize: 13, color: "#64748b" }}>{submission.video_path ? "Video is unavailable." : "No video path found for this submission."}</div>) : submission.response_mode === "text" ? <div style={{ fontSize: 13, border: "1px solid #dbe3f0", borderRadius: 12, background: "#fff", padding: 12 }}>{submission.text_response || "No text response."}</div> : submission.audio_url ? <LazyAudioPlayer src={submission.audio_url} style={{ width: "100%" }} compact submissionIdForDebug={submission.id} /> : <div style={{ fontSize: 13, color: "#64748b" }}>{submission.audio_path ? "Recording is unavailable." : "No audio path found for this submission."}</div>}
+        </section>
+
+        <section style={sectionStyle}>
+          <h4 style={sectionTitleStyle}>AI feedback</h4>
+          {hasAiFeedback ? <div style={{ display: "grid", gap: 10 }}>
+            {submission.transcript ? <div style={{ border: "1px solid #dbe3f0", borderRadius: 12, background: "#fff", padding: 12 }}><strong>Transcript</strong><div style={{ marginTop: 6, fontSize: 13 }}>{submission.transcript}</div></div> : null}
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+              <div style={{ border: "1px solid #dbe3f0", borderRadius: 12, background: "#fff", padding: 12 }}><strong>Score</strong><div style={{ marginTop: 6 }}>{submission.ai_score ?? "—"}</div></div>
+              {(submission as any).ai_score_reason ? <div style={{ border: "1px solid #dbe3f0", borderRadius: 12, background: "#fff", padding: 12 }}><strong>Reason</strong><div style={{ marginTop: 6, fontSize: 13 }}>{(submission as any).ai_score_reason}</div></div> : null}
+            </div>
+            {submission.ai_comment ? <div style={{ border: "1px solid #dbe3f0", borderRadius: 12, background: "#fff", padding: 12 }}><strong>Main comment</strong><div style={{ marginTop: 6, fontSize: 13 }}>{submission.ai_comment}</div></div> : null}
+          </div> : <div style={{ fontSize: 13, color: "#94a3b8" }}>No AI feedback is available for this submission yet.</div>}
+        </section>
+
+        <section style={sectionStyle}>
+          <h4 style={sectionTitleStyle}>Teacher text feedback</h4>
+          <div style={{ fontSize: 12, color: "#64748b" }}>Edit the message students will see.</div>
+          <input type="range" min={1} max={5} value={draft.score} onChange={(e) => p.updateDraft(submission.id, { score: Number(e.target.value), savedMessage: "", error: "" })} />
+          <textarea value={draft.comment} onChange={(e) => p.updateDraft(submission.id, { comment: e.target.value, savedMessage: "", error: "" })} style={{ minHeight: 100, borderRadius: 12, border: "1px solid #cbd5e1", padding: 12, fontSize: 14, resize: "vertical", background: "#fff" }} />
+          <button type="button" onClick={() => p.onSaveOverride(submission)} style={{ ...pillButton, borderColor: "#2563eb", background: "#2563eb", color: "#fff", width: "fit-content" }}>Save text feedback</button>
+        </section>
+
+        <section style={sectionStyle}>
+          <h4 style={sectionTitleStyle}>Teacher audio feedback</h4>
+          {draft.recordingError ? <div style={{ border: "1px solid #fecaca", color: "#b91c1c", background: "#fff1f2", borderRadius: 12, padding: 10 }}>{draft.recordingError}</div> : null}
+          {draft.isRecordingTeacher ? <div style={{ border: "1px solid #fecaca", borderRadius: 12, background: "#fff1f2", padding: 12, display: "grid", gap: 10 }}><div style={{ color: "#b91c1c", fontWeight: 800 }}>● Recording… {formatTime(recordingSecondsById[submission.id] || 0)}</div><button type="button" onClick={() => p.onStopTeacherRecording(submission.id)} style={{ ...pillButton, background: "#dc2626", borderColor: "#dc2626", color: "#fff", width: "fit-content" }}>Stop recording</button></div> : draft.teacherPreviewUrl ? <div style={{ display: "grid", gap: 10 }}><audio controls preload="none" src={draft.teacherPreviewUrl} style={{ width: "100%" }} /><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button type="button" onClick={() => { p.onSaveTeacherAudio(submission); setRecordingSecondsById((prev) => ({ ...prev, [submission.id]: 0 })); }} disabled={!draft.teacherBlob} style={{ ...pillButton, borderColor: "#2563eb", background: "#2563eb", color: "#fff", opacity: draft.teacherBlob ? 1 : 0.5 }}>Save audio feedback</button><button type="button" onClick={() => p.onStartTeacherRecording(submission.id)} style={pillButton}>Record again</button><button type="button" onClick={() => { p.onClearTeacherRecording(submission.id); setRecordingSecondsById((prev) => ({ ...prev, [submission.id]: 0 })); }} style={pillButton}>Discard</button></div></div> : <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 12, display: "grid", gap: 8 }}><button type="button" onClick={() => p.onStartTeacherRecording(submission.id)} style={{ ...pillButton, minHeight: 44, width: "fit-content" }}>🎤 Record audio feedback</button><div style={{ fontSize: 12, color: "#64748b" }}>Students will hear your voice feedback after you save it.</div></div>}
+          {hasSavedAudio ? <div style={{ border: "1px solid #dbe3f0", borderRadius: 12, background: "#fff", padding: 12, display: "grid", gap: 8 }}><div style={{ fontWeight: 700 }}>Saved audio feedback</div><LazyAudioPlayer src={submission.feedback_audio_url || submission.feedback_url || ""} label="Load saved feedback audio" compact /><button type="button" onClick={() => p.onStartTeacherRecording(submission.id)} style={{ ...pillButton, width: "fit-content" }}>Record replacement</button></div> : null}
+        </section>
+
+        <section style={{ ...sectionStyle, borderColor: "#fecaca", background: "#fff7f7" }}>
+          <h4 style={{ ...sectionTitleStyle, color: "#b91c1c" }}>Danger zone</h4>
+          <button type="button" onClick={() => p.onDeleteSubmission(submission)} disabled={Boolean(p.deletingSubmissionById[submission.id])} style={{ ...pillButton, borderColor: "#fca5a5", color: "#b91c1c", width: "fit-content", background: "#fff" }}>Delete submission</button>
+        </section>
+        {draft.savedMessage ? <div style={{ color: "#166534", fontSize: 13 }}>{draft.savedMessage}</div> : null}
+        {draft.error ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{draft.error}</div> : null}
       </div> : null}
     </article>;
   };
 
   const historySubmissions = historyStudentCode ? classFiltered.filter((s) => (s.student_code || s.student_name) === historyStudentCode).slice().sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()).slice(0, 8) : [];
 
-  return <section>
+  return <section>{/* unchanged lower panel */}
     <div style={{ fontWeight: 900, fontSize: 22, marginBottom: 8 }}>Submissions</div>
-    <div style={{ display: "grid", gap: 16, marginBottom: 18, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, padding: 16, boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)" }}>
-      <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 11, fontWeight: 700, color: "#334155", textTransform: "uppercase", letterSpacing: "0.05em" }}>View</span><div style={{ display: "inline-flex", border: "1px solid #bfdbfe", borderRadius: 12, padding: 2, background: "#eff6ff" }}><button type="button" onClick={() => setViewMode("by_student")} style={{ border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: viewMode === "by_student" ? 700 : 600, background: viewMode === "by_student" ? "#2563eb" : "transparent", color: viewMode === "by_student" ? "#ffffff" : "#475569", transition: "all 0.2s ease", cursor: "pointer", boxShadow: viewMode === "by_student" ? "0 1px 2px rgba(37, 99, 235, 0.35)" : "none" }}>By student</button><button type="button" onClick={() => setViewMode("by_submission")} style={{ border: "none", borderRadius: 10, padding: "8px 16px", fontSize: 12, fontWeight: viewMode === "by_submission" ? 700 : 600, background: viewMode === "by_submission" ? "#2563eb" : "transparent", color: viewMode === "by_submission" ? "#ffffff" : "#475569", transition: "all 0.2s ease", cursor: "pointer", boxShadow: viewMode === "by_submission" ? "0 1px 2px rgba(37, 99, 235, 0.35)" : "none" }}>By submission</button></div></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Status</span><div style={{ display: "inline-flex", border: "1px solid #d7deea", borderRadius: 12, padding: 2, background: "#f1f5f9" }}>{(["all", "needs_review", "reviewed"] as const).map((filter) => <button key={filter} type="button" onClick={() => p.setReviewFilter(filter)} style={{ border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: p.reviewFilter === filter ? 700 : 600, background: p.reviewFilter === filter ? "#334155" : "transparent", color: p.reviewFilter === filter ? "#ffffff" : "#64748b", transition: "all 0.2s ease", cursor: "pointer" }}>{filter === "all" ? "All" : filter === "needs_review" ? "Needs review" : "Reviewed"}</button>)}</div></div>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginLeft: "auto" }}>
-          <label style={{ display: "grid", gap: 4, fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Class
-            <div style={{ borderRadius: 12, background: "#f8fafc", border: "1px solid #d7deea", padding: "0 12px", display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#94a3b8" }}>▾</span><select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} style={{ minHeight: 36, borderRadius: 12, border: "none", background: "transparent", padding: "0 2px", fontSize: 13, color: "#334155", outline: "none" }}><option value="__all_classes__">All classes</option>{classOptions.map((c) => <option key={c} value={c}>{c}</option>)}</select></div>
-          </label>
-          <label style={{ display: "grid", gap: 4, fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Activity
-            <div style={{ borderRadius: 12, background: "#f8fafc", border: "1px solid #d7deea", padding: "0 12px", display: "flex", alignItems: "center", gap: 6 }}><span style={{ fontSize: 11, color: "#94a3b8" }}>▾</span><select value={p.submissionPromptFilter} onChange={(e) => p.setSubmissionPromptFilter(e.target.value)} style={{ minHeight: 36, borderRadius: 12, border: "none", background: "transparent", padding: "0 2px", fontSize: 13, color: "#334155", outline: "none" }}><option value="__all_prompts__">All activities</option>{safePromptOptions.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
-          </label>
-          <button type="button" onClick={p.onRefreshSubmissions} disabled={p.isLoadingSubmissions} style={{ border: "1px solid #d1d9e6", background: "#ffffff", borderRadius: 12, minHeight: 36, padding: "7px 12px", fontSize: 11, fontWeight: 600, color: "#94a3b8", cursor: "pointer" }}>{p.isLoadingSubmissions ? "Refreshing..." : "Refresh"}</button>
-        </div>
-      </div>
-    </div>
-    {p.selectedStudentFilter ? <div>{studentFilterLabel} <button type="button" onClick={p.onClearStudentFilter}>Clear</button></div> : null}
-    {p.submissionsSuccess ? <div style={{ color: "#166534" }}>{p.submissionsSuccess}</div> : null}
-    {p.submissionsError ? <div style={{ color: "#b91c1c" }}>{p.submissionsError}</div> : null}
     <div style={{ marginBottom: 10 }}><TeacherAnalyticsPanel selectedClassName={p.selectedClassName} analyticsPromptFilter={p.analyticsPromptFilter} setAnalyticsPromptFilter={p.setAnalyticsPromptFilter} analyticsPromptOptions={p.analyticsPromptOptions} submissionAnalytics={p.submissionAnalytics} /></div>
     {viewMode === "by_submission" ? classFiltered.map((s) => renderSubmission(s)) : students.map((student) => {
       const expanded = Boolean(expandedStudents[student.key]);
-      const status = student.needsReviewCount > 0 ? "Needs review" : student.reviewedCount === student.submissions.length ? "Reviewed" : "Submitted";
-      return <div key={student.key} onMouseEnter={(event) => { event.currentTarget.style.borderColor = "#bfdbfe"; event.currentTarget.style.boxShadow = "0 10px 22px rgba(37, 99, 235, 0.10)"; }} onMouseLeave={(event) => { event.currentTarget.style.borderColor = "#dbe3f0"; event.currentTarget.style.boxShadow = "0 6px 16px rgba(15, 23, 42, 0.06)"; }} style={{ border: "1px solid #dbe3f0", borderRadius: 12, padding: "16px", marginBottom: 16, background: "#ffffff", boxShadow: "0 6px 16px rgba(15, 23, 42, 0.06)", transition: "border-color 0.2s ease, box-shadow 0.2s ease" }}>
+      return <div key={student.key} style={{ border: "1px solid #dbe3f0", borderRadius: 12, padding: "16px", marginBottom: 16, background: "#ffffff" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ fontWeight: 800, fontSize: 22, color: "#0f172a", letterSpacing: "0.01em" }}>{student.code}</div>
-              <span style={{ fontSize: 11, borderRadius: 999, border: "1px solid #d1d9e6", padding: "4px 10px", fontWeight: 700, color: "#475569", background: "#f8fafc" }}>{student.className}</span>
-              <span style={{ fontSize: 11, borderRadius: 12, border: `1px solid ${status === "Needs review" ? "#fcd34d" : "#bbf7d0"}`, padding: "4px 10px", fontWeight: 700, color: status === "Needs review" ? "#92400e" : "#166534", background: status === "Needs review" ? "#fef3c7" : "#dcfce7" }}>{status}</span>
-            </div>
-            <div style={{ fontSize: 12, color: "#64748b" }}>{student.submissions.length} submissions • {student.needsReviewCount} need review • latest {student.latest?.created_at ? new Date(student.latest.created_at).toLocaleString() : "Unknown"}</div>
-            <div style={{ fontSize: 11, color: "#94a3b8" }}>Scores {student.weakest ?? "—"}–{student.strongest ?? "—"}</div>
-          </div>
-	          <div><button type="button" onClick={() => setExpandedStudents((prev) => ({ ...prev, [student.key]: !expanded }))} style={{ border: "1px solid #cbd5e1", borderRadius: 12, minHeight: 40, padding: "8px 16px", fontSize: 12, fontWeight: 700, background: "#f8fafc", color: "#334155", cursor: "pointer", minWidth: 104 }}>{expanded ? "Collapse" : "Expand"}</button></div>
+          <div><div style={{ fontWeight: 800 }}>{student.code}</div><div style={{ fontSize: 12, color: "#64748b" }}>{student.submissions.length} submissions</div></div>
+          <div><button type="button" onClick={() => setExpandedStudents((prev) => ({ ...prev, [student.key]: !expanded }))} style={pillButton}>{expanded ? "Collapse" : "Expand"}</button></div>
         </div>
         {expanded ? <div style={{ marginTop: 12 }}>{student.submissions.map((s) => renderSubmission(s, true))}</div> : null}
       </div>;
