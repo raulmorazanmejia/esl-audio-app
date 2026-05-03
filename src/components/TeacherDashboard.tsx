@@ -868,7 +868,7 @@ export default function TeacherDashboard() {
     prompts.forEach((prompt) => {
       const promptText = prompt.prompt_text?.trim() ?? "";
       if (!promptText) return;
-      const promptClasses = (prompt.prompt_assignments ?? []).map((row) => row.class_name.trim());
+      const promptClasses = (Array.isArray(prompt.prompt_assignments) ? prompt.prompt_assignments : []).map((row) => row.class_name.trim());
       if (!selectedClassName || promptClasses.includes(selectedClassName)) {
         promptSet.add(promptText);
       }
@@ -924,7 +924,7 @@ export default function TeacherDashboard() {
   }, [submissions, selectedClassName, getSubmissionClassName]);
 
   const classScopedPrompts = useMemo(() => {
-    return sortedPrompts.filter((prompt) => (prompt.prompt_assignments ?? []).some((row) => row.class_name.trim() === selectedClassName));
+    return sortedPrompts.filter((prompt) => (Array.isArray(prompt.prompt_assignments) ? prompt.prompt_assignments : []).some((row) => row.class_name.trim() === selectedClassName));
   }, [sortedPrompts, selectedClassName]);
 
   const unassignedPrompts = useMemo(() => {
@@ -955,7 +955,7 @@ export default function TeacherDashboard() {
 
     const promptCounts = new Map<string, number>();
     prompts.forEach((prompt) => {
-      (prompt.prompt_assignments ?? []).forEach((assignment) => {
+      (Array.isArray(prompt.prompt_assignments) ? prompt.prompt_assignments : []).forEach((assignment) => {
         const className = assignment.class_name?.trim() ?? "";
         if (!className) return;
         promptCounts.set(className, (promptCounts.get(className) ?? 0) + 1);
@@ -1000,7 +1000,7 @@ export default function TeacherDashboard() {
 
     prompts.forEach((prompt) => {
       const promptText = prompt.prompt_text?.trim() ?? "";
-      const promptClasses = (prompt.prompt_assignments ?? []).map((row) => row.class_name.trim());
+      const promptClasses = (Array.isArray(prompt.prompt_assignments) ? prompt.prompt_assignments : []).map((row) => row.class_name.trim());
       if (!promptText) return;
       if (promptClasses.includes(selectedClassName)) {
         promptSet.add(promptText);
@@ -1155,7 +1155,8 @@ export default function TeacherDashboard() {
       setPromptError(error.message);
       return;
     }
-    const rows = ((data ?? []) as PromptRow[]).map((prompt) => {
+    const promptRows = Array.isArray(data) ? (data as PromptRow[]) : [];
+    const rows = promptRows.map((prompt) => {
       const normalizedPrompt: PromptRow = {
         ...prompt,
         assignment_type: deriveAssignmentType(prompt),
@@ -1189,8 +1190,8 @@ export default function TeacherDashboard() {
       setIsLoadingSubmissions(false);
       return false;
     }
-    const rows = (data ?? []) as SubmissionRow[];
-    setSubmissions(rows);
+    const rows = Array.isArray(data) ? (data as SubmissionRow[]) : [];
+    setSubmissions(Array.isArray(rows) ? rows : []);
     hydrateDrafts(rows);
     setIsLoadingSubmissions(false);
     return true;
@@ -1207,7 +1208,7 @@ export default function TeacherDashboard() {
       setRosterError(error.message);
       return false;
     }
-    setStudents((data ?? []) as StudentRow[]);
+    setStudents(Array.isArray(data) ? (data as StudentRow[]) : []);
     return true;
   }, []);
 
@@ -1378,7 +1379,7 @@ export default function TeacherDashboard() {
       return;
     }
     if (!shouldAssign) {
-      setPrompts((prev) => prev.map((row) => {
+      setPrompts((prev) => (Array.isArray(prev) ? prev : []).map((row) => {
         if (row.id !== prompt.id) return row;
         return {
           ...row,
@@ -1454,7 +1455,7 @@ export default function TeacherDashboard() {
       }
     }
 
-    setPrompts((prev) => prev.map((row) => {
+    setPrompts((prev) => (Array.isArray(prev) ? prev : []).map((row) => {
       if (row.id !== prompt.id) return row;
       return {
         ...row,
@@ -1497,16 +1498,16 @@ export default function TeacherDashboard() {
   }
 
   function handleExternalLinkChange(index: number, patch: Partial<ExternalActivityLink>) {
-    setNewExternalLinks((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+    setNewExternalLinks((prev) => (Array.isArray(prev) ? prev : []).map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
   }
 
   function handleAddExternalLinkRow() {
-    setNewExternalLinks((prev) => [...prev, { title: "", url: "" }]);
+    setNewExternalLinks((prev) => [...(Array.isArray(prev) ? prev : []), { title: "", url: "" }]);
   }
 
   function handleRemoveExternalLinkRow(index: number) {
     setNewExternalLinks((prev) => {
-      const next = prev.filter((_, rowIndex) => rowIndex !== index);
+      const next = (Array.isArray(prev) ? prev : []).filter((_, rowIndex) => rowIndex !== index);
       return next.length ? next : [{ title: "", url: "" }];
     });
   }
@@ -1529,9 +1530,10 @@ export default function TeacherDashboard() {
         .eq("prompt_id", prompt.id);
       if (submissionsFetchError) throw submissionsFetchError;
 
-      const studentAudioPaths = Array.from(new Set((linkedSubmissions ?? []).map((row) => row.audio_path).filter((value): value is string => Boolean(value))));
-      const studentVideoPaths = Array.from(new Set((linkedSubmissions ?? []).map((row) => row.video_path).filter((value): value is string => Boolean(value))));
-      const teacherAudioPaths = Array.from(new Set((linkedSubmissions ?? []).map((row) => row.feedback_audio_path).filter((value): value is string => Boolean(value))));
+      const linkedSubmissionRows = Array.isArray(linkedSubmissions) ? linkedSubmissions : [];
+      const studentAudioPaths = Array.from(new Set(linkedSubmissionRows.map((row) => row.audio_path).filter((value): value is string => Boolean(value))));
+      const studentVideoPaths = Array.from(new Set(linkedSubmissionRows.map((row) => row.video_path).filter((value): value is string => Boolean(value))));
+      const teacherAudioPaths = Array.from(new Set(linkedSubmissionRows.map((row) => row.feedback_audio_path).filter((value): value is string => Boolean(value))));
 
       if (prompt.prompt_image_path) {
         const { error: removeImageError } = await supabase.storage.from(PROMPT_IMAGES_BUCKET).remove([prompt.prompt_image_path]);
@@ -1562,8 +1564,8 @@ export default function TeacherDashboard() {
       if (analyticsPromptFilter === prompt.id) {
         setAnalyticsPromptFilter("__all_prompts__");
       }
-      setPrompts((prev) => prev.filter((row) => row.id !== prompt.id));
-      setSubmissions((prev) => prev.filter((row) => row.prompt_id !== prompt.id));
+      setPrompts((prev) => (Array.isArray(prev) ? prev : []).filter((row) => row.id !== prompt.id));
+      setSubmissions((prev) => (Array.isArray(prev) ? prev : []).filter((row) => row.prompt_id !== prompt.id));
       setPromptSuccess("Activity deleted.");
       await fetchPrompts();
       await fetchSubmissions();
@@ -1666,7 +1668,7 @@ export default function TeacherDashboard() {
   }
 
   function updateStudentDraft(id: string, patch: Partial<StudentRow>) {
-    setStudents((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+    setStudents((prev) => (Array.isArray(prev) ? prev : []).map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
 
   async function handleSaveStudent(student: StudentRow) {
@@ -1708,7 +1710,7 @@ export default function TeacherDashboard() {
       setRosterError(error.message);
       return;
     }
-    setStudents((prev) => prev.filter((row) => row.id !== studentId));
+    setStudents((prev) => (Array.isArray(prev) ? prev : []).filter((row) => row.id !== studentId));
     const removedLabel = student?.student_name?.trim() || student?.student_code?.trim() || "Student";
     setRosterSuccess(`Deleted ${removedLabel}.`);
     setSelectedStudentFilter((prev) => {
@@ -1760,7 +1762,7 @@ export default function TeacherDashboard() {
       updateDraft(submission.id, { savingOverride: false, error: error.message });
       return;
     }
-    setSubmissions((prev) => prev.map((row) => (row.id === submission.id ? ((data as SubmissionRow) ?? row) : row)));
+    setSubmissions((prev) => (Array.isArray(prev) ? prev : []).map((row) => (row.id === submission.id ? ((data as SubmissionRow) ?? row) : row)));
     updateDraft(submission.id, { savingOverride: false, savedMessage: "Override saved ✅", error: "" });
   }
 
@@ -1899,7 +1901,7 @@ export default function TeacherDashboard() {
         .select(SUBMISSION_SELECT)
         .single();
       if (error) throw error;
-      setSubmissions((prev) => prev.map((row) => (row.id === submission.id ? ((data as SubmissionRow) ?? row) : row)));
+      setSubmissions((prev) => (Array.isArray(prev) ? prev : []).map((row) => (row.id === submission.id ? ((data as SubmissionRow) ?? row) : row)));
       updateDraft(submission.id, { savingAudio: false, savedMessage: "Teacher audio saved ✅", error: "" });
     } catch (error: any) {
       updateDraft(submission.id, { savingAudio: false, error: error?.message || "Teacher audio upload failed." });
@@ -1929,7 +1931,7 @@ export default function TeacherDashboard() {
       const { error } = await supabase.from("student_submissions").delete().eq("id", submission.id);
       if (error) throw error;
 
-      setSubmissions((prev) => prev.filter((row) => row.id !== submission.id));
+      setSubmissions((prev) => (Array.isArray(prev) ? prev : []).filter((row) => row.id !== submission.id));
       setDrafts((prev) => {
         const existing = prev[submission.id];
         if (!existing) return prev;
@@ -2276,7 +2278,7 @@ export default function TeacherDashboard() {
             selectedClassName={selectedClassName}
             selectedClassStudents={selectedClassStudents}
             needsReviewCount={classNeedsReviewCount}
-            assignedPromptCount={sortedPrompts.filter((prompt) => (prompt.prompt_assignments ?? []).some((row) => row.class_name.trim() === selectedClassName)).length}
+            assignedPromptCount={sortedPrompts.filter((prompt) => (Array.isArray(prompt.prompt_assignments) ? prompt.prompt_assignments : []).some((row) => row.class_name.trim() === selectedClassName)).length}
             rosterPanelProps={{
               selectedClassName,
               isDeletingClass,
