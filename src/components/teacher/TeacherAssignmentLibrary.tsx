@@ -161,6 +161,7 @@ function instructionsPreview(value?: string | null) {
 
 export default function TeacherAssignmentLibrary(props: Props) {
   const [isCreatingInCategory, setIsCreatingInCategory] = React.useState(false);
+  const [creationCategoryId, setCreationCategoryId] = React.useState<CategoryId | null>(null);
 
   const activeCategoryId = props.selectedCategoryId;
   const activeCategory = activityCategories.find((category) => category.id === activeCategoryId) ?? null;
@@ -175,13 +176,16 @@ export default function TeacherAssignmentLibrary(props: Props) {
     return props.prompts.filter((prompt) => categoryMatchesPrompt(activeCategoryId, prompt));
   }, [activeCategoryId, props.prompts]);
 
+  const resolvedCreationCategory = creationCategoryId ? activityCategories.find((category) => category.id === creationCategoryId) ?? null : null;
+  const effectiveCreationCategory = activeCategoryId === "all" ? resolvedCreationCategory : activeCategory;
+
   React.useEffect(() => {
-    if (!isCreatingInCategory || !activeCategory?.assignmentType) return;
-    props.setNewAssignmentType(activeCategory.assignmentType);
-    if (activeCategory.assignmentType !== "external_link") {
+    if (!isCreatingInCategory || !effectiveCreationCategory?.assignmentType) return;
+    props.setNewAssignmentType(effectiveCreationCategory.assignmentType);
+    if (effectiveCreationCategory.assignmentType !== "external_link") {
       props.setNewExternalUrl("");
     }
-  }, [activeCategory, isCreatingInCategory]);
+  }, [effectiveCreationCategory, isCreatingInCategory]);
 
   React.useEffect(() => {
     if (props.promptSuccess && isCreatingInCategory) {
@@ -189,10 +193,10 @@ export default function TeacherAssignmentLibrary(props: Props) {
     }
   }, [isCreatingInCategory, props.promptSuccess]);
 
-  const showImageUpload = activeCategoryId === "speaking" || activeCategoryId === "picture";
-  const showExternalUrl = activeCategoryId === "external";
-  const showLessonBuilder = activeCategoryId === "lesson";
-  const suggestedTimePlaceholder = activeCategoryId === "speaking" || activeCategoryId === "picture" ? "Suggested speaking time" : "Suggested time (optional)";
+  const showImageUpload = effectiveCreationCategory?.id === "speaking" || effectiveCreationCategory?.id === "picture";
+  const showExternalUrl = effectiveCreationCategory?.id === "external";
+  const showLessonBuilder = effectiveCreationCategory?.id === "lesson";
+  const suggestedTimePlaceholder = effectiveCreationCategory?.id === "speaking" || effectiveCreationCategory?.id === "picture" ? "Suggested speaking time" : "Suggested time (optional)";
   const addLessonBlock = () => {
     props.setNewLessonBlocks((prev) => [...prev, { type: "source", source_kind: "text", content: "" }]);
   };
@@ -228,34 +232,51 @@ export default function TeacherAssignmentLibrary(props: Props) {
                 <div style={{ color: "#64748b", fontSize: 13, marginTop: 4 }}>{activeCategory.description} • {categoryCounts[activeCategory.id]} total</div>
               </div>
 
-              {activeCategory.id !== "all" ? (
+              <div style={{ display: "grid", gap: 8 }}>
                 <button
                   type="button"
                   onClick={() => {
-                    setIsCreatingInCategory((prev) => !prev);
+                    if (isCreatingInCategory) {
+                      setIsCreatingInCategory(false);
+                      setCreationCategoryId(null);
+                      return;
+                    }
+                    setIsCreatingInCategory(true);
+                    if (activeCategory.id !== "all") setCreationCategoryId(activeCategory.id);
                   }}
-                  style={{ minHeight: 38, borderRadius: 10, border: "1px solid #0f172a", background: isCreatingInCategory ? "#fff" : "#0f172a", color: isCreatingInCategory ? "#0f172a" : "#fff", padding: "0 12px", fontWeight: 800 }}
+                  style={{ minHeight: 40, borderRadius: 10, border: "1px solid #0f172a", background: isCreatingInCategory ? "#fff" : "#0f172a", color: isCreatingInCategory ? "#0f172a" : "#fff", padding: "0 14px", fontWeight: 800 }}
                 >
-                  {isCreatingInCategory ? "Cancel" : activeCategory.createButtonLabel}
+                  {isCreatingInCategory ? "Cancel" : "+ Create activity"}
                 </button>
-              ) : (
-                <div style={{ fontSize: 12, color: "#64748b", border: "1px dashed #cbd5e1", borderRadius: 10, padding: "8px 10px", background: "#f8fafc" }}>Choose a category to create a new activity.</div>
-              )}
+              </div>
             </div>
 
-            {isCreatingInCategory && activeCategory.id !== "all" ? (
+            {isCreatingInCategory ? (
               <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12, display: "grid", gap: 8, marginTop: 12 }}>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>{activeCategory.createTypeLabel}</div>
-                <input value={props.newPrompt} onChange={(e) => props.setNewPrompt(e.target.value)} placeholder="Activity title" style={inputStyle} />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {activityCategories.filter((category) => category.id !== "all").map((category) => (
+                    <button
+                      key={`create-choice-${category.id}`}
+                      type="button"
+                      onClick={() => setCreationCategoryId(category.id)}
+                      style={{ minHeight: 34, borderRadius: 999, border: `1px solid ${effectiveCreationCategory?.id === category.id ? "#0f172a" : "#cbd5e1"}`, background: effectiveCreationCategory?.id === category.id ? "#0f172a" : "#fff", color: effectiveCreationCategory?.id === category.id ? "#fff" : "#334155", padding: "0 12px", fontSize: 12, fontWeight: 800 }}
+                    >
+                      {category.title}{category.id === "lesson" ? " (beta)" : ""}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontWeight: 800, color: "#0f172a" }}>{effectiveCreationCategory?.createTypeLabel ?? "Choose an activity type"}</div>
+                <input disabled={!effectiveCreationCategory} value={props.newPrompt} onChange={(e) => props.setNewPrompt(e.target.value)} placeholder="Activity title" style={inputStyle} />
 
                 <textarea
+                  disabled={!effectiveCreationCategory}
                   value={props.newInstructions}
                   onChange={(e) => props.setNewInstructions(e.target.value)}
-                  placeholder={activeCategory.id === "external" ? "Instructions (optional)" : "Instructions / prompt"}
+                  placeholder={effectiveCreationCategory?.id === "external" ? "Instructions (optional)" : "Instructions / prompt"}
                   style={textareaStyle}
                 />
 
-                <input value={props.newSuggestedTime} onChange={(e) => props.setNewSuggestedTime(e.target.value)} placeholder={suggestedTimePlaceholder} style={inputStyle} />
+                <input disabled={!effectiveCreationCategory} value={props.newSuggestedTime} onChange={(e) => props.setNewSuggestedTime(e.target.value)} placeholder={suggestedTimePlaceholder} style={inputStyle} />
 
                 {showExternalUrl ? (
                   <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 10, display: "grid", gap: 8 }}>
@@ -302,7 +323,7 @@ export default function TeacherAssignmentLibrary(props: Props) {
                 {showImageUpload ? (
                   <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 10 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 6 }}>
-                      {activeCategory.id === "picture" ? "Prompt image (recommended for this activity)" : "Prompt image (optional)"}
+                      {effectiveCreationCategory?.id === "picture" ? "Prompt image (recommended for this activity)" : "Prompt image (optional)"}
                     </div>
                     <input type="file" accept="image/*" onChange={(e) => props.onPromptImageChange(e.target.files?.[0] ?? null)} style={{ fontSize: 13 }} />
                     {props.newPromptImagePreviewUrl ? (
@@ -316,8 +337,8 @@ export default function TeacherAssignmentLibrary(props: Props) {
                   </div>
                 ) : null}
 
-                <button type="button" onClick={props.onSavePrompt} disabled={props.isSavingPrompt} style={{ minHeight: 40, borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800 }}>
-                  {props.isSavingPrompt ? "Saving..." : activeCategory.createButtonLabel}
+                <button type="button" onClick={props.onSavePrompt} disabled={props.isSavingPrompt || !effectiveCreationCategory} style={{ minHeight: 40, borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800 }}>
+                  {props.isSavingPrompt ? "Saving..." : (effectiveCreationCategory?.createButtonLabel ?? "Create activity")}
                 </button>
               </div>
             ) : null}
