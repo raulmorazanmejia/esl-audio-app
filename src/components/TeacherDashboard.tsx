@@ -934,11 +934,11 @@ export default function TeacherDashboard() {
     return sortedPrompts.filter((prompt) => !(prompt.prompt_assignments?.length));
   }, [sortedPrompts]);
   const activityCategoryCounts = useMemo(() => {
-    const ids: ActivityCategoryId[] = ["all", "speaking", "picture", "text", "external", "video"];
+    const ids: ActivityCategoryId[] = ["all", "speaking", "picture", "text", "external", "video", "lesson"];
     return ids.reduce<Record<ActivityCategoryId, number>>((acc, id) => {
       acc[id] = sortedPrompts.filter((prompt) => promptMatchesActivityCategory(id, prompt)).length;
       return acc;
-    }, { all: 0, speaking: 0, picture: 0, text: 0, external: 0, video: 0 });
+    }, { all: 0, speaking: 0, picture: 0, text: 0, external: 0, video: 0, lesson: 0 });
   }, [sortedPrompts]);
 
   const classNameOptions = useMemo(() => {
@@ -2214,6 +2214,7 @@ export default function TeacherDashboard() {
                   { id: "text", label: "Text" },
                   { id: "external", label: "External" },
                   { id: "video", label: "Video" },
+                  { id: "lesson", label: "Lesson" },
                 ].map((category) => (
                   <button key={category.id} type="button" onClick={() => { setTeacherScreen("activities"); setActiveActivityCategoryId(category.id as ActivityCategoryId); }} style={{ width: "100%", minHeight: 32, borderRadius: 10, border: "1px solid rgba(148,163,184,0.35)", background: activeActivityCategoryId === category.id && teacherScreen === "activities" ? "rgba(99,102,241,0.32)" : "rgba(15,23,42,0.28)", color: "#fff", padding: "0 8px", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}>
                     <span style={{ fontSize: 12 }}>{category.label}</span>
@@ -2402,6 +2403,7 @@ export default function TeacherDashboard() {
                 newInstructions={newInstructions}
                 newExternalUrl={newExternalUrl}
                 newExternalLinks={newExternalLinks}
+                newLessonBlocks={newLessonBlocks}
                 newPromptImagePreviewUrl={newPromptImagePreviewUrl}
                 setNewPrompt={setNewPrompt}
                 setNewSuggestedTime={setNewSuggestedTime}
@@ -2411,6 +2413,7 @@ export default function TeacherDashboard() {
                 onExternalLinkChange={handleExternalLinkChange}
                 onAddExternalLink={handleAddExternalLinkRow}
                 onRemoveExternalLink={handleRemoveExternalLinkRow}
+                setNewLessonBlocks={setNewLessonBlocks}
                 onPromptImageChange={handleNewPromptImageChange}
                 onClearPromptImage={handleClearNewPromptImage}
                 onSavePrompt={() => void handleSavePrompt()}

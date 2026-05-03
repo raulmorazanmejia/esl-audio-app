@@ -1,5 +1,5 @@
 import React from "react";
-import { AssignmentActivityType, PromptRow } from "../TeacherDashboardTypes";
+import { AssignmentActivityType, LessonBlock, LessonBlockType, LessonSourceKind, PromptRow } from "../TeacherDashboardTypes";
 import { ExternalActivityLink, parseExternalActivityData } from "../../lib/externalLinks";
 
 type Props = {
@@ -13,6 +13,7 @@ type Props = {
   newInstructions: string;
   newExternalUrl: string;
   newExternalLinks: ExternalActivityLink[];
+  newLessonBlocks: LessonBlock[];
   newPromptImagePreviewUrl: string;
   setNewPrompt: (value: string) => void;
   setNewSuggestedTime: (value: string) => void;
@@ -22,6 +23,7 @@ type Props = {
   onExternalLinkChange: (index: number, patch: Partial<ExternalActivityLink>) => void;
   onAddExternalLink: () => void;
   onRemoveExternalLink: (index: number) => void;
+  setNewLessonBlocks: React.Dispatch<React.SetStateAction<LessonBlock[]>>;
   onPromptImageChange: (file: File | null) => void;
   onClearPromptImage: () => void;
   onSavePrompt: () => void;
@@ -54,6 +56,8 @@ type ActivityCategory = {
 
 const inputStyle: React.CSSProperties = { minHeight: 42, borderRadius: 12, border: "1px solid #dbe3f0", background: "#fff", padding: "0 12px", fontSize: 14, color: "#0f172a" };
 const textareaStyle: React.CSSProperties = { minHeight: 96, borderRadius: 12, border: "1px solid #dbe3f0", background: "#fff", padding: "10px 12px", fontSize: 14, color: "#0f172a", resize: "vertical" };
+const LESSON_BLOCK_TYPES: LessonBlockType[] = ["source", "grammar_explanation", "multiple_choice", "speaking_task", "writing_task"];
+const SOURCE_KINDS: LessonSourceKind[] = ["text", "video", "image"];
 
 const activityCategories: ActivityCategory[] = [
   {
@@ -187,7 +191,11 @@ export default function TeacherAssignmentLibrary(props: Props) {
 
   const showImageUpload = activeCategoryId === "speaking" || activeCategoryId === "picture";
   const showExternalUrl = activeCategoryId === "external";
+  const showLessonBuilder = activeCategoryId === "lesson";
   const suggestedTimePlaceholder = activeCategoryId === "speaking" || activeCategoryId === "picture" ? "Suggested speaking time" : "Suggested time (optional)";
+  const addLessonBlock = () => {
+    props.setNewLessonBlocks((prev) => [...prev, { type: "source", source_kind: "text", content: "" }]);
+  };
 
   return (
     <>
@@ -263,6 +271,30 @@ export default function TeacherAssignmentLibrary(props: Props) {
                     ))}
                     <button type="button" onClick={props.onAddExternalLink} style={{ minHeight: 38, borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700 }}>
                       Add another link
+                    </button>
+                  </div>
+                ) : null}
+                {showLessonBuilder ? (
+                  <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 10, display: "grid", gap: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>Lesson Builder (beta)</div>
+                    {props.newLessonBlocks.map((block, index) => (
+                      <div key={`library-lesson-block-${index}`} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 8, display: "grid", gap: 6 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto auto", gap: 6 }}>
+                          <select value={block.type} onChange={(e) => props.setNewLessonBlocks((prev) => prev.map((item, i) => i === index ? { ...item, type: e.target.value as LessonBlockType } : item))} style={inputStyle}>
+                            {LESSON_BLOCK_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                          </select>
+                          <select value={block.source_kind ?? "text"} onChange={(e) => props.setNewLessonBlocks((prev) => prev.map((item, i) => i === index ? { ...item, source_kind: e.target.value as LessonSourceKind } : item))} style={{ ...inputStyle, opacity: block.type === "source" ? 1 : 0.6 }} disabled={block.type !== "source"}>
+                            {SOURCE_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+                          </select>
+                          <button type="button" onClick={() => props.setNewLessonBlocks((prev) => prev.filter((_, i) => i !== index))} style={{ minHeight: 42, borderRadius: 12, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontWeight: 800, padding: "0 10px" }}>Remove</button>
+                          <button type="button" onClick={() => props.setNewLessonBlocks((prev) => index < 1 ? prev : prev.map((item, i) => i === index - 1 ? prev[index] : i === index ? prev[index - 1] : item))} style={{ minHeight: 42, borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 800, padding: "0 10px" }}>↑</button>
+                          <button type="button" onClick={() => props.setNewLessonBlocks((prev) => index >= prev.length - 1 ? prev : prev.map((item, i) => i === index + 1 ? prev[index] : i === index ? prev[index + 1] : item))} style={{ minHeight: 42, borderRadius: 12, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 800, padding: "0 10px" }}>↓</button>
+                        </div>
+                        <textarea value={block.content} onChange={(e) => props.setNewLessonBlocks((prev) => prev.map((item, i) => i === index ? { ...item, content: e.target.value } : item))} placeholder="Block content" style={textareaStyle} />
+                      </div>
+                    ))}
+                    <button type="button" onClick={addLessonBlock} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700 }}>
+                      Add block
                     </button>
                   </div>
                 ) : null}
