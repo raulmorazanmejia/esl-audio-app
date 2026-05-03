@@ -162,6 +162,7 @@ function instructionsPreview(value?: string | null) {
 export default function TeacherAssignmentLibrary(props: Props) {
   const [isCreatingInCategory, setIsCreatingInCategory] = React.useState(false);
   const [creationCategoryId, setCreationCategoryId] = React.useState<CategoryId | null>(null);
+  const [isTypePickerOpen, setIsTypePickerOpen] = React.useState(false);
 
   const activeCategoryId = props.selectedCategoryId;
   const activeCategory = activityCategories.find((category) => category.id === activeCategoryId) ?? null;
@@ -190,8 +191,13 @@ export default function TeacherAssignmentLibrary(props: Props) {
   React.useEffect(() => {
     if (props.promptSuccess && isCreatingInCategory) {
       setIsCreatingInCategory(false);
+      setIsTypePickerOpen(false);
     }
   }, [isCreatingInCategory, props.promptSuccess]);
+
+  React.useEffect(() => {
+    if (!isCreatingInCategory) setIsTypePickerOpen(false);
+  }, [isCreatingInCategory]);
 
   const showImageUpload = effectiveCreationCategory?.id === "speaking" || effectiveCreationCategory?.id === "picture";
   const showExternalUrl = effectiveCreationCategory?.id === "external";
@@ -253,34 +259,50 @@ export default function TeacherAssignmentLibrary(props: Props) {
 
             {isCreatingInCategory ? (
               <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12, display: "grid", gap: 8, marginTop: 12 }}>
-                <label style={{ display: "grid", gap: 6 }}>
+                <div style={{ display: "grid", gap: 6, position: "relative" }}>
                   <span style={{ fontSize: 12, fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.06em" }}>Activity type</span>
-                  <select
-                    value={effectiveCreationCategory?.id ?? ""}
-                    onChange={(e) => setCreationCategoryId(e.target.value || null)}
-                    style={{ ...inputStyle, borderRadius: 999, minHeight: 42, padding: "0 14px", fontWeight: 700, background: "#fff" }}
+                  <button
+                    type="button"
+                    onClick={() => setIsTypePickerOpen((prev) => !prev)}
+                    style={{ minHeight: 50, borderRadius: 999, border: "1px solid #cbd5e1", background: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 16px", fontWeight: 800, color: "#0f172a", boxShadow: isTypePickerOpen ? "0 8px 20px rgba(15,23,42,0.10)" : "0 2px 8px rgba(15,23,42,0.06)" }}
                   >
-                    <option value="" disabled>Select activity type</option>
-                    <option value="speaking">Speaking / Audio response</option>
-                    <option value="picture">Describe a picture</option>
-                    <option value="text">Text response</option>
-                    <option value="external">External link</option>
-                    <option value="video">Video response</option>
-                    <option value="lesson">Lesson (beta)</option>
-                  </select>
-                </label>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>{effectiveCreationCategory?.createTypeLabel ?? "Choose an activity type"}</div>
-                <input disabled={!effectiveCreationCategory} value={props.newPrompt} onChange={(e) => props.setNewPrompt(e.target.value)} placeholder="Activity title" style={inputStyle} />
+                    <span>{effectiveCreationCategory ? `${effectiveCreationCategory.icon} ${effectiveCreationCategory.title}` : "Choose an activity type to get started."}</span>
+                    <span style={{ color: "#64748b" }}>{isTypePickerOpen ? "▴" : "▾"}</span>
+                  </button>
+                  {isTypePickerOpen ? (
+                    <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#fff", boxShadow: "0 16px 28px rgba(15,23,42,0.08)", padding: 8, display: "grid", gap: 6 }}>
+                      {activityCategories.filter((category) => category.id !== "all").map((category) => {
+                        const selected = effectiveCreationCategory?.id === category.id;
+                        return (
+                          <button
+                            key={`create-type-${category.id}`}
+                            type="button"
+                            onClick={() => { setCreationCategoryId(category.id); setIsTypePickerOpen(false); }}
+                            style={{ textAlign: "left", border: selected ? "1px solid #0f172a" : "1px solid #e2e8f0", borderRadius: 12, background: selected ? "#f1f5f9" : "#fff", padding: "10px 12px", display: "grid", gap: 2 }}
+                          >
+                            <div style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{category.icon} {category.id === "lesson" ? "Lesson (beta)" : category.title}</div>
+                            <div style={{ fontSize: 12, color: "#64748b" }}>{category.description}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+                <div style={{ fontWeight: 900, fontSize: 20, color: "#0f172a" }}>{effectiveCreationCategory?.createButtonLabel ?? "Choose an activity type"}</div>
+                {!effectiveCreationCategory ? (
+                  <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 12, color: "#475569", fontWeight: 600 }}>Choose an activity type to get started.</div>
+                ) : null}
+                <input disabled={!effectiveCreationCategory} value={props.newPrompt} onChange={(e) => props.setNewPrompt(e.target.value)} placeholder="Activity title" style={{ ...inputStyle, display: effectiveCreationCategory ? "block" : "none" }} />
 
                 <textarea
                   disabled={!effectiveCreationCategory}
                   value={props.newInstructions}
                   onChange={(e) => props.setNewInstructions(e.target.value)}
                   placeholder={effectiveCreationCategory?.id === "external" ? "Instructions (optional)" : "Instructions / prompt"}
-                  style={textareaStyle}
+                  style={{ ...textareaStyle, display: effectiveCreationCategory ? "block" : "none" }}
                 />
 
-                <input disabled={!effectiveCreationCategory} value={props.newSuggestedTime} onChange={(e) => props.setNewSuggestedTime(e.target.value)} placeholder={suggestedTimePlaceholder} style={inputStyle} />
+                <input disabled={!effectiveCreationCategory} value={props.newSuggestedTime} onChange={(e) => props.setNewSuggestedTime(e.target.value)} placeholder={suggestedTimePlaceholder} style={{ ...inputStyle, display: effectiveCreationCategory ? "block" : "none" }} />
 
                 {showExternalUrl ? (
                   <div style={{ border: "1px dashed #cbd5e1", borderRadius: 12, background: "#fff", padding: 10, display: "grid", gap: 8 }}>
@@ -341,7 +363,7 @@ export default function TeacherAssignmentLibrary(props: Props) {
                   </div>
                 ) : null}
 
-                <button type="button" onClick={props.onSavePrompt} disabled={props.isSavingPrompt || !effectiveCreationCategory} style={{ minHeight: 40, borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800 }}>
+                <button type="button" onClick={props.onSavePrompt} disabled={props.isSavingPrompt || !effectiveCreationCategory || !props.newPrompt.trim()} style={{ minHeight: 40, borderRadius: 12, border: "none", background: "#0f172a", color: "#fff", fontWeight: 800 }}>
                   {props.isSavingPrompt ? "Saving..." : (effectiveCreationCategory?.createButtonLabel ?? "Create activity")}
                 </button>
               </div>
