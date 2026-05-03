@@ -5,13 +5,13 @@ import TeacherClassDetail from "./teacher/TeacherClassDetail";
 import TeacherPromptPanel from "./teacher/TeacherPromptPanel";
 import TeacherAssignmentLibrary from "./teacher/TeacherAssignmentLibrary";
 import TeacherSubmissionsPanel from "./teacher/TeacherSubmissionsPanel";
-import { AssignmentActivityType, DraftState, DraftsById, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
+import { AssignmentActivityType, DraftState, DraftsById, LessonBlock, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
 import { ExternalActivityLink, isValidExternalUrl, serializeExternalActivityData } from "../lib/externalLinks";
 
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, ai_grammar_feedback, ai_improvements, ai_picture_accuracy, teacher_score, teacher_comment, student_code, prompt:prompts(assignment_type)";
-const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
+const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, lesson_blocks, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
 type ActivityCategoryId = "all" | "speaking" | "picture" | "text" | "external" | "video" | "lesson";
 
 const styles = {
@@ -668,6 +668,7 @@ export default function TeacherDashboard() {
   const [newInstructions, setNewInstructions] = useState("");
   const [newExternalUrl, setNewExternalUrl] = useState("");
   const [newExternalLinks, setNewExternalLinks] = useState<ExternalActivityLink[]>([{ title: "", url: "" }]);
+  const [newLessonBlocks, setNewLessonBlocks] = useState<LessonBlock[]>([]);
   const [newPromptImageFile, setNewPromptImageFile] = useState<File | null>(null);
   const [newPromptImagePreviewUrl, setNewPromptImagePreviewUrl] = useState("");
   const [isSavingPrompt, setIsSavingPrompt] = useState(false);
@@ -1177,6 +1178,11 @@ export default function TeacherDashboard() {
         }],
       };
     });
+    rows.forEach((prompt) => {
+      if (prompt.assignment_type === "lesson") {
+        console.log("[TeacherDashboard] loaded lesson_blocks", prompt.id, prompt.lesson_blocks);
+      }
+    });
     setPrompts(rows);
   }, []);
 
@@ -1286,6 +1292,7 @@ export default function TeacherDashboard() {
         example_text: newAssignmentType === "external_link"
           ? serializeExternalActivityData(instructions, normalizedLinks)
           : (instructions || null),
+        lesson_blocks: newAssignmentType === "lesson" ? newLessonBlocks : null,
         is_active: false,
       })
       .select("id")
@@ -1304,6 +1311,7 @@ export default function TeacherDashboard() {
     setNewInstructions("");
     setNewExternalUrl("");
     setNewExternalLinks([{ title: "", url: "" }]);
+    setNewLessonBlocks([]);
     setNewPromptImageFile(null);
     if (newPromptImagePreviewUrl) {
       URL.revokeObjectURL(newPromptImagePreviewUrl);
@@ -2314,6 +2322,7 @@ export default function TeacherDashboard() {
               newInstructions,
               newExternalUrl,
               newExternalLinks,
+              newLessonBlocks,
               setNewPrompt,
               setNewSuggestedTime,
               setNewAssignmentType: handleAssignmentTypeChange,
@@ -2322,6 +2331,7 @@ export default function TeacherDashboard() {
               onExternalLinkChange: handleExternalLinkChange,
               onAddExternalLink: handleAddExternalLinkRow,
               onRemoveExternalLink: handleRemoveExternalLinkRow,
+              setNewLessonBlocks,
               newPromptImagePreviewUrl,
               onPromptImageChange: handleNewPromptImageChange,
               onClearPromptImage: handleClearNewPromptImage,

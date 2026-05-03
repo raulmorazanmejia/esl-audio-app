@@ -1,5 +1,5 @@
 import React from "react";
-import { AssignmentActivityType, PromptRow } from "../TeacherDashboardTypes";
+import { AssignmentActivityType, LessonBlock, LessonBlockType, LessonSourceKind, PromptRow } from "../TeacherDashboardTypes";
 import { ExternalActivityLink, parseExternalActivityData } from "../../lib/externalLinks";
 
 type Props = {
@@ -13,6 +13,7 @@ type Props = {
   newInstructions: string;
   newExternalUrl: string;
   newExternalLinks: ExternalActivityLink[];
+  newLessonBlocks: LessonBlock[];
   setNewPrompt: (v: string) => void;
   setNewSuggestedTime: (v: string) => void;
   setNewAssignmentType: (value: AssignmentActivityType) => void;
@@ -21,6 +22,7 @@ type Props = {
   onExternalLinkChange: (index: number, patch: Partial<ExternalActivityLink>) => void;
   onAddExternalLink: () => void;
   onRemoveExternalLink: (index: number) => void;
+  setNewLessonBlocks: React.Dispatch<React.SetStateAction<LessonBlock[]>>;
   newPromptImagePreviewUrl: string;
   onPromptImageChange: (file: File | null) => void;
   onClearPromptImage: () => void;
@@ -55,6 +57,8 @@ type Props = {
 };
 
 const inputStyle: React.CSSProperties = { minHeight: 38, borderRadius: 10, border: "1px solid #dbe3f0", background: "#f8fafc", padding: "0 10px" };
+const LESSON_BLOCK_TYPES: LessonBlockType[] = ["source", "grammar_explanation", "multiple_choice", "speaking_task", "writing_task"];
+const SOURCE_KINDS: LessonSourceKind[] = ["text", "video", "image"];
 
 export default function TeacherPromptPanel(props: Props) {
   const p = props;
@@ -80,6 +84,10 @@ export default function TeacherPromptPanel(props: Props) {
       ? p.emptyAssignedStateText ?? `No assignments are currently assigned to ${p.selectedClassName}.`
       : p.emptyLibraryStateText ?? "No assignments found in the full library."
     : p.emptyStateText ?? `No assignments yet for this class.`;
+
+  const addLessonBlock = () => {
+    p.setNewLessonBlocks((prev) => [...prev, { type: "source", source_kind: "text", content: "" }]);
+  };
 
   return <section>
     <div style={{ fontWeight: 900, fontSize: 22 }}>{title}</div>
@@ -111,6 +119,38 @@ export default function TeacherPromptPanel(props: Props) {
           ))}
           <button type="button" onClick={p.onAddExternalLink} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700 }}>
             Add another link
+          </button>
+        </div>
+      ) : p.newAssignmentType === "lesson" ? (
+        <div style={{ border: "1px dashed #cbd5e1", borderRadius: 10, padding: 10, display: "grid", gap: 8, background: "#fff" }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>Lesson Builder (beta)</div>
+          {p.newLessonBlocks.map((block, index) => (
+            <div key={`lesson-block-${index}`} style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 8, display: "grid", gap: 6 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto auto", gap: 6 }}>
+                <select
+                  value={block.type}
+                  onChange={(e) => p.setNewLessonBlocks((prev) => prev.map((item, i) => i === index ? { ...item, type: e.target.value as LessonBlockType } : item))}
+                  style={inputStyle}
+                >
+                  {LESSON_BLOCK_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+                <select
+                  value={block.source_kind ?? "text"}
+                  onChange={(e) => p.setNewLessonBlocks((prev) => prev.map((item, i) => i === index ? { ...item, source_kind: e.target.value as LessonSourceKind } : item))}
+                  style={{ ...inputStyle, opacity: block.type === "source" ? 1 : 0.6 }}
+                  disabled={block.type !== "source"}
+                >
+                  {SOURCE_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+                </select>
+                <button type="button" onClick={() => p.setNewLessonBlocks((prev) => prev.filter((_, i) => i !== index))} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #fecaca", background: "#fff7f7", color: "#b91c1c", fontWeight: 700 }}>Remove</button>
+                <button type="button" onClick={() => p.setNewLessonBlocks((prev) => index < 1 ? prev : prev.map((item, i) => i === index - 1 ? prev[index] : i === index ? prev[index - 1] : item))} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700 }}>↑</button>
+                <button type="button" onClick={() => p.setNewLessonBlocks((prev) => index >= prev.length - 1 ? prev : prev.map((item, i) => i === index + 1 ? prev[index] : i === index ? prev[index + 1] : item))} style={{ minHeight: 38, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700 }}>↓</button>
+              </div>
+              <textarea value={block.content} onChange={(e) => p.setNewLessonBlocks((prev) => prev.map((item, i) => i === index ? { ...item, content: e.target.value } : item))} placeholder="Block content" style={{ ...inputStyle, minHeight: 84, padding: 10 }} />
+            </div>
+          ))}
+          <button type="button" onClick={addLessonBlock} style={{ minHeight: 34, borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 700 }}>
+            Add block
           </button>
         </div>
       ) : (
