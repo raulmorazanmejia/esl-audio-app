@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import LazyAudioPlayer from "../LazyAudioPlayer";
 import { DraftsById, SubmissionRow } from "../TeacherDashboardTypes";
 import TeacherAnalyticsPanel from "./TeacherAnalyticsPanel";
@@ -18,6 +18,8 @@ export default function TeacherSubmissionsPanel(p: Props) {
   const [expandedStudents, setExpandedStudents] = useState<Record<string, boolean>>({});
   const [expandedClasses, setExpandedClasses] = useState<Record<string, boolean>>({});
   const [recordingSecondsById, setRecordingSecondsById] = useState<Record<string, number>>({});
+  const [openSubmissionMenuId, setOpenSubmissionMenuId] = useState<string | null>(null);
+  const menuWrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => { const ids = Object.entries(p.drafts).filter(([, d]) => d?.isRecordingTeacher).map(([id]) => id); if (!ids.length) return; const t = setInterval(() => setRecordingSecondsById((prev) => { const n = { ...prev }; ids.forEach((id) => n[id] = (n[id] || 0) + 1); return n; }), 1000); return () => clearInterval(t); }, [p.drafts]);
 
@@ -34,6 +36,16 @@ export default function TeacherSubmissionsPanel(p: Props) {
     return Array.from(m.values()).map((st: any) => ({ ...st, submissions: st.submissions.sort((a: SubmissionRow, b: SubmissionRow) => +new Date(b.created_at || 0) - +new Date(a.created_at || 0)), needsReviewCount: st.submissions.filter(needsReview).length, latest: st.submissions[0] })).sort((a: any, b: any) => a.className.localeCompare(b.className) || a.code.localeCompare(b.code));
   }, [classFiltered]);
 
+
+
+  useEffect(() => {
+    const onDocClick = (event: MouseEvent) => {
+      if (!menuWrapRef.current?.contains(event.target as Node)) setOpenSubmissionMenuId(null);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+
   const byClass = useMemo(() => {
     const m = new Map<string, SubmissionRow[]>();
     classFiltered.forEach((s) => { const c = getClassName(s); if (!m.has(c)) m.set(c, []); m.get(c)!.push(s); });
@@ -46,7 +58,7 @@ export default function TeacherSubmissionsPanel(p: Props) {
 
   const renderSubmission = (s: SubmissionRow) => {
     const d = p.drafts[s.id]; if (!d) return null; const exp = Boolean(p.expandedSubmissionIds[s.id]); const hasSavedAudio = Boolean(s.feedback_audio_url || s.feedback_url); const hasAi = Boolean(s.transcript || s.ai_comment || s.ai_score !== null || (s as any).ai_score_reason);
-    return <article key={s.id} style={{ border: "1px solid #dbe3f0", borderRadius: 14, background: "#fff", padding: 12, marginTop: 8 }}><div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}><div style={{ fontWeight: 800 }}>{s.prompt_text || "Untitled activity"}</div><button type="button" onClick={() => p.toggleSubmissionDetails(s.id)} style={{ ...pillButton, borderColor: "#93c5fd", background: "#eff6ff", color: "#1e3a8a" }}>{exp ? "Hide review" : "Open review"}</button></div>
+    return <article key={s.id} style={{ border: "1px solid #dbe3f0", borderRadius: 14, background: "#fff", padding: 12, marginTop: 8 }}><div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}><div style={{ fontWeight: 800 }}>{s.prompt_text || "Untitled activity"}</div><div ref={menuWrapRef} style={{ display: "flex", gap: 8, alignItems: "center", position: "relative" }}><button type="button" onClick={() => p.toggleSubmissionDetails(s.id)} style={{ ...pillButton, borderColor: "#93c5fd", background: "#eff6ff", color: "#1e3a8a" }}>{exp ? "Hide review" : "Open review"}</button><button type="button" aria-label="More actions" onClick={() => setOpenSubmissionMenuId((prev) => prev === s.id ? null : s.id)} style={{ minHeight: 40, minWidth: 40, borderRadius: 999, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontSize: 18, fontWeight: 800 }}>⋯</button>{openSubmissionMenuId === s.id ? <div style={{ position: "absolute", top: 44, right: 0, zIndex: 20, border: "1px solid #e2e8f0", borderRadius: 12, background: "#fff", boxShadow: "0 10px 25px rgba(15,23,42,0.12)", padding: 6, display: "grid", gap: 4, minWidth: 180 }}><button type="button" onClick={() => { p.toggleSubmissionDetails(s.id); setOpenSubmissionMenuId(null); }} style={{ ...pillButton, minHeight: 36, borderRadius: 10, textAlign: "left" }}>Open review</button><button type="button" onClick={() => { setExpandedStudents((prev) => ({ ...prev, [`${s.student_code?.trim() || "Unknown"}__${s.student_name?.trim() || "Student"}`]: true })); setOpenSubmissionMenuId(null); }} style={{ ...pillButton, minHeight: 36, borderRadius: 10, textAlign: "left" }}>Student history</button><button type="button" onClick={() => { if (window.confirm("Delete this submission? This cannot be undone.")) p.onDeleteSubmission(s); setOpenSubmissionMenuId(null); }} style={{ ...pillButton, minHeight: 36, borderRadius: 10, textAlign: "left", color: "#b91c1c", borderColor: "#fecaca", background: "#fff7f7" }}>Delete submission</button></div> : null}</div></div>
       <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{activityTypeLabel(s)} · {s.created_at ? new Date(s.created_at).toLocaleString() : "Unknown"}</div>
       {exp ? <div style={{ marginTop: 10, border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12, display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))" }}>
         <div style={{ display: "grid", gap: 10 }}>
