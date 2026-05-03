@@ -39,7 +39,7 @@ type Props = {
   selectedCategoryId: CategoryId;
 };
 
-type CategoryId = "speaking" | "picture" | "text" | "external" | "video" | "all";
+type CategoryId = "speaking" | "picture" | "text" | "external" | "video" | "lesson" | "all";
 
 type ActivityCategory = {
   id: CategoryId;
@@ -104,6 +104,15 @@ const activityCategories: ActivityCategory[] = [
     assignmentType: "video_response",
   },
   {
+    id: "lesson",
+    title: "Lesson",
+    description: "Create a lesson activity shown like other assignments.",
+    icon: "📘",
+    createButtonLabel: "Create lesson activity",
+    createTypeLabel: "Lesson",
+    assignmentType: "lesson",
+  },
+  {
     id: "all",
     title: "All activities",
     description: "View and manage every activity in one place.",
@@ -125,6 +134,7 @@ function categoryMatchesPrompt(categoryId: CategoryId, prompt: PromptRow) {
   if (categoryId === "text") return type === "text_response";
   if (categoryId === "external") return type === "external_link";
   if (categoryId === "video") return type === "video_response";
+  if (categoryId === "lesson") return type === "lesson";
   return false;
 }
 
@@ -134,6 +144,7 @@ function typeLabel(type: AssignmentActivityType | null, hasImage: boolean) {
   if (type === "text_response") return "Text response";
   if (type === "audio_response" && hasImage) return "Describe a picture";
   if (type === "audio_response") return "Speaking / Audio response";
+  if (type === "lesson") return "Lesson";
   if (type === "guided_speaking") return "Guided speaking";
   if (type === "multiple_choice") return "Multiple choice";
   return "Audio response";
@@ -153,7 +164,7 @@ export default function TeacherAssignmentLibrary(props: Props) {
     return activityCategories.reduce<Record<CategoryId, number>>((acc, category) => {
       acc[category.id] = props.prompts.filter((prompt) => categoryMatchesPrompt(category.id, prompt)).length;
       return acc;
-    }, { speaking: 0, picture: 0, text: 0, external: 0, video: 0, all: 0 });
+    }, { speaking: 0, picture: 0, text: 0, external: 0, video: 0, lesson: 0, all: 0 });
   }, [props.prompts]);
 
   const categoryPrompts = React.useMemo(() => {

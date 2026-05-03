@@ -12,7 +12,7 @@ import { ExternalActivityLink, isValidExternalUrl, serializeExternalActivityData
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, ai_grammar_feedback, ai_improvements, ai_picture_accuracy, teacher_score, teacher_comment, student_code, prompt:prompts(assignment_type)";
 const PROMPT_SELECT = "id, prompt_text, assignment_type, external_url, class_name, suggested_time, prompt_image_path, prompt_image_url, example_text, is_active, created_at, prompt_assignments(id, prompt_id, class_name, is_visible, created_at)";
-type ActivityCategoryId = "all" | "speaking" | "picture" | "text" | "external" | "video";
+type ActivityCategoryId = "all" | "speaking" | "picture" | "text" | "external" | "video" | "lesson";
 
 const styles = {
   page: {
@@ -637,6 +637,7 @@ function demoActivityTypeLabel(type: DemoConfig["activities"][number]["type"], h
   if (type === "external_link") return "External link";
   if (type === "video_response") return "Video response";
   if (type === "text_response") return "Text response";
+  if (type === "lesson") return "Lesson";
   if (type === "audio_response" && hasImage) return "Describe a picture";
   return "Speaking / Audio response";
 }
@@ -649,6 +650,7 @@ function promptMatchesActivityCategory(categoryId: ActivityCategoryId, prompt: P
   if (categoryId === "text") return prompt.assignment_type === "text_response";
   if (categoryId === "external") return prompt.assignment_type === "external_link";
   if (categoryId === "video") return prompt.assignment_type === "video_response";
+  if (categoryId === "lesson") return prompt.assignment_type === "lesson";
   return false;
 }
 
