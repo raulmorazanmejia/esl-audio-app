@@ -253,18 +253,22 @@ export default function TeacherAssignmentLibrary(props: Props) {
 
             {isCreatingInCategory ? (
               <div style={{ border: "1px solid #e2e8f0", borderRadius: 14, background: "#f8fafc", padding: 12, display: "grid", gap: 8, marginTop: 12 }}>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {activityCategories.filter((category) => category.id !== "all").map((category) => (
-                    <button
-                      key={`create-choice-${category.id}`}
-                      type="button"
-                      onClick={() => setCreationCategoryId(category.id)}
-                      style={{ minHeight: 34, borderRadius: 999, border: `1px solid ${effectiveCreationCategory?.id === category.id ? "#0f172a" : "#cbd5e1"}`, background: effectiveCreationCategory?.id === category.id ? "#0f172a" : "#fff", color: effectiveCreationCategory?.id === category.id ? "#fff" : "#334155", padding: "0 12px", fontSize: 12, fontWeight: 800 }}
-                    >
-                      {category.title}{category.id === "lesson" ? " (beta)" : ""}
-                    </button>
-                  ))}
-                </div>
+                <label style={{ display: "grid", gap: 6 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: "#334155", textTransform: "uppercase", letterSpacing: "0.06em" }}>Activity type</span>
+                  <select
+                    value={effectiveCreationCategory?.id ?? ""}
+                    onChange={(e) => setCreationCategoryId(e.target.value || null)}
+                    style={{ ...inputStyle, borderRadius: 999, minHeight: 42, padding: "0 14px", fontWeight: 700, background: "#fff" }}
+                  >
+                    <option value="" disabled>Select activity type</option>
+                    <option value="speaking">Speaking / Audio response</option>
+                    <option value="picture">Describe a picture</option>
+                    <option value="text">Text response</option>
+                    <option value="external">External link</option>
+                    <option value="video">Video response</option>
+                    <option value="lesson">Lesson (beta)</option>
+                  </select>
+                </label>
                 <div style={{ fontWeight: 800, color: "#0f172a" }}>{effectiveCreationCategory?.createTypeLabel ?? "Choose an activity type"}</div>
                 <input disabled={!effectiveCreationCategory} value={props.newPrompt} onChange={(e) => props.setNewPrompt(e.target.value)} placeholder="Activity title" style={inputStyle} />
 
