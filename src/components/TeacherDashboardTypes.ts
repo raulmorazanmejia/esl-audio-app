@@ -8,9 +8,18 @@ export type PromptRow = {
   prompt_image_path: string | null;
   prompt_image_url: string | null;
   example_text: string | null;
+  lesson_blocks?: LessonBlock[] | null;
   is_active: boolean | null;
   created_at?: string | null;
   prompt_assignments?: PromptAssignmentRow[];
+};
+
+export type LessonBlockType = "source" | "grammar_explanation" | "multiple_choice" | "speaking_task" | "writing_task";
+export type LessonSourceKind = "text" | "video" | "image";
+export type LessonBlock = {
+  type: LessonBlockType;
+  source_kind?: LessonSourceKind;
+  content: string;
 };
 
 export type AssignmentResponseMode = "audio" | "video" | "text" | "multiple_choice" | "guided_speaking";
