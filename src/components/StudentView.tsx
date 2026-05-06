@@ -833,7 +833,7 @@ function normalizePictureAccuracy(
 type StudentViewProps = {
   onEntryStateChange?: (isEntryState: boolean) => void;
 };
-type DashboardFilter = "all" | "todo" | "completed";
+type StudentCategoryId = "all" | "speaking" | "picture" | "text" | "external_link" | "video" | "lesson";
 
 export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -889,7 +889,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
   const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
   const [studentFeedbackProfile, setStudentFeedbackProfile] = useState<FeedbackProfile>("student_friendly");
-  const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>("all");
+  const [activeCategoryId, setActiveCategoryId] = useState<StudentCategoryId | null>(null);
   const [demoAttemptsToday, setDemoAttemptsToday] = useState(0);
   const [lastDemoSubmitAt, setLastDemoSubmitAt] = useState(0);
   const deferredInstallPromptRef = useRef<any>(null);
@@ -997,6 +997,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       setRosterStudent(null);
       setAssignedPrompts([]);
       setSelectedPromptId(null);
+    setActiveCategoryId(null);
       setStatusMessage("");
       setVideoStatusMessage("");
       setErrorMessage("");
@@ -2384,15 +2385,38 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       return { prompt, assignmentType, status, isCompleted };
     });
   }, [assignedPrompts, getPromptStatus]);
-  const filteredPrompts = useMemo(() => {
-    if (dashboardFilter === "todo") return categorizedPrompts.filter((row) => !row.isCompleted);
-    if (dashboardFilter === "completed") return categorizedPrompts.filter((row) => row.isCompleted);
-    return categorizedPrompts;
-  }, [categorizedPrompts, dashboardFilter]);
   const completedRows = categorizedPrompts.filter((row) => row.isCompleted);
   const todoRows = categorizedPrompts.filter((row) => !row.isCompleted);
-  const continueRow = todoRows[0] || null;
-  const feedbackRows = completedRows.filter((row) => row.status.includes("Feedback ready")).slice(0, 3);
+  const categoryCards = useMemo(() => {
+    const cards = [
+      { id: "speaking", icon: "🎤", label: "Speaking" },
+      { id: "picture", icon: "🖼️", label: "Picture" },
+      { id: "text", icon: "✍️", label: "Text" },
+      { id: "external_link", icon: "🔗", label: "External link" },
+      { id: "video", icon: "🎬", label: "Video" },
+      { id: "lesson", icon: "📚", label: "Lesson" },
+    ] as const;
+    return cards.map((card) => {
+      const matches = categorizedPrompts.filter((row) => {
+        if (card.id === "speaking") return row.assignmentType === "speaking";
+        if (card.id === "picture") return row.assignmentType === "picture_description";
+        if (card.id === "text") return row.assignmentType === "text_response";
+        if (card.id === "video") return row.assignmentType === "video_response";
+        return row.assignmentType === card.id;
+      });
+      return { ...card, total: matches.length, completed: matches.filter((row) => row.isCompleted).length };
+    }).filter((card) => card.total > 0);
+  }, [categorizedPrompts]);
+  const activeCategoryRows = useMemo(() => {
+    if (!activeCategoryId || activeCategoryId === "all") return categorizedPrompts;
+    return categorizedPrompts.filter((row) => {
+      if (activeCategoryId === "speaking") return row.assignmentType === "speaking";
+      if (activeCategoryId === "picture") return row.assignmentType === "picture_description";
+      if (activeCategoryId === "text") return row.assignmentType === "text_response";
+      if (activeCategoryId === "video") return row.assignmentType === "video_response";
+      return row.assignmentType === activeCategoryId;
+    });
+  }, [activeCategoryId, categorizedPrompts]);
   const completedCount = useMemo(
     () =>
       assignedPrompts.filter((prompt) => {
@@ -2546,95 +2570,43 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           </div>
         ) : null}
 
-        {rosterStudent && !selectedPromptId ? (
-          <div style={{ ...styles.card, padding: "18px 16px", borderRadius: 20, marginBottom: 12 }}>
-            <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", lineHeight: 1.15 }}>Welcome, {studentFirstName}</div>
-            <div style={{ color: "#475569", marginTop: 6 }}>{rosterStudent.class_name ? `${rosterStudent.class_name} · ` : ""}Choose an activity to start.</div>
-          </div>
+        {rosterStudent && !selectedPromptId && !activeCategoryId ? (
+          <>
+            <div style={{ ...styles.card, padding: "22px 18px", borderRadius: 22, marginBottom: 14 }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", lineHeight: 1.15 }}>Welcome, {studentFirstName}.</div>
+              <div style={{ color: "#475569", marginTop: 6 }}>{rosterStudent.class_name ? `${rosterStudent.class_name} · ` : ""}Choose what you want to practice.</div>
+            </div>
+            <div style={styles.assignmentOverviewCard}>
+              <div style={styles.assignmentOverviewLabel}>{progressLabel}</div>
+              <div style={styles.assignmentOverviewTrack} aria-hidden="true"><div style={{ ...styles.assignmentOverviewFill, width: `${progressPercent}%` }} /></div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                <div style={styles.taskTypeBadge}>To do: {todoRows.length}</div>
+                <div style={styles.taskTypeBadge}>Completed: {completedRows.length}</div>
+                <div style={styles.taskTypeBadge}>Total: {categorizedPrompts.length}</div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginTop: 14 }}>
+              {categorizedPrompts.length ? <button type="button" onClick={() => setActiveCategoryId("all")} style={{ ...styles.taskButton, textAlign: "left", minHeight: 120 }}><div style={{ fontSize: 26 }}>📋</div><div style={styles.taskTitle}>All activities</div><div style={styles.taskMeta}>{categorizedPrompts.length} available · {completedRows.length} completed</div></button> : null}
+              {categoryCards.map((card) => <button key={card.id} type="button" onClick={() => setActiveCategoryId(card.id as StudentCategoryId)} style={{ ...styles.taskButton, textAlign: "left", minHeight: 120 }}><div style={{ fontSize: 26 }}>{card.icon}</div><div style={styles.taskTitle}>{card.label}</div><div style={styles.taskMeta}>{card.total} available · {card.completed} completed</div></button>)}
+            </div>
+          </>
         ) : null}
 
-        {rosterStudent && !selectedPromptId && hasVisiblePrompts ? (
-          <div style={styles.assignmentOverviewCard}>
-            <div style={styles.assignmentOverviewLabel}>{progressLabel}</div>
-            <div style={styles.assignmentOverviewTrack} aria-hidden="true">
-              <div style={{ ...styles.assignmentOverviewFill, width: `${progressPercent}%` }} />
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-              <div style={styles.taskTypeBadge}>To do: {todoRows.length}</div>
-              <div style={styles.taskTypeBadge}>Completed: {completedRows.length}</div>
-              <div style={styles.taskTypeBadge}>Total: {categorizedPrompts.length}</div>
-            </div>
-          </div>
-        ) : null}
-        {rosterStudent && !selectedPromptId && continueRow ? (
-          <button type="button" onClick={() => setSelectedPromptId(continueRow.prompt.id)} style={{ ...styles.taskButton, width: "100%", marginBottom: 12, borderColor: "#c4b5fd", boxShadow: "0 12px 26px rgba(79,70,229,0.12)" }}>
-            <div style={{ fontSize: 12, color: "#6d28d9", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em" }}>Continue learning</div>
-            <div style={{ ...styles.taskTitle, marginTop: 6 }}>{continueRow.prompt.prompt_text || "Untitled activity"}</div>
-            <div style={{ ...styles.taskMeta, marginTop: 6 }}>{assignmentTypeLabel(continueRow.assignmentType)} · {continueRow.status}</div>
-          </button>
-        ) : null}
-        {rosterStudent && !selectedPromptId ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            {(["all", "todo", "completed"] as DashboardFilter[]).map((filterKey) => (
-              <button key={filterKey} type="button" onClick={() => setDashboardFilter(filterKey)} style={{ ...styles.taskTypeBadge, borderColor: dashboardFilter === filterKey ? "#6366f1" : "#cbd5e1", background: dashboardFilter === filterKey ? "#eef2ff" : "#f8fafc" }}>
-                {filterKey === "all" ? "All" : filterKey === "todo" ? "To do" : "Completed"}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {rosterStudent && !selectedPromptId && feedbackRows.length ? <div style={{ ...styles.subtleHelper, textAlign: "left", marginBottom: 8 }}>Recent feedback: {feedbackRows.map((row) => row.prompt.prompt_text || "Activity").join(" · ")}</div> : null}
-
-        {rosterStudent && !selectedPromptId ? (
+        {rosterStudent && !selectedPromptId && activeCategoryId ? (
           hasVisiblePrompts ? (
             <div style={{ ...styles.taskList, maxWidth: 640, margin: "0 auto", gap: 16 }}>
-              {filteredPrompts.map(({ prompt, assignmentType, status }) => {
+              <button type="button" onClick={() => setActiveCategoryId(null)} style={styles.backButton}>← Back to home</button>
+              <div style={{ ...styles.sectionTitle, fontSize: 24, marginTop: 0 }}>{activeCategoryId === "all" ? "All activities" : `${categoryCards.find((card) => card.id === activeCategoryId)?.label || "Category"} activities`}</div>
+              {activeCategoryRows.map(({ prompt, assignmentType, status }) => {
                 const statusInfo = submissionStatusIndex[prompt.id] || (prompt.prompt_text?.trim() ? submissionStatusIndex[`text:${prompt.prompt_text.trim()}`] : undefined);
-                const statusStyle = status.includes("Feedback ready")
-                  ? { border: "1px solid #c4b5fd", background: "#f5f3ff", color: "#6d28d9" }
-                  : status.includes("Completed")
-                    ? { border: "1px solid #86efac", background: "#f0fdf4", color: "#166534" }
-                    : { border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569" };
-                const isLessonCard = assignmentType === "lesson";
-                return (
-                  <button
-                    key={prompt.id}
-                    type="button"
-                    onClick={() => setSelectedPromptId(prompt.id)}
-                    className="student-assignment-card"
-                    style={{
-                      ...styles.taskButton,
-                      borderColor: isDemoMode ? "#cbd5e1" : "#dbe3f0",
-                      boxShadow: isDemoMode ? "0 10px 24px rgba(15, 23, 42, 0.08)" : "0 8px 18px rgba(15, 23, 42, 0.06)",
-                      background: isDemoMode ? "#ffffff" : "#ffffff",
-                      borderRadius: isDemoMode ? 16 : styles.taskButton.borderRadius,
-                      padding: isDemoMode ? "20px" : styles.taskButton.padding,
-                      transform: isLessonCard ? "scale(1.01)" : "none",
-                    }}
-                  >
-                    <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                      {prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Activity thumbnail" style={styles.taskThumb} /> : null}
-                      <div style={{ display: "grid", gap: "6px", flex: 1, minWidth: 0 }}>
-                        <div style={styles.taskTitle}>{prompt.prompt_text || "Untitled activity"}</div>
-                        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                          <div style={styles.taskTypeBadge}>{assignmentTypeLabel(assignmentType)}</div>
-                          {prompt.suggested_time ? <div style={styles.taskTypeBadge}>{prompt.suggested_time}</div> : null}
-                          <div style={{ ...styles.taskStatus, ...statusStyle }}>{status}</div>
-                        </div>
-                        <div style={styles.taskMeta}>{prompt.example_text?.slice(0, 80) || "Tap to open activity"}</div>
-                        <div style={styles.taskMeta}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div>
-                      </div>
-                      <div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div>
-                    </div>
-                  </button>
-                );
+                const statusStyle = status.includes("Feedback ready") ? { border: "1px solid #c4b5fd", background: "#f5f3ff", color: "#6d28d9" } : status.includes("Completed") ? { border: "1px solid #86efac", background: "#f0fdf4", color: "#166534" } : { border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569" };
+                return (<button key={prompt.id} type="button" onClick={() => setSelectedPromptId(prompt.id)} className="student-assignment-card" style={{ ...styles.taskButton }}><div style={{ display: "flex", gap: "12px", alignItems: "center" }}>{prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Activity thumbnail" style={styles.taskThumb} /> : null}<div style={{ display: "grid", gap: "6px", flex: 1, minWidth: 0 }}><div style={styles.taskTitle}>{prompt.prompt_text || "Untitled activity"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><div style={styles.taskTypeBadge}>{assignmentTypeLabel(assignmentType)}</div>{prompt.suggested_time ? <div style={styles.taskTypeBadge}>{prompt.suggested_time}</div> : null}<div style={{ ...styles.taskStatus, ...statusStyle }}>{status}</div></div><div style={styles.taskMeta}>{statusInfo?.hasSubmission ? "Review / Continue" : "Start"}</div></div><div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div></div></button>);
               })}
             </div>
-          ) : (
-            <div style={styles.helperText}>{isDemoMode ? "No demo activities are available right now." : "No activities yet. Your teacher will add activities soon."}</div>
-          )
+          ) : (<div style={styles.helperText}>No activities yet. Your teacher will add activities soon.</div>)
         ) : null}
 
-        {rosterStudent && selectedPromptId ? (
+{rosterStudent && selectedPromptId ? (
           <>
         {submissionLoadError || (submissionForActivePrompt && !hasValidSubmissionRecord) ? <div style={{ ...styles.card, border: "1px solid #fecaca", background: "#fff7f7" }}><div style={{ ...styles.cardTitle, color: "#b91c1c" }}>This activity did not complete correctly.</div><div style={styles.infoText}>Please go back or try again safely.</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><button type="button" onClick={() => setSelectedPromptId(null)} style={styles.secondaryButton}>Back to activities</button><button type="button" onClick={() => void findSubmissionForActivePrompt(studentCode.trim(), activePrompt?.id || "", activePrompt?.prompt_text || "")} style={styles.primaryButton}>Try again</button></div></div> : null}
         <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "4px", marginBottom: "4px" }}>
