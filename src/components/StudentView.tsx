@@ -833,6 +833,7 @@ function normalizePictureAccuracy(
 type StudentViewProps = {
   onEntryStateChange?: (isEntryState: boolean) => void;
 };
+type DashboardFilter = "all" | "todo" | "completed";
 
 export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -888,6 +889,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
   const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
   const [studentFeedbackProfile, setStudentFeedbackProfile] = useState<FeedbackProfile>("student_friendly");
+  const [dashboardFilter, setDashboardFilter] = useState<DashboardFilter>("all");
   const [demoAttemptsToday, setDemoAttemptsToday] = useState(0);
   const [lastDemoSubmitAt, setLastDemoSubmitAt] = useState(0);
   const deferredInstallPromptRef = useRef<any>(null);
@@ -2365,6 +2367,32 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const shouldClampTranscript = latestTranscript.length > 280;
   const visibleTranscript = showFullTranscript || !shouldClampTranscript ? latestTranscript : `${latestTranscript.slice(0, 280)}...`;
   const hasVisiblePrompts = assignedPrompts.length > 0;
+  const studentFirstName = (rosterStudent?.student_name || "Student").trim().split(/\s+/)[0] || "Student";
+  const getPromptStatus = useCallback((prompt: PromptRow) => {
+    const promptText = prompt.prompt_text?.trim() || "";
+    const info = submissionStatusIndex[prompt.id] || (promptText ? submissionStatusIndex[`text:${promptText}`] : undefined);
+    if (!info?.hasSubmission) return "Not started";
+    if (!info.isValid) return "Needs retry";
+    return info.hasFeedback ? "Completed · Feedback ready" : "Completed";
+  }, [submissionStatusIndex]);
+  const categorizedPrompts = useMemo(() => {
+    const safePrompts = Array.isArray(assignedPrompts) ? assignedPrompts : [];
+    return safePrompts.map((prompt) => {
+      const assignmentType = getAssignmentType(prompt);
+      const status = getPromptStatus(prompt);
+      const isCompleted = status.startsWith("Completed");
+      return { prompt, assignmentType, status, isCompleted };
+    });
+  }, [assignedPrompts, getPromptStatus]);
+  const filteredPrompts = useMemo(() => {
+    if (dashboardFilter === "todo") return categorizedPrompts.filter((row) => !row.isCompleted);
+    if (dashboardFilter === "completed") return categorizedPrompts.filter((row) => row.isCompleted);
+    return categorizedPrompts;
+  }, [categorizedPrompts, dashboardFilter]);
+  const completedRows = categorizedPrompts.filter((row) => row.isCompleted);
+  const todoRows = categorizedPrompts.filter((row) => !row.isCompleted);
+  const continueRow = todoRows[0] || null;
+  const feedbackRows = completedRows.filter((row) => row.status.includes("Feedback ready")).slice(0, 3);
   const completedCount = useMemo(
     () =>
       assignedPrompts.filter((prompt) => {
@@ -2519,36 +2547,54 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
         ) : null}
 
         {rosterStudent && !selectedPromptId ? (
-          <div style={{ ...styles.message, color: "#0f766e", fontWeight: 800 }}>
-            {isDemoMode ? "Demo mode · Public preview experience" : `Welcome, ${rosterStudent.student_name}.`}
+          <div style={{ ...styles.card, padding: "18px 16px", borderRadius: 20, marginBottom: 12 }}>
+            <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", lineHeight: 1.15 }}>Welcome, {studentFirstName}</div>
+            <div style={{ color: "#475569", marginTop: 6 }}>{rosterStudent.class_name ? `${rosterStudent.class_name} · ` : ""}Choose an activity to start.</div>
           </div>
         ) : null}
 
-        {rosterStudent && !selectedPromptId ? <div style={{ ...styles.sectionTitle, marginTop: "12px", fontSize: "30px", letterSpacing: "0.01em" }}>{isDemoMode ? "Try ESL Hub" : "Choose an activity"}</div> : null}
-        {rosterStudent && !selectedPromptId && isDemoMode ? <div style={{ ...styles.helperText, marginTop: 0, marginBottom: 8, textAlign: "center" }}>Complete a sample activity and see how it works.</div> : null}
         {rosterStudent && !selectedPromptId && hasVisiblePrompts ? (
           <div style={styles.assignmentOverviewCard}>
             <div style={styles.assignmentOverviewLabel}>{progressLabel}</div>
             <div style={styles.assignmentOverviewTrack} aria-hidden="true">
               <div style={{ ...styles.assignmentOverviewFill, width: `${progressPercent}%` }} />
             </div>
-            <div style={styles.subtleHelper}>Keep going — your feedback appears after each submit.</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+              <div style={styles.taskTypeBadge}>To do: {todoRows.length}</div>
+              <div style={styles.taskTypeBadge}>Completed: {completedRows.length}</div>
+              <div style={styles.taskTypeBadge}>Total: {categorizedPrompts.length}</div>
+            </div>
           </div>
         ) : null}
+        {rosterStudent && !selectedPromptId && continueRow ? (
+          <button type="button" onClick={() => setSelectedPromptId(continueRow.prompt.id)} style={{ ...styles.taskButton, width: "100%", marginBottom: 12, borderColor: "#c4b5fd", boxShadow: "0 12px 26px rgba(79,70,229,0.12)" }}>
+            <div style={{ fontSize: 12, color: "#6d28d9", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em" }}>Continue learning</div>
+            <div style={{ ...styles.taskTitle, marginTop: 6 }}>{continueRow.prompt.prompt_text || "Untitled activity"}</div>
+            <div style={{ ...styles.taskMeta, marginTop: 6 }}>{assignmentTypeLabel(continueRow.assignmentType)} · {continueRow.status}</div>
+          </button>
+        ) : null}
+        {rosterStudent && !selectedPromptId ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            {(["all", "todo", "completed"] as DashboardFilter[]).map((filterKey) => (
+              <button key={filterKey} type="button" onClick={() => setDashboardFilter(filterKey)} style={{ ...styles.taskTypeBadge, borderColor: dashboardFilter === filterKey ? "#6366f1" : "#cbd5e1", background: dashboardFilter === filterKey ? "#eef2ff" : "#f8fafc" }}>
+                {filterKey === "all" ? "All" : filterKey === "todo" ? "To do" : "Completed"}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {rosterStudent && !selectedPromptId && feedbackRows.length ? <div style={{ ...styles.subtleHelper, textAlign: "left", marginBottom: 8 }}>Recent feedback: {feedbackRows.map((row) => row.prompt.prompt_text || "Activity").join(" · ")}</div> : null}
 
         {rosterStudent && !selectedPromptId ? (
           hasVisiblePrompts ? (
             <div style={{ ...styles.taskList, maxWidth: 640, margin: "0 auto", gap: 16 }}>
-              {assignedPrompts.map((prompt) => {
-                const promptText = prompt.prompt_text?.trim() || "";
-                const assignmentType = getAssignmentType(prompt);
-                const statusInfo = submissionStatusIndex[prompt.id] || (promptText ? submissionStatusIndex[`text:${promptText}`] : undefined);
-                const cardStatus = statusInfo?.hasFeedback ? "Feedback ready" : statusInfo?.hasSubmission ? "Completed" : "Not started";
-                const statusStyle = statusInfo?.hasFeedback
+              {filteredPrompts.map(({ prompt, assignmentType, status }) => {
+                const statusInfo = submissionStatusIndex[prompt.id] || (prompt.prompt_text?.trim() ? submissionStatusIndex[`text:${prompt.prompt_text.trim()}`] : undefined);
+                const statusStyle = status.includes("Feedback ready")
                   ? { border: "1px solid #c4b5fd", background: "#f5f3ff", color: "#6d28d9" }
-                  : statusInfo?.hasSubmission
+                  : status.includes("Completed")
                     ? { border: "1px solid #86efac", background: "#f0fdf4", color: "#166534" }
                     : { border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569" };
+                const isLessonCard = assignmentType === "lesson";
                 return (
                   <button
                     key={prompt.id}
@@ -2562,6 +2608,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                       background: isDemoMode ? "#ffffff" : "#ffffff",
                       borderRadius: isDemoMode ? 16 : styles.taskButton.borderRadius,
                       padding: isDemoMode ? "20px" : styles.taskButton.padding,
+                      transform: isLessonCard ? "scale(1.01)" : "none",
                     }}
                   >
                     <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
@@ -2571,12 +2618,12 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           <div style={styles.taskTypeBadge}>{assignmentTypeLabel(assignmentType)}</div>
                           {prompt.suggested_time ? <div style={styles.taskTypeBadge}>{prompt.suggested_time}</div> : null}
-                          <div style={{ ...styles.taskStatus, ...statusStyle }}>{cardStatus}</div>
+                          <div style={{ ...styles.taskStatus, ...statusStyle }}>{status}</div>
                         </div>
-                        <div style={styles.taskMeta}>{isDemoMode ? "Sample activity" : "Tap to open activity"}</div>
-                        {isDemoMode ? <div style={styles.taskMeta}>{prompt.example_text || "Sample instructions"}</div> : null}
+                        <div style={styles.taskMeta}>{prompt.example_text?.slice(0, 80) || "Tap to open activity"}</div>
+                        <div style={styles.taskMeta}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div>
                       </div>
-                      {isDemoMode ? <div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>Start activity</div> : null}
+                      <div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div>
                     </div>
                   </button>
                 );
@@ -2589,7 +2636,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
 
         {rosterStudent && selectedPromptId ? (
           <>
-        {submissionLoadError || (submissionForActivePrompt && !hasValidSubmissionRecord) ? <div style={{ ...styles.card, border: "1px solid #fecaca", background: "#fff7f7" }}><div style={{ ...styles.cardTitle, color: "#b91c1c" }}>Something went wrong with this submission.</div><div style={styles.infoText}>This activity looks completed, but the submission could not be loaded correctly.</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><button type="button" onClick={() => setSelectedPromptId(null)} style={styles.secondaryButton}>Go back to activities</button><button type="button" onClick={() => void findSubmissionForActivePrompt(studentCode.trim(), activePrompt?.id || "", activePrompt?.prompt_text || "")} style={styles.primaryButton}>Try again</button></div></div> : null}
+        {submissionLoadError || (submissionForActivePrompt && !hasValidSubmissionRecord) ? <div style={{ ...styles.card, border: "1px solid #fecaca", background: "#fff7f7" }}><div style={{ ...styles.cardTitle, color: "#b91c1c" }}>This activity did not complete correctly.</div><div style={styles.infoText}>Please go back or try again safely.</div><div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}><button type="button" onClick={() => setSelectedPromptId(null)} style={styles.secondaryButton}>Back to activities</button><button type="button" onClick={() => void findSubmissionForActivePrompt(studentCode.trim(), activePrompt?.id || "", activePrompt?.prompt_text || "")} style={styles.primaryButton}>Try again</button></div></div> : null}
         <div style={{ display: "flex", justifyContent: "flex-start", marginTop: "4px", marginBottom: "4px" }}>
           <button type="button" onClick={changeCode} style={styles.changeCodeButton}>
             ← Change code
@@ -2643,7 +2690,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                   <button type="button" onClick={() => setLessonStep((s) => Math.min(lessonBlocks.length - 1, s + 1))} disabled={!lessonBlocks.length || lessonStep >= lessonBlocks.length - 1} style={styles.primaryButton}>Next</button>
                 </div>
               </>
-            ) : <div style={styles.infoText}>This lesson is missing block data. Ask your teacher to update it.</div>}
+            ) : <div style={styles.infoText}>This lesson is being prepared. Please check back later.</div>}
           </div>
         ) : isExternalAssignment ? (
           <div style={{ ...styles.card, border: "1px solid #93c5fd", background: "#eff6ff" }}>
