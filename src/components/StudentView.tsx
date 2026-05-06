@@ -2387,7 +2387,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   }, [assignedPrompts, getPromptStatus]);
   const completedRows = categorizedPrompts.filter((row) => row.isCompleted);
   const todoRows = categorizedPrompts.filter((row) => !row.isCompleted);
-  const categoryCards = useMemo(() => {
+  const allCategoryCards = useMemo(() => {
     const cards = [
       { id: "speaking", icon: "🎤", label: "Speaking" },
       { id: "picture", icon: "🖼️", label: "Picture" },
@@ -2407,6 +2407,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       return { ...card, total: matches.length, completed: matches.filter((row) => row.isCompleted).length };
     }).filter((card) => card.total > 0);
   }, [categorizedPrompts]);
+  const categoryCards = useMemo(() => (allCategoryCards.length >= 2 ? allCategoryCards : []), [allCategoryCards]);
   const activeCategoryRows = useMemo(() => {
     if (!activeCategoryId || activeCategoryId === "all") return categorizedPrompts;
     return categorizedPrompts.filter((row) => {
@@ -2596,7 +2597,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           hasVisiblePrompts ? (
             <div style={{ ...styles.taskList, maxWidth: 640, margin: "0 auto", gap: 16 }}>
               <button type="button" onClick={() => setActiveCategoryId(null)} style={styles.backButton}>← Back to home</button>
-              <div style={{ ...styles.sectionTitle, fontSize: 24, marginTop: 0 }}>{activeCategoryId === "all" ? "All activities" : `${categoryCards.find((card) => card.id === activeCategoryId)?.label || "Category"} activities`}</div>
+              <div style={{ ...styles.sectionTitle, fontSize: 24, marginTop: 0 }}>{activeCategoryId === "all" ? "All activities" : `${allCategoryCards.find((card) => card.id === activeCategoryId)?.label || "Category"} activities`}</div>
               {activeCategoryRows.map(({ prompt, assignmentType, status }) => {
                 const statusInfo = submissionStatusIndex[prompt.id] || (prompt.prompt_text?.trim() ? submissionStatusIndex[`text:${prompt.prompt_text.trim()}`] : undefined);
                 const statusStyle = status.includes("Feedback ready") ? { border: "1px solid #c4b5fd", background: "#f5f3ff", color: "#6d28d9" } : status.includes("Completed") ? { border: "1px solid #86efac", background: "#f0fdf4", color: "#166534" } : { border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569" };
