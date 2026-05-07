@@ -906,6 +906,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const [demoConfig, setDemoConfig] = useState<DemoConfig>(DEFAULT_DEMO_CONFIG);
   const [isLoadingDemoConfig, setIsLoadingDemoConfig] = useState(false);
   const [studentFeedbackProfile, setStudentFeedbackProfile] = useState<FeedbackProfile>("student_friendly");
+  const [isActivitiesMenuOpen, setIsActivitiesMenuOpen] = useState(false);
   const [activeCategoryId, setActiveCategoryId] = useState<StudentCategoryId | null>(null);
   const [demoAttemptsToday, setDemoAttemptsToday] = useState(0);
   const [lastDemoSubmitAt, setLastDemoSubmitAt] = useState(0);
@@ -1014,6 +1015,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
       setRosterStudent(null);
       setAssignedPrompts([]);
       setSelectedPromptId(null);
+    setIsActivitiesMenuOpen(false);
     setActiveCategoryId(null);
       setStatusMessage("");
       setVideoStatusMessage("");
@@ -1032,6 +1034,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     });
     setAssignedPrompts(demoPrompts);
     setSelectedPromptId(null);
+    setIsActivitiesMenuOpen(false);
     setCompletedPromptKeys([]);
     setSubmissionStatusIndex({});
     setSubmissionForActivePrompt(null);
@@ -1050,6 +1053,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     setRosterStudent(null);
     setAssignedPrompts([]);
     setSelectedPromptId(null);
+    setIsActivitiesMenuOpen(false);
     setCompletedPromptKeys([]);
     setSubmissionStatusIndex({});
     setSubmissionForActivePrompt(null);
@@ -2578,7 +2582,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           </div>
         ) : null}
 
-        {rosterStudent && !selectedPromptId && !activeCategoryId ? (
+        {rosterStudent && !selectedPromptId && !isActivitiesMenuOpen && !activeCategoryId ? (
           <>
             <div style={{ ...styles.card, padding: "22px 18px", borderRadius: 22, marginBottom: 14 }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: "#0f172a", lineHeight: 1.15 }}>Welcome, {studentFirstName}.</div>
@@ -2593,31 +2597,47 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 <div style={styles.taskTypeBadge}>Total: {categorizedPrompts.length}</div>
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginTop: 14 }}>
-              {categoryCards.map((card) => {
-                const isEmpty = card.total < 1;
-                return (
-                  <button
-                    key={card.id}
-                    type="button"
-                    onClick={() => setActiveCategoryId(card.id as StudentCategoryId)}
-                    style={{ ...styles.taskButton, textAlign: "left", minHeight: 138, opacity: isEmpty ? 0.55 : 1 }}
-                  >
-                    <div style={{ fontSize: 26 }}>{card.icon}</div>
-                    <div style={styles.taskTitle}>{card.label}</div>
-                    <div style={{ ...styles.taskMeta, marginTop: 4 }}>{card.description}</div>
-                    <div style={{ ...styles.taskMeta, marginTop: 6, fontWeight: 700 }}>{card.total} available · {card.completed} completed</div>
-                  </button>
-                );
-              })}
-            </div>
+            <button
+              type="button"
+              onClick={() => setIsActivitiesMenuOpen(true)}
+              style={{ ...styles.taskButton, textAlign: "left", minHeight: 170, marginTop: 14, width: "100%" }}
+            >
+              <div style={{ fontSize: 30 }}>🧩</div>
+              <div style={{ ...styles.taskTitle, fontSize: 24, marginTop: 4 }}>Activities</div>
+              <div style={{ ...styles.taskMeta, marginTop: 4 }}>Choose speaking, picture, video, links, or lessons.</div>
+              <div style={{ ...styles.taskMeta, marginTop: 8, fontWeight: 700 }}>
+                {categorizedPrompts.length} available · {completedRows.length} completed
+              </div>
+            </button>
           </>
+        ) : null}
+
+        {rosterStudent && !selectedPromptId && isActivitiesMenuOpen && !activeCategoryId ? (
+          <div style={{ ...styles.taskList, maxWidth: 760, margin: "0 auto", gap: 16 }}>
+            <button type="button" onClick={() => setIsActivitiesMenuOpen(false)} style={styles.backButton}>← Back to home</button>
+            <div style={{ ...styles.sectionTitle, fontSize: 28, marginTop: 0 }}>Activities</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 }}>
+              {categoryCards.map((card) => (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => setActiveCategoryId(card.id as StudentCategoryId)}
+                  style={{ ...styles.taskButton, textAlign: "left", minHeight: 138 }}
+                >
+                  <div style={{ fontSize: 26 }}>{card.icon}</div>
+                  <div style={styles.taskTitle}>{card.label}</div>
+                  <div style={{ ...styles.taskMeta, marginTop: 4 }}>{card.description}</div>
+                  <div style={{ ...styles.taskMeta, marginTop: 6, fontWeight: 700 }}>{card.total} available · {card.completed} completed</div>
+                </button>
+              ))}
+            </div>
+          </div>
         ) : null}
 
         {rosterStudent && !selectedPromptId && activeCategoryId ? (
           activeCategoryRows.length ? (
             <div style={{ ...styles.taskList, maxWidth: 640, margin: "0 auto", gap: 16 }}>
-              <button type="button" onClick={() => setActiveCategoryId(null)} style={styles.backButton}>← Back to home</button>
+              <button type="button" onClick={() => setActiveCategoryId(null)} style={styles.backButton}>← Back to activities</button>
               <div style={{ ...styles.sectionTitle, fontSize: 24, marginTop: 0 }}>{allCategoryCards.find((card) => card.id === activeCategoryId)?.label || "Category"}</div>
               <div style={styles.helperText}>{allCategoryCards.find((card) => card.id === activeCategoryId)?.description}</div>{activeCategoryRows.map(({ prompt, assignmentType, status }) => {
                 const statusInfo = submissionStatusIndex[prompt.id] || (prompt.prompt_text?.trim() ? submissionStatusIndex[`text:${prompt.prompt_text.trim()}`] : undefined);
@@ -2630,7 +2650,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               <div style={{ ...styles.sectionTitle, marginTop: 0, fontSize: 24 }}>No activities here yet.</div>
               <div style={{ ...styles.helperText, marginTop: 8 }}>Check back soon for new assignments in this category.</div>
               <button type="button" onClick={() => setActiveCategoryId(null)} style={{ ...styles.secondaryButton, minHeight: 44, marginTop: 16 }}>
-                Back to home
+                Back to activities
               </button>
             </div>
           )
