@@ -2419,9 +2419,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     });
   }, [categorizedPrompts, getRowMatchesCategory]);
   const categoryCards = useMemo(() => {
-    if (isDemoMode) return allCategoryCards;
-    return allCategoryCards.filter((card) => card.id === "all" || card.total > 0);
-  }, [allCategoryCards, isDemoMode]);
+    return allCategoryCards;
+  }, [allCategoryCards]);
   const activeCategoryRows = useMemo(() => {
     if (!activeCategoryId || activeCategoryId === "all") return categorizedPrompts;
     return categorizedPrompts.filter((row) => getRowMatchesCategory(row, activeCategoryId));
@@ -2595,13 +2594,28 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginTop: 14 }}>
-              {categoryCards.map((card) => <button key={card.id} type="button" disabled={!isDemoMode && card.id !== "all" && card.total < 1} onClick={() => setActiveCategoryId(card.id as StudentCategoryId)} style={{ ...styles.taskButton, textAlign: "left", minHeight: 138, opacity: (!isDemoMode && card.id !== "all" && card.total < 1) ? 0.55 : 1 }}><div style={{ fontSize: 26 }}>{card.icon}</div><div style={styles.taskTitle}>{card.label}</div><div style={{ ...styles.taskMeta, marginTop: 4 }}>{card.description}</div><div style={{ ...styles.taskMeta, marginTop: 6, fontWeight: 700 }}>{card.total} available · {card.completed} completed</div></button>)}
+              {categoryCards.map((card) => {
+                const isEmpty = card.total < 1;
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => setActiveCategoryId(card.id as StudentCategoryId)}
+                    style={{ ...styles.taskButton, textAlign: "left", minHeight: 138, opacity: isEmpty ? 0.55 : 1 }}
+                  >
+                    <div style={{ fontSize: 26 }}>{card.icon}</div>
+                    <div style={styles.taskTitle}>{card.label}</div>
+                    <div style={{ ...styles.taskMeta, marginTop: 4 }}>{card.description}</div>
+                    <div style={{ ...styles.taskMeta, marginTop: 6, fontWeight: 700 }}>{card.total} available · {card.completed} completed</div>
+                  </button>
+                );
+              })}
             </div>
           </>
         ) : null}
 
         {rosterStudent && !selectedPromptId && activeCategoryId ? (
-          hasVisiblePrompts ? (
+          activeCategoryRows.length ? (
             <div style={{ ...styles.taskList, maxWidth: 640, margin: "0 auto", gap: 16 }}>
               <button type="button" onClick={() => setActiveCategoryId(null)} style={styles.backButton}>← Back to home</button>
               <div style={{ ...styles.sectionTitle, fontSize: 24, marginTop: 0 }}>{allCategoryCards.find((card) => card.id === activeCategoryId)?.label || "Category"}</div>
@@ -2611,7 +2625,15 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
                 return (<button key={prompt.id} type="button" onClick={() => setSelectedPromptId(prompt.id)} className="student-assignment-card" style={{ ...styles.taskButton }}><div style={{ display: "flex", gap: "12px", alignItems: "center" }}>{prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Activity thumbnail" style={styles.taskThumb} /> : null}<div style={{ display: "grid", gap: "6px", flex: 1, minWidth: 0 }}><div style={styles.taskTitle}>{prompt.prompt_text || "Untitled activity"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><div style={styles.taskTypeBadge}>{assignmentTypeLabel(assignmentType)}</div>{prompt.suggested_time ? <div style={styles.taskTypeBadge}>{prompt.suggested_time}</div> : null}<div style={{ ...styles.taskStatus, ...statusStyle }}>{status}</div></div><div style={styles.taskMeta}>{statusInfo?.hasSubmission ? "Review / Continue" : "Start"}</div></div><div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div></div></button>);
               })}
             </div>
-          ) : (<div style={styles.helperText}>No activities yet. Your teacher will add activities soon.</div>)
+          ) : (
+            <div style={{ ...styles.card, maxWidth: 640, margin: "0 auto", textAlign: "center" }}>
+              <div style={{ ...styles.sectionTitle, marginTop: 0, fontSize: 24 }}>No activities here yet.</div>
+              <div style={{ ...styles.helperText, marginTop: 8 }}>Check back soon for new assignments in this category.</div>
+              <button type="button" onClick={() => setActiveCategoryId(null)} style={{ ...styles.secondaryButton, minHeight: 44, marginTop: 16 }}>
+                Back to home
+              </button>
+            </div>
+          )
         ) : null}
 
 {rosterStudent && selectedPromptId ? (
