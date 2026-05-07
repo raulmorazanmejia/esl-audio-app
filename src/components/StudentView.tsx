@@ -835,6 +835,23 @@ type StudentViewProps = {
 };
 type StudentCategoryId = "all" | "speaking" | "picture" | "text" | "external_link" | "video" | "lesson";
 
+type CategoryCardMeta = {
+  id: StudentCategoryId;
+  icon: string;
+  label: string;
+  description: string;
+};
+
+const CATEGORY_CARD_META: CategoryCardMeta[] = [
+  { id: "all", icon: "📋", label: "All activities", description: "See everything assigned to you." },
+  { id: "speaking", icon: "🎧", label: "Speaking / Audio", description: "Record your voice." },
+  { id: "picture", icon: "🖼️", label: "Picture", description: "Describe what you see." },
+  { id: "text", icon: "✍️", label: "Text", description: "Write short answers." },
+  { id: "external_link", icon: "🔗", label: "External links", description: "Open practice from another site." },
+  { id: "video", icon: "🎬", label: "Video", description: "Watch or record video responses." },
+  { id: "lesson", icon: "📚", label: "Lesson", description: "Follow guided lesson steps." },
+];
+
 export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -2387,37 +2404,28 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
   }, [assignedPrompts, getPromptStatus]);
   const completedRows = categorizedPrompts.filter((row) => row.isCompleted);
   const todoRows = categorizedPrompts.filter((row) => !row.isCompleted);
+  const getRowMatchesCategory = useCallback((row: { assignmentType: string }, categoryId: StudentCategoryId) => {
+    if (categoryId === "all") return true;
+    if (categoryId === "speaking") return row.assignmentType === "speaking";
+    if (categoryId === "picture") return row.assignmentType === "picture_description";
+    if (categoryId === "text") return row.assignmentType === "text_response";
+    if (categoryId === "video") return row.assignmentType === "video_response";
+    return row.assignmentType === categoryId;
+  }, []);
   const allCategoryCards = useMemo(() => {
-    const cards = [
-      { id: "speaking", icon: "🎤", label: "Speaking" },
-      { id: "picture", icon: "🖼️", label: "Picture" },
-      { id: "text", icon: "✍️", label: "Text" },
-      { id: "external_link", icon: "🔗", label: "External link" },
-      { id: "video", icon: "🎬", label: "Video" },
-      { id: "lesson", icon: "📚", label: "Lesson" },
-    ] as const;
-    return cards.map((card) => {
-      const matches = categorizedPrompts.filter((row) => {
-        if (card.id === "speaking") return row.assignmentType === "speaking";
-        if (card.id === "picture") return row.assignmentType === "picture_description";
-        if (card.id === "text") return row.assignmentType === "text_response";
-        if (card.id === "video") return row.assignmentType === "video_response";
-        return row.assignmentType === card.id;
-      });
+    return CATEGORY_CARD_META.map((card) => {
+      const matches = categorizedPrompts.filter((row) => getRowMatchesCategory(row, card.id));
       return { ...card, total: matches.length, completed: matches.filter((row) => row.isCompleted).length };
-    }).filter((card) => card.total > 0);
-  }, [categorizedPrompts]);
-  const categoryCards = useMemo(() => (allCategoryCards.length >= 2 ? allCategoryCards : []), [allCategoryCards]);
+    });
+  }, [categorizedPrompts, getRowMatchesCategory]);
+  const categoryCards = useMemo(() => {
+    if (isDemoMode) return allCategoryCards;
+    return allCategoryCards.filter((card) => card.id === "all" || card.total > 0);
+  }, [allCategoryCards, isDemoMode]);
   const activeCategoryRows = useMemo(() => {
     if (!activeCategoryId || activeCategoryId === "all") return categorizedPrompts;
-    return categorizedPrompts.filter((row) => {
-      if (activeCategoryId === "speaking") return row.assignmentType === "speaking";
-      if (activeCategoryId === "picture") return row.assignmentType === "picture_description";
-      if (activeCategoryId === "text") return row.assignmentType === "text_response";
-      if (activeCategoryId === "video") return row.assignmentType === "video_response";
-      return row.assignmentType === activeCategoryId;
-    });
-  }, [activeCategoryId, categorizedPrompts]);
+    return categorizedPrompts.filter((row) => getRowMatchesCategory(row, activeCategoryId));
+  }, [activeCategoryId, categorizedPrompts, getRowMatchesCategory]);
   const completedCount = useMemo(
     () =>
       assignedPrompts.filter((prompt) => {
@@ -2587,8 +2595,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginTop: 14 }}>
-              {categorizedPrompts.length ? <button type="button" onClick={() => setActiveCategoryId("all")} style={{ ...styles.taskButton, textAlign: "left", minHeight: 120 }}><div style={{ fontSize: 26 }}>📋</div><div style={styles.taskTitle}>All activities</div><div style={styles.taskMeta}>{categorizedPrompts.length} available · {completedRows.length} completed</div></button> : null}
-              {categoryCards.map((card) => <button key={card.id} type="button" onClick={() => setActiveCategoryId(card.id as StudentCategoryId)} style={{ ...styles.taskButton, textAlign: "left", minHeight: 120 }}><div style={{ fontSize: 26 }}>{card.icon}</div><div style={styles.taskTitle}>{card.label}</div><div style={styles.taskMeta}>{card.total} available · {card.completed} completed</div></button>)}
+              {categoryCards.map((card) => <button key={card.id} type="button" disabled={!isDemoMode && card.id !== "all" && card.total < 1} onClick={() => setActiveCategoryId(card.id as StudentCategoryId)} style={{ ...styles.taskButton, textAlign: "left", minHeight: 138, opacity: (!isDemoMode && card.id !== "all" && card.total < 1) ? 0.55 : 1 }}><div style={{ fontSize: 26 }}>{card.icon}</div><div style={styles.taskTitle}>{card.label}</div><div style={{ ...styles.taskMeta, marginTop: 4 }}>{card.description}</div><div style={{ ...styles.taskMeta, marginTop: 6, fontWeight: 700 }}>{card.total} available · {card.completed} completed</div></button>)}
             </div>
           </>
         ) : null}
@@ -2597,8 +2604,8 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
           hasVisiblePrompts ? (
             <div style={{ ...styles.taskList, maxWidth: 640, margin: "0 auto", gap: 16 }}>
               <button type="button" onClick={() => setActiveCategoryId(null)} style={styles.backButton}>← Back to home</button>
-              <div style={{ ...styles.sectionTitle, fontSize: 24, marginTop: 0 }}>{activeCategoryId === "all" ? "All activities" : `${allCategoryCards.find((card) => card.id === activeCategoryId)?.label || "Category"} activities`}</div>
-              {activeCategoryRows.map(({ prompt, assignmentType, status }) => {
+              <div style={{ ...styles.sectionTitle, fontSize: 24, marginTop: 0 }}>{allCategoryCards.find((card) => card.id === activeCategoryId)?.label || "Category"}</div>
+              <div style={styles.helperText}>{allCategoryCards.find((card) => card.id === activeCategoryId)?.description}</div>{activeCategoryRows.map(({ prompt, assignmentType, status }) => {
                 const statusInfo = submissionStatusIndex[prompt.id] || (prompt.prompt_text?.trim() ? submissionStatusIndex[`text:${prompt.prompt_text.trim()}`] : undefined);
                 const statusStyle = status.includes("Feedback ready") ? { border: "1px solid #c4b5fd", background: "#f5f3ff", color: "#6d28d9" } : status.includes("Completed") ? { border: "1px solid #86efac", background: "#f0fdf4", color: "#166534" } : { border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569" };
                 return (<button key={prompt.id} type="button" onClick={() => setSelectedPromptId(prompt.id)} className="student-assignment-card" style={{ ...styles.taskButton }}><div style={{ display: "flex", gap: "12px", alignItems: "center" }}>{prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Activity thumbnail" style={styles.taskThumb} /> : null}<div style={{ display: "grid", gap: "6px", flex: 1, minWidth: 0 }}><div style={styles.taskTitle}>{prompt.prompt_text || "Untitled activity"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><div style={styles.taskTypeBadge}>{assignmentTypeLabel(assignmentType)}</div>{prompt.suggested_time ? <div style={styles.taskTypeBadge}>{prompt.suggested_time}</div> : null}<div style={{ ...styles.taskStatus, ...statusStyle }}>{status}</div></div><div style={styles.taskMeta}>{statusInfo?.hasSubmission ? "Review / Continue" : "Start"}</div></div><div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div></div></button>);
