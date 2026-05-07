@@ -4,7 +4,7 @@ import ReliableAudioPlayer from "./ReliableAudioPlayer";
 import LazyAudioPlayer from "./LazyAudioPlayer";
 import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
 import { parseExternalActivityData, serializeExternalActivityData } from "../lib/externalLinks";
-import { normalizeActivityType } from "../lib/activityType";
+import { normalizeActivityType, normalizeStudentActivityCategory } from "../lib/activityType";
 
 type PromptRow = {
   id: string;
@@ -786,7 +786,11 @@ function getAssignmentType(prompt?: PromptRow | null) {
   return "audio_response" as const;
 }
 
-function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
+function assignmentTypeLabel(prompt: Pick<PromptRow, "assignment_type" | "prompt_image_url" | "prompt_image_path">) {
+  const normalizedForStudent = normalizeStudentActivityCategory(prompt);
+  if (normalizedForStudent === "picture") return "Picture";
+
+  const type = prompt.assignment_type;
   if (type === "multiple_choice") return "Quiz";
   const normalized = normalizeActivityType(type);
   if (normalized === "video") return "Video response";
@@ -2405,7 +2409,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     const safePrompts = Array.isArray(assignedPrompts) ? assignedPrompts : [];
     return safePrompts.map((prompt) => {
       const assignmentType = getAssignmentType(prompt);
-      const normalizedAssignmentType = normalizeActivityType(assignmentType);
+      const normalizedAssignmentType = normalizeStudentActivityCategory(prompt);
       const status = getPromptStatus(prompt);
       const isCompleted = status.startsWith("Completed");
       return { prompt, assignmentType, normalizedAssignmentType, status, isCompleted };
@@ -2643,7 +2647,7 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
               <div style={styles.helperText}>{allCategoryCards.find((card) => card.id === activeCategoryId)?.description}</div>{activeCategoryRows.map(({ prompt, assignmentType, status }) => {
                 const statusInfo = submissionStatusIndex[prompt.id] || (prompt.prompt_text?.trim() ? submissionStatusIndex[`text:${prompt.prompt_text.trim()}`] : undefined);
                 const statusStyle = status.includes("Feedback ready") ? { border: "1px solid #c4b5fd", background: "#f5f3ff", color: "#6d28d9" } : status.includes("Completed") ? { border: "1px solid #86efac", background: "#f0fdf4", color: "#166534" } : { border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569" };
-                return (<button key={prompt.id} type="button" onClick={() => setSelectedPromptId(prompt.id)} className="student-assignment-card" style={{ ...styles.taskButton }}><div style={{ display: "flex", gap: "12px", alignItems: "center" }}>{prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Activity thumbnail" style={styles.taskThumb} /> : null}<div style={{ display: "grid", gap: "6px", flex: 1, minWidth: 0 }}><div style={styles.taskTitle}>{prompt.prompt_text || "Untitled activity"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><div style={styles.taskTypeBadge}>{assignmentTypeLabel(assignmentType)}</div>{prompt.suggested_time ? <div style={styles.taskTypeBadge}>{prompt.suggested_time}</div> : null}<div style={{ ...styles.taskStatus, ...statusStyle }}>{status}</div></div><div style={styles.taskMeta}>{statusInfo?.hasSubmission ? "Review / Continue" : "Start"}</div></div><div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div></div></button>);
+                return (<button key={prompt.id} type="button" onClick={() => setSelectedPromptId(prompt.id)} className="student-assignment-card" style={{ ...styles.taskButton }}><div style={{ display: "flex", gap: "12px", alignItems: "center" }}>{prompt.prompt_image_url ? <img src={prompt.prompt_image_url} alt="Activity thumbnail" style={styles.taskThumb} /> : null}<div style={{ display: "grid", gap: "6px", flex: 1, minWidth: 0 }}><div style={styles.taskTitle}>{prompt.prompt_text || "Untitled activity"}</div><div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}><div style={styles.taskTypeBadge}>{assignmentTypeLabel(prompt)}</div>{prompt.suggested_time ? <div style={styles.taskTypeBadge}>{prompt.suggested_time}</div> : null}<div style={{ ...styles.taskStatus, ...statusStyle }}>{status}</div></div><div style={styles.taskMeta}>{statusInfo?.hasSubmission ? "Review / Continue" : "Start"}</div></div><div style={{ ...styles.primaryButton, minHeight: 40, padding: "0 14px", display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>{statusInfo?.hasSubmission ? "Review" : "Start"}</div></div></button>);
               })}
             </div>
           ) : (
