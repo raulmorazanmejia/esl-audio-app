@@ -8,6 +8,7 @@ import TeacherSubmissionsPanel from "./teacher/TeacherSubmissionsPanel";
 import { AssignmentActivityType, DraftState, DraftsById, LessonBlock, PromptAssignmentRow, PromptRow, StudentRow, SubmissionRow } from "./TeacherDashboardTypes";
 import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
 import { ExternalActivityLink, isValidExternalUrl, serializeExternalActivityData } from "../lib/externalLinks";
+import { normalizeActivityType } from "../lib/activityType";
 
 const SUBMISSION_SELECT =
   "id, prompt_id, response_mode, text_response, completion_marked_at, student_name, prompt_text, audio_path, audio_url, video_path, video_url, status, created_at, feedback_audio_path, feedback_audio_url, feedback_status, feedback_created_at, student_email, student_auth_id, feedback_url, transcript, ai_score, ai_comment, ai_grammar_feedback, ai_improvements, ai_picture_accuracy, teacher_score, teacher_comment, student_code, prompt:prompts(assignment_type)";
@@ -634,24 +635,18 @@ async function saveAppSettingViaApi(key: string, value: unknown) {
 }
 
 function demoActivityTypeLabel(type: DemoConfig["activities"][number]["type"], hasImage: boolean) {
-  if (type === "external_link") return "External link";
-  if (type === "video_response") return "Video response";
-  if (type === "text_response") return "Text response";
-  if (type === "lesson") return "Lesson";
-  if (type === "audio_response" && hasImage) return "Describe a picture";
+  const normalized = normalizeActivityType(type);
+  if (normalized === "external") return "External link";
+  if (normalized === "video") return "Video response";
+  if (normalized === "text") return "Text response";
+  if (normalized === "picture") return "Describe a picture";
+  if (normalized === "lesson") return "Lesson";
   return "Speaking / Audio response";
 }
 
 function promptMatchesActivityCategory(categoryId: ActivityCategoryId, prompt: PromptRow) {
-  const hasImage = Boolean(prompt.prompt_image_url || prompt.prompt_image_path);
   if (categoryId === "all") return true;
-  if (categoryId === "speaking") return prompt.assignment_type === "audio_response" && !hasImage;
-  if (categoryId === "picture") return prompt.assignment_type === "audio_response" && hasImage;
-  if (categoryId === "text") return prompt.assignment_type === "text_response";
-  if (categoryId === "external") return prompt.assignment_type === "external_link";
-  if (categoryId === "video") return prompt.assignment_type === "video_response";
-  if (categoryId === "lesson") return prompt.assignment_type === "lesson";
-  return false;
+  return normalizeActivityType(prompt.assignment_type) === categoryId;
 }
 
 export default function TeacherDashboard() {

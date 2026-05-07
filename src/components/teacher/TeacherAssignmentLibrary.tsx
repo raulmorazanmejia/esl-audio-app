@@ -1,6 +1,7 @@
 import React from "react";
 import { AssignmentActivityType, LessonBlock, LessonBlockType, LessonSourceKind, PromptRow } from "../TeacherDashboardTypes";
 import { ExternalActivityLink, parseExternalActivityData } from "../../lib/externalLinks";
+import { normalizeActivityType } from "../../lib/activityType";
 
 type Props = {
   totalPromptCount: number;
@@ -129,26 +130,18 @@ function hasPromptImage(prompt: PromptRow) {
 }
 
 function categoryMatchesPrompt(categoryId: CategoryId, prompt: PromptRow) {
-  const type = prompt.assignment_type;
-  const hasImage = hasPromptImage(prompt);
-
   if (categoryId === "all") return true;
-  if (categoryId === "speaking") return type === "audio_response" && !hasImage;
-  if (categoryId === "picture") return type === "audio_response" && hasImage;
-  if (categoryId === "text") return type === "text_response";
-  if (categoryId === "external") return type === "external_link";
-  if (categoryId === "video") return type === "video_response";
-  if (categoryId === "lesson") return type === "lesson";
-  return false;
+  return normalizeActivityType(prompt.assignment_type) === categoryId;
 }
 
 function typeLabel(type: AssignmentActivityType | null, hasImage: boolean) {
-  if (type === "external_link") return "External link";
-  if (type === "video_response") return "Video response";
-  if (type === "text_response") return "Text response";
-  if (type === "audio_response" && hasImage) return "Describe a picture";
-  if (type === "audio_response") return "Speaking / Audio response";
-  if (type === "lesson") return "Lesson";
+  const normalized = normalizeActivityType(type);
+  if (normalized === "external") return "External link";
+  if (normalized === "video") return "Video response";
+  if (normalized === "text") return "Text response";
+  if (normalized === "picture") return "Describe a picture";
+  if (normalized === "speaking") return "Speaking / Audio response";
+  if (normalized === "lesson") return "Lesson";
   if (type === "guided_speaking") return "Guided speaking";
   if (type === "multiple_choice") return "Multiple choice";
   return "Audio response";
