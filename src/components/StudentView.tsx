@@ -4,6 +4,7 @@ import ReliableAudioPlayer from "./ReliableAudioPlayer";
 import LazyAudioPlayer from "./LazyAudioPlayer";
 import { DEFAULT_DEMO_CONFIG, DEMO_CONFIG_SETTING_KEY, DemoConfig, FeedbackProfile, parseDemoConfigValue } from "../lib/demoConfig";
 import { parseExternalActivityData, serializeExternalActivityData } from "../lib/externalLinks";
+import { normalizeActivityType } from "../lib/activityType";
 
 type PromptRow = {
   id: string;
@@ -786,11 +787,14 @@ function getAssignmentType(prompt?: PromptRow | null) {
 }
 
 function assignmentTypeLabel(type: PromptRow["assignment_type"]) {
-  if (type === "video_response") return "Video response";
-  if (type === "text_response") return "Text response";
   if (type === "multiple_choice") return "Quiz";
-  if (type === "external_link") return "External link";
-  if (type === "lesson") return "Lesson";
+  const normalized = normalizeActivityType(type);
+  if (normalized === "video") return "Video response";
+  if (normalized === "text") return "Text response";
+  if (normalized === "external") return "External link";
+  if (normalized === "picture") return "Picture";
+  if (normalized === "lesson") return "Lesson";
+  if (normalized === "unknown") return "Other activity";
   return "Speaking / audio";
 }
 
@@ -833,7 +837,7 @@ function normalizePictureAccuracy(
 type StudentViewProps = {
   onEntryStateChange?: (isEntryState: boolean) => void;
 };
-type StudentCategoryId = "all" | "speaking" | "picture" | "text" | "external_link" | "video" | "lesson";
+type StudentCategoryId = "all" | "speaking" | "picture" | "text" | "external" | "video" | "lesson";
 
 type CategoryCardMeta = {
   id: StudentCategoryId;
@@ -847,7 +851,7 @@ const CATEGORY_CARD_META: CategoryCardMeta[] = [
   { id: "speaking", icon: "🎧", label: "Speaking / Audio", description: "Record your voice." },
   { id: "picture", icon: "🖼️", label: "Picture", description: "Describe what you see." },
   { id: "text", icon: "✍️", label: "Text", description: "Write short answers." },
-  { id: "external_link", icon: "🔗", label: "External links", description: "Open practice from another site." },
+  { id: "external", icon: "🔗", label: "External links", description: "Open practice from another site." },
   { id: "video", icon: "🎬", label: "Video", description: "Watch or record video responses." },
   { id: "lesson", icon: "📚", label: "Lesson", description: "Follow guided lesson steps." },
 ];
@@ -2401,20 +2405,17 @@ export default function StudentView({ onEntryStateChange }: StudentViewProps) {
     const safePrompts = Array.isArray(assignedPrompts) ? assignedPrompts : [];
     return safePrompts.map((prompt) => {
       const assignmentType = getAssignmentType(prompt);
+      const normalizedAssignmentType = normalizeActivityType(assignmentType);
       const status = getPromptStatus(prompt);
       const isCompleted = status.startsWith("Completed");
-      return { prompt, assignmentType, status, isCompleted };
+      return { prompt, assignmentType, normalizedAssignmentType, status, isCompleted };
     });
   }, [assignedPrompts, getPromptStatus]);
   const completedRows = categorizedPrompts.filter((row) => row.isCompleted);
   const todoRows = categorizedPrompts.filter((row) => !row.isCompleted);
-  const getRowMatchesCategory = useCallback((row: { assignmentType: string }, categoryId: StudentCategoryId) => {
+  const getRowMatchesCategory = useCallback((row: { normalizedAssignmentType: string }, categoryId: StudentCategoryId) => {
     if (categoryId === "all") return true;
-    if (categoryId === "speaking") return row.assignmentType === "speaking";
-    if (categoryId === "picture") return row.assignmentType === "picture_description";
-    if (categoryId === "text") return row.assignmentType === "text_response";
-    if (categoryId === "video") return row.assignmentType === "video_response";
-    return row.assignmentType === categoryId;
+    return row.normalizedAssignmentType === categoryId;
   }, []);
   const allCategoryCards = useMemo(() => {
     return CATEGORY_CARD_META.map((card) => {
